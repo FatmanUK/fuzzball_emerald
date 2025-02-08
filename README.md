@@ -1,3 +1,5 @@
+Forked from https://github.com/fuzzball-muck/fuzzball . I've removed the fork relationship because Github's PR system doesn't seem to understand that I want to modify this repository and not the upstream one.
+
 Fuzzball MUCK
 =============
 
