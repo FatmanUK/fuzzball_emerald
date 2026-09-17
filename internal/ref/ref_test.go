@@ -123,3 +123,54 @@ func TestDumpMaskCoversInternalFlags(t *testing.T) {
 		}
 	}
 }
+
+// TestSpecialRefsMatchFuzzball pins the reserved dbrefs to the values in
+// Fuzzball's include/db.h. They appear in every legacy dump, so changing one
+// would silently corrupt an imported world: #0 is the room every other room
+// ultimately parents to, and the negatives are sentinels rather than objects.
+func TestSpecialRefsMatchFuzzball(t *testing.T) {
+	cases := []struct {
+		name string
+		got  Ref
+		want int32
+	}{
+		{"GLOBAL_ENVIRONMENT", GlobalEnvironment, 0},
+		{"GOD", God, 1},
+		{"NOTHING", Nothing, -1},
+		{"AMBIGUOUS", Ambiguous, -2},
+		{"HOME", Home, -3},
+		{"NIL", Nil, -4},
+	}
+	for _, c := range cases {
+		if int32(c.got) != c.want {
+			t.Errorf("%s = %d, want %d", c.name, int32(c.got), c.want)
+		}
+	}
+
+	// #0 is a real object, not a sentinel. Ok() must agree, or the world
+	// root would be treated as absent.
+	if !GlobalEnvironment.Ok() {
+		t.Error("#0 is the global environment, a real object")
+	}
+	if !God.Ok() {
+		t.Error("#1 is a real object")
+	}
+	for _, r := range []Ref{Nothing, Ambiguous, Home, Nil} {
+		if r.Ok() {
+			t.Errorf("%v is a sentinel, not an object", r)
+		}
+	}
+
+	// Go's zero value for a Ref is #0, the global environment, not Nothing.
+	// Any struct holding refs must therefore initialise them explicitly;
+	// forgetting to attaches objects to the world root. This is exactly
+	// what went wrong in the importer for programs, whose exit list a dump
+	// does not store.
+	var zero Ref
+	if zero != GlobalEnvironment {
+		t.Fatal("the zero value is expected to be #0; this test is the warning that it is")
+	}
+	if zero == Nothing {
+		t.Error("the zero value must not be Nothing")
+	}
+}

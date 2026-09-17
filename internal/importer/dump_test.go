@@ -377,3 +377,107 @@ func TestDumpMaskFlagsAreCleared(t *testing.T) {
 		t.Error("clearing live-state flags removed a real one")
 	}
 }
+
+// TestUnstoredLinksDefaultToNothing guards the importer against Go's zero
+// value leaking in as #0.
+//
+// A dump stores `exits` only for things, players and rooms, and an owner only
+// for some types. Any field the record does not carry must end up as NOTHING,
+// because the zero value for a ref is #0 — the global environment — and
+// defaulting to it silently attaches objects to the world root.
+func TestUnstoredLinksDefaultToNothing(t *testing.T) {
+	// A program: the dump gives it an owner and nothing else.
+	dump := VersionString + "\n1\n0\n0\n" +
+		"#7\nlib-props\n2\n-1\n-1\n" + strconv.Itoa(int(ref.TypeProgram)) +
+		"\n100\n200\n0\n300\n" +
+		"2\n" + // owner, in the no-properties slot
+		endOfDump + "\n"
+
+	w := world.New()
+	if _, err := Parse(strings.NewReader(dump), w); err != nil {
+		t.Fatal(err)
+	}
+	o := w.Get(ref.Ref(7))
+	if o == nil {
+		t.Fatal("#7 is missing")
+	}
+	if o.Owner != ref.Ref(2) {
+		t.Errorf("owner = %v, want #2", o.Owner)
+	}
+	for _, f := range []struct {
+		name string
+		got  ref.Ref
+	}{
+		{"exits", o.Exits},
+		{"home", o.Home},
+		{"drop-to", o.Dropto},
+	} {
+		if f.got != ref.Nothing {
+			t.Errorf("a program's %s = %v, want #-1; the dump does not store it, "+
+				"so it must not default to the global environment",
+				f.name, f.got)
+		}
+	}
+}
+
+// TestGlobalEnvironmentSurvivesImport checks that #0 comes back as the world
+// root it is in the shipped databases, rather than being confused with a
+// sentinel.
+func TestGlobalEnvironmentSurvivesImport(t *testing.T) {
+	for _, path := range []string{
+		"../../testdata/minimal.db",
+		"../../testdata/starterdb/starterdb.db",
+	} {
+		w, _ := parseFile(t, path)
+		root := w.Get(ref.GlobalEnvironment)
+		if root == nil {
+			t.Errorf("%s: #0 is missing", path)
+			continue
+		}
+		if root.Type() != ref.TypeRoom {
+			t.Errorf("%s: #0 is a %v, want a room", path, root.Type())
+		}
+		if root.Name != "Room Zero" {
+			t.Errorf("%s: #0 is named %q, want Room Zero", path, root.Name)
+		}
+		// The world root sits in no container; that is what makes it the
+		// root, and it must not be confused with #0 meaning "unset".
+		if root.Location != ref.Nothing {
+			t.Errorf("%s: #0 location = %v, want #-1", path, root.Location)
+		}
+		// New rooms parent to default_room_parent, which is #0 in the
+		// minimal world and the Null Environment Room (#109) in the
+		// starter one. Either way it must be a real room whose own
+		// containment chain reaches #0, since that is what makes #0 the
+		// root of the world rather than just another object.
+		parent := w.Tune.Ref("default_room_parent")
+		po := w.Get(parent)
+		if po == nil {
+			t.Errorf("%s: default_room_parent %v does not exist", path, parent)
+			continue
+		}
+		if po.Type() != ref.TypeRoom {
+			t.Errorf("%s: default_room_parent %v is a %v, want a room",
+				path, parent, po.Type())
+		}
+		if !reachesRoot(w, parent) {
+			t.Errorf("%s: default_room_parent %v does not sit under #0",
+				path, parent)
+		}
+	}
+}
+
+// reachesRoot reports whether r is #0 or is contained, at any depth, by #0.
+func reachesRoot(w *world.World, r ref.Ref) bool {
+	for i := 0; i < w.Len()+1; i++ {
+		if r == ref.GlobalEnvironment {
+			return true
+		}
+		o := w.Get(r)
+		if o == nil || o.Location == ref.Nothing {
+			return false
+		}
+		r = o.Location
+	}
+	return false
+}
