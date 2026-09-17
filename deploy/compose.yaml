@@ -1,0 +1,42 @@
+# podman-compose -f deploy/compose.yaml up
+#
+# Generate a self-signed certificate for local work first:
+#   mkdir -p deploy/tls && openssl req -x509 -newkey rsa:4096 -nodes -days 365 \
+#     -subj /CN=localhost \
+#     -keyout deploy/tls/key.pem -out deploy/tls/cert.pem
+services:
+  postgres:
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_USER: fbemerald
+      POSTGRES_PASSWORD: ${FBE_DB_PASSWORD:-fbemerald}
+      POSTGRES_DB: fbemerald
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fbemerald"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  fbemerald:
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${FBE_LINE_PORT:-4202}:4202"
+      - "${FBE_WSS_PORT:-4203}:4203"
+    volumes:
+      - ./tls:/etc/fbemerald/tls:ro,z
+    environment:
+      FBE_DATABASE_URL: "postgres://fbemerald:${FBE_DB_PASSWORD:-fbemerald}@postgres:5432/fbemerald?sslmode=disable"
+      FBE_FLUSH_INTERVAL: "1s"
+      FBE_LOG_FORMAT: "json"
+    # A clean SIGTERM shutdown flushes outstanding writes.
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:

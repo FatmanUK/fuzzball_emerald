@@ -1,0 +1,36 @@
+# Build a static fbemerald binary, then ship it on a distroless base.
+#
+# Built and run rootless under Podman:
+#   podman build -t fbemerald -f deploy/Containerfile .
+
+FROM docker.io/library/golang:1.26-alpine AS build
+WORKDIR /src
+
+# Cache dependencies separately from the source tree.
+COPY go.mod go.su[m] ./
+RUN go mod download
+
+COPY . .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath \
+        -ldflags "-s -w -X main.version=${VERSION}" \
+        -o /out/fbemerald ./cmd/fbemerald
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/fbemerald /usr/bin/fbemerald
+
+# TLS material and the database live outside the image.
+VOLUME ["/etc/fbemerald/tls"]
+
+ENV FBE_TLS_CERT_FILE=/etc/fbemerald/tls/cert.pem \
+    FBE_TLS_KEY_FILE=/etc/fbemerald/tls/key.pem \
+    FBE_LINE_ADDR=:4202 \
+    FBE_WSS_ADDR=:4203
+
+EXPOSE 4202 4203
+USER nonroot:nonroot
+
+# SIGTERM is enough: the server flushes and exits. There is no dump-on-signal
+# dance, so no STOPSIGNAL override is needed.
+ENTRYPOINT ["/usr/bin/fbemerald"]
+CMD ["serve"]
