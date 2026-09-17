@@ -149,6 +149,10 @@ func NewSet() *Set {
 	return s
 }
 
+// Params returns every parameter, ordered by name. It is a method as well as
+// a package function so callers holding only a Set can enumerate.
+func (s *Set) Params() []Param { return Params() }
+
 // Get returns the current value of a parameter.
 func (s *Set) Get(name string) (Value, bool) {
 	p, ok := Lookup(name)

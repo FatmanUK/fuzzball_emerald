@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
+	"github.com/FatmanUK/fuzzball_emerald/internal/store"
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
+	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
 func cmdServe(args []string) error {
@@ -36,9 +39,44 @@ func cmdServe(args []string) error {
 		"cipher_policy", c.TLS.Policy,
 	)
 
-	// M1 wires the world and the persister in here.
-	<-ctx.Done()
-	log.Info("shutting down")
+	st, err := store.Open(ctx, c.DatabaseURL, base)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := st.Migrate(ctx); err != nil {
+		return err
+	}
+
+	w := world.New()
+	loadStart := time.Now()
+	rep, err := st.Load(ctx, w)
+	if err != nil {
+		return fmt.Errorf("loading the world: %w", err)
+	}
+	log.Info("world loaded",
+		"objects", rep.Objects,
+		"properties", rep.Properties,
+		"tune_params", rep.Tune,
+		"chains_repaired", rep.ChainsRepaired,
+		"took", time.Since(loadStart).String(),
+	)
+	if rep.Objects == 0 {
+		log.Warn("the database is empty; import a world with \"fbemerald import\"")
+	}
+
+	engine := world.NewEngine(w, world.Options{
+		Persister: st,
+		Interval:  c.FlushInterval,
+		Logger:    base,
+	})
+
+	// M3 starts the listeners here; until then the engine just runs.
+	if err := engine.Run(ctx); err != nil {
+		return err
+	}
+	log.Info("stopped cleanly")
 	return nil
 }
 
@@ -51,7 +89,25 @@ func cmdMigrate(args []string) error {
 	if c.DatabaseURL == "" {
 		return fmt.Errorf("no database URL (set FBE_DATABASE_URL)")
 	}
-	return fmt.Errorf("migrate is not implemented yet (M1)")
+	base, err := newLogger(c)
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := notifyContext()
+	defer stop()
+
+	st, err := store.Open(ctx, c.DatabaseURL, base)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := st.Migrate(ctx); err != nil {
+		return err
+	}
+	logging.On(base, logging.Status).Info("schema is up to date")
+	return nil
 }
 
 func cmdImport(args []string) error {

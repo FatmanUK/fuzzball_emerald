@@ -20,8 +20,10 @@ git show origin/mother:src/interp.c
 
 ## Status
 
-Early. See the milestones in the implementation plan; M0 (skeleton, `@tune`
-table, container) is done.
+Early. M0 (skeleton, `@tune` table, container) and M1 (object model,
+properties, world goroutine, Postgres persistence) are done. There is no
+network listener yet, so the server currently boots, loads the world and waits
+for a signal.
 
 ## Building
 
@@ -65,6 +67,47 @@ Everything else is an `@tune` parameter, as upstream. Inspect the table with:
 ```bash
 fbemerald tune
 ```
+
+## How persistence works
+
+The in-memory object graph is authoritative. One goroutine owns it and runs
+every mutation, because Fuzzball is single-threaded and MUF depends on that:
+primitives mutate the graph non-atomically and multitasking is cooperative.
+Connections and the database talk to that goroutine over channels.
+
+Changed objects are marked dirty, snapshotted as deep copies on the world
+goroutine, and written to Postgres in one transaction per flush. Saving
+therefore never touches a live object and never pauses the game, which is what
+replaces Fuzzball's dump cycle. `@dump` becomes a forced flush that returns
+immediately.
+
+The guarantee is that at any instant, every change older than
+`FBE_FLUSH_INTERVAL` is already durable. A crash loses at most that window,
+rather than up to `dump_interval`.
+
+Containment chains are stored as Fuzzball keeps them, because MUF can observe
+their order, and each object also records its own location. That redundancy is
+the recovery path: on load the chains are checked against what the objects
+claim, and any that disagree are rebuilt rather than silently orphaning
+everything past the break.
+
+## Testing
+
+```bash
+go test -race ./...
+```
+
+The `internal/store` tests need a Postgres to talk to and skip without one:
+
+```bash
+podman run -d --name fbe-pg -e POSTGRES_USER=fbemerald -e POSTGRES_PASSWORD=fbemerald -e POSTGRES_DB=fbemerald -p 55432:5432 docker.io/library/postgres:17-alpine
+```
+
+```bash
+FBE_TEST_DATABASE_URL="postgres://fbemerald:fbemerald@localhost:55432/fbemerald?sslmode=disable" go test -race ./...
+```
+
+Each test runs in its own schema, so they do not interfere.
 
 ## Compatibility notes
 
