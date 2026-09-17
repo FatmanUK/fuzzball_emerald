@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,8 +14,18 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
+// schemaSeq keeps test schema names distinct within a run.
+var schemaSeq atomic.Int64
+
 // testStore opens a store against a scratch schema, or skips if no test
 // database is configured. Set FBE_TEST_DATABASE_URL to run these.
+//
+// The schema is put in the connection string rather than applied with SET.
+// GORM pools connections, so a SET reaches exactly one of them and every other
+// query silently lands in "public" — which means the tests would read and
+// write whatever real world happened to be in the database they were pointed
+// at. That is not a hypothetical: it destroyed a locally imported world before
+// this was fixed.
 func testStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := os.Getenv("FBE_TEST_DATABASE_URL")
@@ -21,30 +33,79 @@ func testStore(t *testing.T) *Store {
 		t.Skip("set FBE_TEST_DATABASE_URL to run store integration tests")
 	}
 
-	s, err := Open(context.Background(), dsn, nil)
+	ctx := context.Background()
+	schema := fmt.Sprintf("fbe_test_%d_%d", os.Getpid(), schemaSeq.Add(1))
+
+	// A separate connection owns the schema's lifetime, because the store
+	// under test is pinned to a schema that will not exist yet.
+	admin, err := Open(ctx, dsn, nil)
 	if err != nil {
 		t.Fatalf("opening test database: %v", err)
 	}
-
-	// Each test gets its own schema so they cannot see each other's rows.
-	schema := fmt.Sprintf("test_%d", time.Now().UnixNano())
-	if err := s.db.Exec("CREATE SCHEMA " + schema).Error; err != nil {
+	if err := admin.db.Exec("CREATE SCHEMA " + schema).Error; err != nil {
+		admin.Close()
 		t.Fatalf("creating schema: %v", err)
 	}
-	if err := s.db.Exec("SET search_path TO " + schema).Error; err != nil {
-		t.Fatalf("setting search path: %v", err)
+
+	scoped, err := withSearchPath(dsn, schema)
+	if err != nil {
+		admin.Close()
+		t.Fatal(err)
 	}
+	s, err := Open(ctx, scoped, nil)
+	if err != nil {
+		admin.Close()
+		t.Fatalf("opening scoped connection: %v", err)
+	}
+
 	t.Cleanup(func() {
-		if err := s.db.Exec("DROP SCHEMA " + schema + " CASCADE").Error; err != nil {
+		s.Close()
+		if err := admin.db.Exec("DROP SCHEMA " + schema + " CASCADE").Error; err != nil {
 			t.Errorf("dropping schema: %v", err)
 		}
-		s.Close()
+		admin.Close()
 	})
 
-	if err := s.Migrate(context.Background()); err != nil {
+	if err := s.Migrate(ctx); err != nil {
 		t.Fatalf("migrating: %v", err)
 	}
+
+	// Prove the isolation rather than assuming it: every connection in the
+	// pool must resolve to the scratch schema.
+	assertSchemaIsolated(t, s, schema)
 	return s
+}
+
+// withSearchPath returns dsn with search_path set, so every connection the
+// pool opens starts in that schema.
+func withSearchPath(dsn, schema string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil || u.Scheme == "" {
+		// A keyword/value DSN rather than a URL.
+		return dsn + " search_path=" + schema, nil
+	}
+	q := u.Query()
+	q.Set("search_path", schema)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// assertSchemaIsolated checks that queries land in the scratch schema, on
+// every connection the pool might hand out.
+func assertSchemaIsolated(t *testing.T, s *Store, schema string) {
+	t.Helper()
+	// More probes than the pool is wide, so a connection that was not
+	// configured would be caught.
+	for i := 0; i < 16; i++ {
+		var got string
+		if err := s.db.Raw("SELECT current_schema()").Scan(&got).Error; err != nil {
+			t.Fatalf("checking current schema: %v", err)
+		}
+		if got != schema {
+			t.Fatalf("a pooled connection is in schema %q, want %q; "+
+				"the tests would be writing to a real database", got, schema)
+		}
+	}
 }
 
 // buildWorld makes a small world with one of everything worth persisting.

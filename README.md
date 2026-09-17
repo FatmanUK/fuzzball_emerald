@@ -32,9 +32,29 @@ evaluated. That is M4 to M6.
 
 ## Building
 
+There is a Makefile; `make` on its own lists the targets.
+
 ```bash
-go build ./cmd/fbemerald
+make build
 ```
+
+## Quick start
+
+```bash
+make pod-import pod-run
+```
+
+That builds the image, starts Postgres, imports the starter world, and runs the
+server in a container with the uid mapping described below. Then:
+
+```bash
+make connect
+```
+
+and `connect One potrzebie`. `make pod-logs` follows the server's output and
+`make pod-stop` shuts it down.
+
+To run on the host instead, `make import run`.
 
 ## Connecting
 
@@ -174,10 +194,16 @@ podman run -d --name fbe-pg -e POSTGRES_USER=fbemerald -e POSTGRES_PASSWORD=fbem
 ```
 
 ```bash
-FBE_TEST_DATABASE_URL="postgres://fbemerald:fbemerald@localhost:55432/fbemerald?sslmode=disable" go test -race ./...
+make test
 ```
 
-Each test runs in its own schema, so they do not interfere.
+Store tests run against a database of their own (`fbemerald_test`), never the
+one holding your world, and each test isolates itself further into a scratch
+schema. The schema is set in the connection string rather than with `SET`,
+because GORM pools connections and a `SET` reaches only one of them — every
+other query would silently land in `public`. Each test asserts its isolation
+before doing anything, so a regression there fails loudly instead of quietly
+writing to a real database.
 
 ## Compatibility notes
 
