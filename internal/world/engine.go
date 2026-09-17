@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -41,7 +42,15 @@ type Engine struct {
 	// it so every Run exit path closes it exactly once.
 	done     chan struct{}
 	stopOnce sync.Once
+
+	// onPanic, when set, is called after a recovered panic so the caller
+	// can tell whoever triggered it that their command failed.
+	onPanic func(any)
 }
+
+// OnPanic sets a callback run after a recovered panic in a world operation.
+// It runs on the world goroutine.
+func (e *Engine) OnPanic(fn func(any)) { e.onPanic = fn }
 
 type operation struct {
 	fn   func(*World)
@@ -188,13 +197,21 @@ func (e *Engine) Run(ctx context.Context) error {
 
 // apply runs one operation, containing any panic so a single bad command
 // cannot take the whole world down.
+//
+// The stack is captured and logged: a swallowed panic that leaves no trace is
+// worse than a crash, because the symptom is a command that silently does
+// nothing at all.
 func (e *Engine) apply(op operation) {
 	defer func() {
 		if op.done != nil {
 			close(op.done)
 		}
 		if r := recover(); r != nil {
-			e.log.Error("panic in world operation", "panic", r)
+			e.log.Error("panic in world operation",
+				"panic", r, "stack", string(debug.Stack()))
+			if e.onPanic != nil {
+				e.onPanic(r)
+			}
 		}
 	}()
 	op.fn(e.world)

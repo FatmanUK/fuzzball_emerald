@@ -20,16 +20,44 @@ git show origin/mother:src/interp.c
 
 ## Status
 
-Early. M0 (skeleton, `@tune` table, container), M1 (object model, properties,
-world goroutine, Postgres persistence) and M2 (legacy importer) are done. The
-shipped starter world imports and reloads intact. There is no network listener
-yet, so the server currently boots, loads the world and waits for a signal.
+Early, but playable. M0 (skeleton, `@tune` table, container), M1 (object model,
+properties, world goroutine, Postgres persistence), M2 (legacy importer) and M3
+(transports, login, basic commands) are done: you can import the shipped
+starter world, connect a real MUCK client over TLS, walk around, talk and
+build.
+
+MUF and MPI are not implemented yet, so exits that run programs report that
+rather than working, and descriptions are shown as stored rather than
+evaluated. That is M4 to M6.
 
 ## Building
 
 ```bash
 go build ./cmd/fbemerald
 ```
+
+## Connecting
+
+Once a world is imported and the server is running, connect with any client
+that speaks TLS:
+
+```bash
+openssl s_client -quiet -connect localhost:4202
+```
+
+Then `connect <name> <password>`. Browser clients use the WebSocket listener on
+`:4203` at `/muck`; both terminate into the same session, so everything behaves
+identically.
+
+Two command-matching rules are inherited deliberately and will look odd
+otherwise:
+
+- `QUIT` and `WHO` are **case-sensitive**. Lowercase `quit` falls through to
+  exit matching, which is why the starter world ships a `quit` exit that tells
+  you to use capitals.
+- **Exits beat built-in commands.** A world that defines its own `look` or
+  `@view` exit wins. A wizard can prefix a line with `!` to skip exit matching
+  and reach the built-in.
 
 ## Running locally
 
@@ -45,6 +73,16 @@ Then bring up Postgres and the server:
 ```bash
 podman-compose -f deploy/compose.yaml up
 ```
+
+The image runs as the unprivileged `nonroot` user (uid 65532), which under
+rootless Podman cannot read a private key owned by your account with the usual
+`0600` permissions. Map your uid onto the container's:
+
+```bash
+podman run --userns=keep-id:uid=65532,gid=65532 -v ./deploy/tls:/etc/fbemerald/tls:ro,z ...
+```
+
+The alternative — loosening the key's permissions — is worse.
 
 ## Configuration
 

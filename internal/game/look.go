@@ -1,0 +1,238 @@
+package game
+
+import (
+	"strings"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/match"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
+	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+	"github.com/FatmanUK/fuzzball_emerald/internal/world"
+)
+
+// Message properties, from include/db.h. MPI evaluation of these arrives with
+// M6; for now they are shown as stored.
+const (
+	propDesc  = "_/de"
+	propSucc  = "_/sc"
+	propOSucc = "_/osc"
+	propFail  = "_/fl"
+	propOFail = "_/ofl"
+	propDrop  = "_/dr"
+	propODrop = "_/odr"
+)
+
+// getMesg reads a message property.
+func getMesg(w *world.World, r ref.Ref, path string) string {
+	o := w.Get(r)
+	if o == nil {
+		return ""
+	}
+	v, ok := o.Props.Get(path)
+	if !ok || v.Type != props.String {
+		return ""
+	}
+	return v.Str
+}
+
+// cmdLook shows the room, or an object in it.
+func (s *Server) cmdLook(c *ctx) {
+	if c.arg == "" {
+		s.lookHere(c.w, c.who)
+		return
+	}
+	target := match.New(c.w, c.who, c.arg).Everything().Result()
+	switch target {
+	case ref.Nothing:
+		c.tell("I don't see that here.")
+	case ref.Ambiguous:
+		c.tell("I don't know which one you mean.")
+	default:
+		s.lookAt(c.w, c.who, target)
+	}
+}
+
+// lookHere shows the room a player is standing in.
+func (s *Server) lookHere(w *world.World, who ref.Ref) {
+	o := w.Get(who)
+	if o == nil {
+		return
+	}
+	if o.Location == ref.Nothing {
+		s.notify(who, "You are nowhere.")
+		return
+	}
+	s.lookAt(w, who, o.Location)
+}
+
+// lookAt describes one object to a player.
+func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
+	o := w.Get(target)
+	if o == nil {
+		s.notify(who, "I don't see that here.")
+		return
+	}
+
+	s.send(who, unparse(w, who, target))
+
+	desc := getMesg(w, target, propDesc)
+	if desc == "" {
+		desc = w.Tune.String("description_default")
+	}
+	s.send(who, desc)
+
+	w.Used(target)
+
+	if o.Type() == ref.TypeRoom {
+		s.listContents(w, who, target)
+		s.listExits(w, who, target)
+		return
+	}
+	// A container's contents are listed too, so a player can see what is
+	// inside a thing they are examining.
+	if o.Type() == ref.TypeThing || o.Type() == ref.TypePlayer {
+		s.listContents(w, who, target)
+	}
+}
+
+// listContents lists what is in a container, skipping the viewer and anything
+// dark they may not see.
+func (s *Server) listContents(w *world.World, who, container ref.Ref) {
+	var names []string
+	for _, r := range w.Contents(container) {
+		if r == who {
+			continue
+		}
+		o := w.Get(r)
+		if o == nil {
+			continue
+		}
+		if !s.canSee(w, who, r) {
+			continue
+		}
+		names = append(names, unparse(w, who, r))
+	}
+	if len(names) == 0 {
+		return
+	}
+	s.notify(who, "Contents:")
+	for _, n := range names {
+		s.send(who, n)
+	}
+}
+
+// listExits names the obvious ways out.
+func (s *Server) listExits(w *world.World, who, room ref.Ref) {
+	var names []string
+	for _, r := range w.Exits(room) {
+		o := w.Get(r)
+		if o == nil || o.Flags&ref.Dark != 0 {
+			continue
+		}
+		// Only the first alias is the exit's public name.
+		name, _, _ := strings.Cut(o.Name, string(match.ExitDelimiter))
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	s.notify(who, "Obvious exits: %s", strings.Join(names, ", "))
+}
+
+// canSee reports whether a player may see an object in a listing.
+func (s *Server) canSee(w *world.World, who, target ref.Ref) bool {
+	o := w.Get(target)
+	if o == nil {
+		return false
+	}
+	if o.Flags&ref.Dark == 0 {
+		return true
+	}
+	// A dark object is still visible to anyone who controls it.
+	return s.controls(w, who, target)
+}
+
+// controls reports whether a player may modify an object.
+func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
+	p := w.Get(who)
+	o := w.Get(target)
+	if p == nil || o == nil {
+		return false
+	}
+	if p.Flags.IsWizard() {
+		return true
+	}
+	if who == target {
+		return true
+	}
+	return o.Owner == who
+}
+
+// cmdExamine shows an object's details to someone who controls it.
+func (s *Server) cmdExamine(c *ctx) {
+	target := c.who
+	if c.arg != "" {
+		target = match.New(c.w, c.who, c.arg).Everything().Result()
+	}
+	switch target {
+	case ref.Nothing:
+		c.tell("I don't see that here.")
+		return
+	case ref.Ambiguous:
+		c.tell("I don't know which one you mean.")
+		return
+	}
+	if !s.controls(c.w, c.who, target) {
+		c.tell("Permission denied.")
+		return
+	}
+
+	o := c.w.Get(target)
+	c.tell("%s(%v%s)", o.Name, target, o.Flags.Unparse())
+	c.tell("Type: %v", o.Type())
+	c.tell("Owner: %s", unparse(c.w, c.who, o.Owner))
+	c.tell("Location: %s", unparse(c.w, c.who, o.Location))
+
+	switch o.Type() {
+	case ref.TypeRoom:
+		c.tell("Drop-to: %s", unparse(c.w, c.who, o.Dropto))
+	case ref.TypeThing, ref.TypePlayer:
+		c.tell("Home: %s", unparse(c.w, c.who, o.Home))
+	case ref.TypeExit:
+		var dests []string
+		for _, d := range o.Dest {
+			dests = append(dests, unparse(c.w, c.who, d))
+		}
+		if len(dests) == 0 {
+			c.tell("Destination: *UNLINKED*")
+		} else {
+			c.tell("Destination: %s", strings.Join(dests, ", "))
+		}
+	}
+
+	c.tell("Created: %s", o.Created.Format("Mon Jan 2 15:04:05 2006"))
+	c.tell("Modified: %s", o.Modified.Format("Mon Jan 2 15:04:05 2006"))
+	c.tell("Last used: %s (%d times)",
+		o.LastUsed.Format("Mon Jan 2 15:04:05 2006"), o.UseCount)
+
+	if entries := o.Props.All(); len(entries) > 0 {
+		c.tell("Properties:")
+		for _, e := range entries {
+			c.tell("  %s:%s", e.Path, e.Value.StringValue())
+		}
+	}
+}
+
+// cmdInventory lists what the player is carrying.
+func (s *Server) cmdInventory(c *ctx) {
+	contents := c.w.Contents(c.who)
+	if len(contents) == 0 {
+		c.tell("You aren't carrying anything.")
+		return
+	}
+	c.tell("You are carrying:")
+	for _, r := range contents {
+		c.send(unparse(c.w, c.who, r))
+	}
+}

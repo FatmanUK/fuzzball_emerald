@@ -1,17 +1,22 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/game"
 	"github.com/FatmanUK/fuzzball_emerald/internal/importer"
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/store"
+	"github.com/FatmanUK/fuzzball_emerald/internal/transport/tlsline"
+	"github.com/FatmanUK/fuzzball_emerald/internal/transport/wss"
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
@@ -75,12 +80,75 @@ func cmdServe(args []string) error {
 		Logger:    base,
 	})
 
-	// M3 starts the listeners here; until then the engine just runs.
-	if err := engine.Run(ctx); err != nil {
+	tlsConfig, err := c.BuildTLS(base)
+	if err != nil {
+		return err
+	}
+
+	game.Version = version
+	gs := game.New(engine, game.Options{Logger: base})
+
+	// Run the world first: the listeners enqueue work onto it from their
+	// own goroutines, so it has to be draining before they accept anyone.
+	runCtx, stopWorld := context.WithCancel(ctx)
+	defer stopWorld()
+	gs.OnShutdown(stopWorld)
+
+	worldDone := make(chan error, 1)
+	go func() { worldDone <- engine.Run(runCtx) }()
+
+	var listeners []listener
+	if c.LineAddr != "" {
+		ls, err := tlsline.New(c.LineAddr, tlsConfig, gs, base)
+		if err != nil {
+			stopWorld()
+			<-worldDone
+			return fmt.Errorf("listening on %s: %w", c.LineAddr, err)
+		}
+		log.Info("listening", "transport", "tls", "addr", ls.Addr().String())
+		listeners = append(listeners, ls)
+	}
+	if c.WSSAddr != "" {
+		ls, err := wss.New(c.WSSAddr, tlsConfig, gs, wss.Options{
+			Path:   c.WSSPath,
+			Logger: base,
+		})
+		if err != nil {
+			stopWorld()
+			<-worldDone
+			return fmt.Errorf("listening on %s: %w", c.WSSAddr, err)
+		}
+		log.Info("listening", "transport", "wss",
+			"addr", ls.Addr().String(), "path", c.WSSPath)
+		listeners = append(listeners, ls)
+	}
+
+	for _, ls := range listeners {
+		go func(ls listener) {
+			if err := ls.Serve(runCtx); err != nil {
+				log.Error("listener stopped", "error", err)
+			}
+		}(ls)
+	}
+
+	// The world goroutine returning is what ends the server: it happens on
+	// a signal, or when a wizard types @shutdown.
+	err = <-worldDone
+	for _, ls := range listeners {
+		_ = ls.Close()
+	}
+	if err != nil {
 		return err
 	}
 	log.Info("stopped cleanly")
 	return nil
+}
+
+// listener is what both transports provide.
+type listener interface {
+	Serve(context.Context) error
+	Close() error
+	Addr() net.Addr
 }
 
 func cmdMigrate(args []string) error {
