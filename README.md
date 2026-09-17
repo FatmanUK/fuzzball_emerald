@@ -20,10 +20,10 @@ git show origin/mother:src/interp.c
 
 ## Status
 
-Early. M0 (skeleton, `@tune` table, container) and M1 (object model,
-properties, world goroutine, Postgres persistence) are done. There is no
-network listener yet, so the server currently boots, loads the world and waits
-for a signal.
+Early. M0 (skeleton, `@tune` table, container), M1 (object model, properties,
+world goroutine, Postgres persistence) and M2 (legacy importer) are done. The
+shipped starter world imports and reloads intact. There is no network listener
+yet, so the server currently boots, loads the world and waits for a signal.
 
 ## Building
 
@@ -67,6 +67,38 @@ Everything else is an `@tune` parameter, as upstream. Inspect the table with:
 ```bash
 fbemerald tune
 ```
+
+## Importing a legacy world
+
+```bash
+fbemerald import path/to/starterdb.db
+```
+
+Fuzzball splits a world across three places: the `.db` dump, a `muf/` directory
+of program sources named `<dbref>.m`, and a `macros` file inside it. A dump on
+its own carries no code, so the importer looks for `muf/` beside the dump and
+one level up from a `data/` directory; `-muf-dir` overrides it.
+
+`-dry-run` reads and reports without writing. Importing into a database that
+already holds a world is refused unless you pass `-force`.
+
+Only the `Foxen9` format is read, which is what Fuzzball 7 writes. Converting
+older dumps is upstream's job and its own binary does it.
+
+## Passwords
+
+Emerald hashes with Argon2id. It verifies both formats Fuzzball wrote — bare
+base64 MD5, and the newer PBKDF2-HMAC-SHA512 `$1$salt$hex` — so imported
+players can still log in, and upgrades them in place on the first successful
+login.
+
+Two deliberate differences:
+
+- Fuzzball accepts **any** password for a player whose stored password is
+  empty. Emerald refuses the login instead. The importer lists any such players
+  so you can set passwords on them.
+- Fuzzball compares only the leading bytes of a stored hash, so a truncated
+  hash matches. Emerald compares the whole value, in constant time.
 
 ## How persistence works
 

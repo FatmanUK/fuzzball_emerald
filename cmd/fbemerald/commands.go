@@ -4,10 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/importer"
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
+	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/store"
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
@@ -113,9 +116,18 @@ func cmdMigrate(args []string) error {
 func cmdImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: fbemerald import [flags] <dump.db>\n\n")
+		fmt.Fprintf(os.Stderr, `usage: fbemerald import [flags] <dump.db>
+
+Loads a legacy Fuzzball database into Postgres. Program sources and the macro
+table are read from a muf/ directory beside the dump.
+
+`)
 		fs.PrintDefaults()
 	}
+	mufDir := fs.String("muf-dir", "", "directory of <dbref>.m sources (default: found beside the dump)")
+	force := fs.Bool("force", false, "replace an existing world instead of refusing")
+	dryRun := fs.Bool("dry-run", false, "read and report, but write nothing")
+
 	c, err := loadConfig(fs, args)
 	if err != nil {
 		return err
@@ -124,8 +136,113 @@ func cmdImport(args []string) error {
 		fs.Usage()
 		return fmt.Errorf("expected exactly one dump file")
 	}
-	_ = c
-	return fmt.Errorf("import is not implemented yet (M2)")
+	dumpPath := fs.Arg(0)
+
+	base, err := newLogger(c)
+	if err != nil {
+		return err
+	}
+	log := logging.On(base, logging.Status)
+
+	ctx, stop := notifyContext()
+	defer stop()
+
+	// Read the whole world before touching the database, so a dump that
+	// turns out to be unreadable cannot leave a half-replaced world behind.
+	started := time.Now()
+	res, err := importer.Load(importer.Source{DumpPath: dumpPath, MufDir: *mufDir})
+	if err != nil {
+		return err
+	}
+	rep := res.Report
+
+	for _, warn := range rep.Warnings {
+		log.Warn("import", "detail", warn)
+	}
+	log.Info("dump read",
+		"objects", rep.Objects,
+		"properties", rep.Properties,
+		"programs", rep.Programs,
+		"macros", rep.Macros,
+		"params_set", rep.ParamsSet,
+		"params_reset", rep.ParamsReset,
+		"params_dropped", rep.ParamsDropped,
+		"warnings", len(rep.Warnings),
+		"took", time.Since(started).String(),
+	)
+
+	// Fuzzball lets a player with no password log in with any password.
+	// Emerald refuses, so these accounts are unreachable until someone sets
+	// a password on them. That is a change in behaviour and needs saying
+	// plainly rather than hiding in a count.
+	if locked := res.PlayersWithoutPasswords(); len(locked) > 0 {
+		names := make([]string, 0, len(locked))
+		for _, r := range locked {
+			names = append(names, fmt.Sprintf("%s (%v)", res.World.Get(r).Name, r))
+		}
+		log.Warn("players in this dump have no password and cannot log in; "+
+			"Fuzzball would have accepted any password for them",
+			"players", strings.Join(names, ", "))
+	}
+
+	if *dryRun {
+		log.Info("dry run: nothing was written")
+		return nil
+	}
+
+	st, err := store.Open(ctx, c.DatabaseURL, base)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := st.Migrate(ctx); err != nil {
+		return err
+	}
+
+	empty, err := st.IsEmpty(ctx)
+	if err != nil {
+		return err
+	}
+	if !empty && !*force {
+		return fmt.Errorf("the database already holds a world; pass -force to replace it")
+	}
+	if !empty {
+		log.Warn("replacing the existing world")
+		if err := st.Reset(ctx); err != nil {
+			return err
+		}
+	}
+
+	if err := st.Flush(ctx, res.World.TakeSnapshot()); err != nil {
+		return fmt.Errorf("writing the world: %w", err)
+	}
+
+	progs := make(map[ref.Ref]string, len(res.Programs))
+	for _, p := range res.Programs {
+		progs[p.Ref] = p.Source
+	}
+	if err := st.SavePrograms(ctx, progs); err != nil {
+		return err
+	}
+
+	macros := make([]store.Macro, 0, len(res.Macros))
+	for _, m := range res.Macros {
+		macros = append(macros, store.Macro{
+			Name: m.Name, Definition: m.Definition, Owner: int32(m.Owner),
+		})
+	}
+	if err := st.SaveMacros(ctx, macros); err != nil {
+		return err
+	}
+
+	log.Info("import complete",
+		"objects", rep.Objects,
+		"programs", len(progs),
+		"macros", len(macros),
+		"took", time.Since(started).String(),
+	)
+	return nil
 }
 
 func cmdTune(args []string) error {

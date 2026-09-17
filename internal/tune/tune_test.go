@@ -244,7 +244,8 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 	if dropped != 8 {
 		t.Errorf("skipped %d dropped parameters, want 8", dropped)
 	}
-	// default_room_parent is the one value minimal.db overrides explicitly.
+	// minimal.db sets two parameters explicitly, without the '%' default
+	// marker: default_room_parent and player_start.
 	if s.IsDefault("default_room_parent") {
 		t.Error("default_room_parent is set explicitly in the fixture")
 	}
