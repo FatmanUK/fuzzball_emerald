@@ -171,6 +171,135 @@ func TestArrays(t *testing.T) {
 	})
 }
 
+func TestStringFormatting(t *testing.T) {
+	runCase(t, Case{
+		Name: "fmtstring",
+		Source: tellPrelude + `: main
+  "plain" "%s" fmtstring ts
+  42 "%i" fmtstring ts
+  "x" "%5s|" fmtstring ts
+  "x" "%-5s|" fmtstring ts
+  7 "%5i|" fmtstring ts
+  1 2 "%i and %i" fmtstring ts
+  "100%% sure" ts
+;`,
+	})
+}
+
+func TestStringCutAndCompare(t *testing.T) {
+	runCase(t, Case{
+		Name: "strcut",
+		Source: tellPrelude + `: main
+  "hello world" 5 strcut ts ts
+  "hello" 0 strcut ts ts
+  "hello" 99 strcut ts ts
+  "abcdef" "abcxyz" 3 strncmp t
+  "abcdef" "abcxyz" 4 strncmp t
+  "one two one" "one" "X" subst ts
+;`,
+	})
+}
+
+func TestPatternMatching(t *testing.T) {
+	runCase(t, Case{
+		Name: "smatch",
+		Source: tellPrelude + `: main
+  "hello" "h*" smatch t
+  "hello" "*o" smatch t
+  "hello" "h?llo" smatch t
+  "hello" "goodbye" smatch t
+  "HELLO" "hello" smatch t
+  "hello" "{hello|goodbye}" smatch t
+;`,
+	})
+}
+
+func TestObjectQueries(t *testing.T) {
+	runCase(t, Case{
+		Name: "objects",
+		Source: tellPrelude + `: main
+  me @ name ts
+  me @ location intostr ts
+  me @ owner intostr ts
+  me @ player? t
+  me @ room? t
+  loc @ room? t
+  me @ "wizard" flag? t
+  me @ "dark" flag? t
+  me @ me @ controls t
+;`,
+	})
+}
+
+func TestProperties(t *testing.T) {
+	runCase(t, Case{
+		Name: "properties",
+		Source: tellPrelude + `: main
+  me @ "test/str" "a value" setprop
+  me @ "test/str" getpropstr ts
+  me @ "test/num" "" 42 addprop
+  me @ "test/num" getpropval t
+  me @ "test/str" remove_prop
+  me @ "test/str" getpropstr ts
+  me @ "test" propdir? t
+;`,
+	})
+}
+
+func TestStackRotation(t *testing.T) {
+	runCase(t, Case{
+		Name: "rotate",
+		Source: tellPrelude + `: main
+  1 2 3 3 rotate t t t
+  1 2 3 -3 rotate t t t
+  1 2 3 2 rotate t t t
+;`,
+	})
+}
+
+func TestFloats(t *testing.T) {
+	runCase(t, Case{
+		Name: "floats",
+		Source: tellPrelude + `: main
+  2.5 ftostr ts
+  4.0 sqrt ftostr ts
+  2.0 10.0 pow ftostr ts
+  -3.5 fabs ftostr ts
+  3.7 floor ftostr ts
+  3.2 ceil ftostr ts
+  1.0 exp ftostr ts
+  100.0 log10 ftostr ts
+  "2.5" strtof ftostr ts
+  7.0 2.0 fmod ftostr ts
+;`,
+	})
+}
+
+func TestArrayOperations(t *testing.T) {
+	runCase(t, Case{
+		Name: "array ops",
+		Source: tellPrelude + `: main
+  { 3 1 2 }list 0 array_sort array_vals t t t
+  { 1 2 3 4 5 }list 1 3 array_getrange array_count t
+  { 1 2 3 }list array_reverse array_vals t t t
+  { "a" 1 "b" 2 }dict array_count t
+  { 1 2 3 }list 1 array_delitem array_count t
+;`,
+	})
+}
+
+func TestTimeAndVersion(t *testing.T) {
+	runCase(t, Case{
+		Name: "timesplit",
+		Source: tellPrelude + `: main
+  0 timesplit
+  t t t t t t t t
+  "%Y-%m-%d" 0 timefmt ts
+  "%H:%M:%S" 0 timefmt ts
+;`,
+	})
+}
+
 // TestDivisionByZero checks that a failure reports the same way in both.
 func TestDivisionByZero(t *testing.T) {
 	runCase(t, Case{

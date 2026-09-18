@@ -192,3 +192,53 @@ func (a *Array) sortKeys() {
 		return x.Str < y.Str
 	})
 }
+
+// Insert adds a value at a key, shifting a list's later entries up rather than
+// replacing one.
+func (a *Array) Insert(key, val Value) {
+	if a.IsList() && key.Type == TypeInteger {
+		i := int(key.Num)
+		if i < 0 {
+			i = 0
+		}
+		if i > len(a.list) {
+			i = len(a.list)
+		}
+		a.list = append(a.list, Value{})
+		copy(a.list[i+1:], a.list[i:])
+		a.list[i] = val
+		return
+	}
+	a.Set(key, val)
+}
+
+// Range returns the entries between two keys, inclusive.
+func (a *Array) Range(from, to Value) *Array {
+	if a.IsList() && from.Type == TypeInteger && to.Type == TypeInteger {
+		lo, hi := int(from.Num), int(to.Num)
+		if lo < 0 {
+			lo = 0
+		}
+		if hi >= len(a.list) {
+			hi = len(a.list) - 1
+		}
+		if lo > hi {
+			return NewList(nil)
+		}
+		return NewList(a.list[lo : hi+1])
+	}
+
+	out := NewDict()
+	keys, vals := a.Keys(), a.Values()
+	for i, k := range keys {
+		if inRange(k, from, to) {
+			out.Set(k, vals[i])
+		}
+	}
+	return out
+}
+
+// inRange reports whether a key falls between two others.
+func inRange(k, from, to Value) bool {
+	return !valueLess(k, from, false) && !valueLess(to, k, false)
+}

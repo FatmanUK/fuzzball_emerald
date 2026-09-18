@@ -3,6 +3,9 @@ package game
 import (
 	"strings"
 
+	"time"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf/compiler"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -21,19 +24,15 @@ type mufHost struct {
 
 func (h *mufHost) Notify(who ref.Ref, msg string) { h.s.send(who, msg) }
 
-func (h *mufHost) GetPropStr(obj ref.Ref, path string) string {
-	v, ok := h.w.GetProp(obj, path)
-	if !ok {
-		return ""
-	}
-	return v.StringValue()
-}
-
-func (h *mufHost) SetPropStr(obj ref.Ref, path, val string) {
-	h.w.SetProp(obj, path, props.Value{Type: props.String, Str: val})
+func (h *mufHost) NotifyExcept(room ref.Ref, except []ref.Ref, msg string) {
+	h.s.notifyRoom(h.w, room, except, "%s", msg)
 }
 
 func (h *mufHost) Name(obj ref.Ref) string { return nameOf(h.w, obj) }
+
+func (h *mufHost) SetName(obj ref.Ref, name string) error {
+	return h.w.Rename(obj, name)
+}
 
 func (h *mufHost) Location(obj ref.Ref) ref.Ref {
 	if o := h.w.Get(obj); o != nil {
@@ -49,6 +48,42 @@ func (h *mufHost) Owner(obj ref.Ref) ref.Ref {
 	return ref.Nothing
 }
 
+func (h *mufHost) Home(obj ref.Ref) ref.Ref {
+	if o := h.w.Get(obj); o != nil {
+		return o.Home
+	}
+	return ref.Nothing
+}
+
+// Links returns what an object points at, which differs by type: an exit's
+// destinations, a room's drop-to, or a thing's or player's home.
+func (h *mufHost) Links(obj ref.Ref) []ref.Ref {
+	o := h.w.Get(obj)
+	if o == nil {
+		return nil
+	}
+	switch o.Type() {
+	case ref.TypeExit:
+		return o.Dest
+	case ref.TypeRoom:
+		if o.Dropto == ref.Nothing {
+			return nil
+		}
+		return []ref.Ref{o.Dropto}
+	case ref.TypeThing, ref.TypePlayer:
+		if o.Home == ref.Nothing {
+			return nil
+		}
+		return []ref.Ref{o.Home}
+	}
+	return nil
+}
+
+func (h *mufHost) Contents(obj ref.Ref) []ref.Ref { return h.w.Contents(obj) }
+func (h *mufHost) Exits(obj ref.Ref) []ref.Ref    { return h.w.Exits(obj) }
+
+func (h *mufHost) MoveTo(what, dest ref.Ref) error { return h.w.MoveTo(what, dest) }
+
 func (h *mufHost) Valid(obj ref.Ref) bool { return h.w.Valid(obj) }
 
 func (h *mufHost) ObjType(obj ref.Ref) ref.ObjType {
@@ -57,6 +92,79 @@ func (h *mufHost) ObjType(obj ref.Ref) ref.ObjType {
 	}
 	return ref.NoType
 }
+
+func (h *mufHost) Flags(obj ref.Ref) ref.Flags {
+	if o := h.w.Get(obj); o != nil {
+		return o.Flags
+	}
+	return 0
+}
+
+func (h *mufHost) SetFlags(obj ref.Ref, f ref.Flags) {
+	o := h.w.Get(obj)
+	if o == nil {
+		return
+	}
+	// The type bits are not a program's to change, and the internal flags
+	// describe live server state.
+	o.Flags = (f &^ ref.DumpMask).WithType(o.Type())
+	h.w.Modified(obj)
+}
+
+func (h *mufHost) Top() ref.Ref { return h.w.Top() }
+
+func (h *mufHost) GetProp(obj ref.Ref, path string) (props.Value, bool) {
+	return h.w.GetProp(obj, path)
+}
+
+func (h *mufHost) SetProp(obj ref.Ref, path string, v props.Value) {
+	h.w.SetProp(obj, path, v)
+}
+
+func (h *mufHost) RemoveProp(obj ref.Ref, path string) {
+	if o := h.w.Get(obj); o != nil {
+		o.Props.Delete(path)
+		h.w.Modified(obj)
+	}
+}
+
+func (h *mufHost) PropChildren(obj ref.Ref, path string) []string {
+	if o := h.w.Get(obj); o != nil {
+		return o.Props.Children(path)
+	}
+	return nil
+}
+
+func (h *mufHost) Match(who ref.Ref, name string) ref.Ref {
+	return match.New(h.w, who, name).Everything().Player().Result()
+}
+
+func (h *mufHost) MatchPlayer(name string) ref.Ref {
+	r, ok := h.w.PlayerNamed(strings.TrimPrefix(name, "*"))
+	if !ok {
+		return ref.Nothing
+	}
+	return r
+}
+
+func (h *mufHost) Connections(player ref.Ref) int {
+	return len(h.s.hub.DescriptorsFor(player))
+}
+
+func (h *mufHost) Descriptors(player ref.Ref) []int {
+	ds := h.s.hub.DescriptorsFor(player)
+	out := make([]int, len(ds))
+	for i, d := range ds {
+		out[i] = d.ID
+	}
+	return out
+}
+
+func (h *mufHost) Now() time.Time { return h.w.Now() }
+
+func (h *mufHost) Uptime() time.Duration { return h.w.Now().Sub(h.s.started) }
+
+func (h *mufHost) Version() string { return "Fuzzball Emerald " + Version }
 
 // compiled caches a program's compiled form, keyed by ref.
 type compiled struct {

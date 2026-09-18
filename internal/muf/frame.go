@@ -1,6 +1,11 @@
 package muf
 
-import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
+import (
+	"time"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
+	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+)
 
 // Host is what a running program can reach outside itself.
 //
@@ -10,20 +15,60 @@ import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
 type Host interface {
 	// Notify sends a line to an object's connections.
 	Notify(who ref.Ref, msg string)
-	// GetPropStr reads a property as a string, empty when unset.
-	GetPropStr(obj ref.Ref, path string) string
-	// SetPropStr writes a string property.
-	SetPropStr(obj ref.Ref, path, val string)
-	// Name returns an object's name.
+	// NotifyExcept sends a line to everything in a room, skipping some.
+	NotifyExcept(room ref.Ref, except []ref.Ref, msg string)
+
+	// Name returns an object's name, and SetName changes it.
 	Name(obj ref.Ref) string
-	// Location returns what an object is inside.
+	SetName(obj ref.Ref, name string) error
+
+	// Location, Owner and Home answer the obvious questions.
 	Location(obj ref.Ref) ref.Ref
-	// Owner returns who owns an object.
 	Owner(obj ref.Ref) ref.Ref
-	// Valid reports whether a ref names a live object.
+	Home(obj ref.Ref) ref.Ref
+	// Links returns what an object points at: an exit's destinations, a
+	// room's drop-to, or a thing's or player's home.
+	Links(obj ref.Ref) []ref.Ref
+
+	// Contents and Exits walk the containment chains.
+	Contents(obj ref.Ref) []ref.Ref
+	Exits(obj ref.Ref) []ref.Ref
+	// MoveTo relocates an object.
+	MoveTo(what, dest ref.Ref) error
+
+	// Valid reports whether a ref names a live object, ObjType gives its
+	// type, and Flags its flag word.
 	Valid(obj ref.Ref) bool
-	// ObjType returns an object's type.
 	ObjType(obj ref.Ref) ref.ObjType
+	Flags(obj ref.Ref) ref.Flags
+	SetFlags(obj ref.Ref, f ref.Flags)
+	// Top is one past the highest ref in use.
+	Top() ref.Ref
+
+	// Properties. GetProp returns the stored value; the string, integer and
+	// dbref forms of the primitives convert from it.
+	GetProp(obj ref.Ref, path string) (props.Value, bool)
+	SetProp(obj ref.Ref, path string, v props.Value)
+	RemoveProp(obj ref.Ref, path string)
+	// PropChildren lists the names directly under a property path.
+	PropChildren(obj ref.Ref, path string) []string
+
+	// Match resolves a name the way a player's command would, and
+	// MatchPlayer looks only at player names.
+	Match(who ref.Ref, name string) ref.Ref
+	MatchPlayer(name string) ref.Ref
+
+	// Connections returns how many times a player is connected, and
+	// Descriptors the descriptor numbers.
+	Connections(player ref.Ref) int
+	Descriptors(player ref.Ref) []int
+
+	// Now is the server's clock, which tests replace.
+	Now() time.Time
+	// Uptime is how long the server has been running.
+	Uptime() time.Duration
+	// Version identifies the server.
+	Version() string
 }
 
 // callSite records where a call came from, so EXIT can return to it.
@@ -77,6 +122,10 @@ type Frame struct {
 	// Instructions counts what has run, which bounds a runaway program.
 	Instructions int
 
+	// Mode is the multitasking mode, which decides how readily the program
+	// yields. The scheduler that acts on it arrives with the process queue.
+	Mode int
+
 	// Err holds the error a TRY has not yet caught.
 	err *Error
 
@@ -113,6 +162,13 @@ func NewFrame(p *Program, host Host) *Frame {
 	}
 	return f
 }
+
+// Multitasking modes, from the MODE and SETMODE primitives.
+const (
+	ModePreempt    = 0
+	ModeForeground = 1
+	ModeBackground = 2
+)
 
 // ErrorFlags are the arithmetic conditions is_set? reports. The order matches
 // the bits union error_mask defines, because is_set? takes the number.

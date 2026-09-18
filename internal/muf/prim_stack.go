@@ -266,3 +266,182 @@ func (f *Frame) popRef() (ref.Ref, error) {
 	}
 	return v.Ref, nil
 }
+
+// Stack primitives that move several values at once, and the remaining type
+// and mode queries.
+
+func init() {
+	register("ROTATE", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 || n == 1 || n == -1 {
+			return nil, nil
+		}
+		count := n
+		if count < 0 {
+			count = -count
+		}
+		if int(count) > f.Depth() {
+			return nil, errf("stack underflow")
+		}
+		vals, err := f.PopN(int(count))
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			// Bring the deepest of the group to the top.
+			vals = append(vals[1:], vals[0])
+		} else {
+			// Send the top of the group to the bottom.
+			vals = append(vals[len(vals)-1:], vals[:len(vals)-1]...)
+		}
+		for _, v := range vals {
+			if err := f.Push(v); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	register("PUT", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if n < 1 || int(n) > f.Depth() {
+			return nil, errf("PUT needs a position on the stack")
+		}
+		f.Stack[f.Depth()-int(n)] = v
+		return nil, nil
+	})
+
+	register("REVERSE", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 {
+			return nil, errf("REVERSE needs a count that is not negative")
+		}
+		vals, err := f.PopN(int(n))
+		if err != nil {
+			return nil, err
+		}
+		for i := len(vals) - 1; i >= 0; i-- {
+			if err := f.Push(vals[i]); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	register("LREVERSE", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 {
+			return nil, errf("LREVERSE needs a count that is not negative")
+		}
+		vals, err := f.PopN(int(n))
+		if err != nil {
+			return nil, err
+		}
+		for i := len(vals) - 1; i >= 0; i-- {
+			if err := f.Push(vals[i]); err != nil {
+				return nil, err
+			}
+		}
+		return nil, f.Push(Int(n))
+	})
+
+	register("DUPN", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 || int(n) > f.Depth() {
+			return nil, errf("stack underflow")
+		}
+		base := f.Depth() - int(n)
+		for i := 0; i < int(n); i++ {
+			if err := f.Push(f.Stack[base+i]); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	register("LDUP", func(f *Frame) (*Result, error) {
+		top, err := f.Peek(0)
+		if err != nil {
+			return nil, err
+		}
+		if top.Type != TypeInteger {
+			return nil, errf("LDUP needs a count on top of the stack")
+		}
+		n := int(top.Num)
+		if n < 0 || n+1 > f.Depth() {
+			return nil, errf("stack underflow")
+		}
+		base := f.Depth() - n - 1
+		for i := 0; i <= n; i++ {
+			if err := f.Push(f.Stack[base+i]); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	register("FULLDEPTH", func(f *Frame) (*Result, error) {
+		return nil, f.Push(Int(int64(f.Depth())))
+	})
+
+	register("LOCK?", typeTest(TypeLock))
+	register("VARIABLE", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Value{Type: TypeVar, Num: n})
+	})
+	register("LOCALVAR", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Value{Type: TypeLVar, Num: n})
+	})
+
+	// The multitasking modes. Real scheduling arrives with the process
+	// queue; for now a program may set and read its mode.
+	register("MODE", func(f *Frame) (*Result, error) {
+		return nil, f.Push(Int(int64(f.Mode)))
+	})
+	register("SETMODE", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		f.Mode = int(n)
+		return nil, nil
+	})
+	register("PREEMPT", func(f *Frame) (*Result, error) {
+		f.Mode = ModePreempt
+		return nil, nil
+	})
+	register("FOREGROUND", func(f *Frame) (*Result, error) {
+		f.Mode = ModeForeground
+		return nil, nil
+	})
+	register("BACKGROUND", func(f *Frame) (*Result, error) {
+		f.Mode = ModeBackground
+		return nil, nil
+	})
+}

@@ -32,6 +32,9 @@ type Server struct {
 	// shutdown asks the process to stop, set by the server binary.
 	shutdown func()
 
+	// started is when the server came up, for uptime.
+	started time.Time
+
 	// programs caches compiled MUF, and macros is the editor's macro table.
 	programs map[ref.Ref]compiled
 	macros   map[string]string
@@ -61,6 +64,7 @@ func New(engine *world.Engine, opts Options) *Server {
 		hub:      session.NewHub(),
 		log:      opts.Logger,
 		welcome:  welcome,
+		started:  time.Now(),
 		programs: map[ref.Ref]compiled{},
 		macros:   map[string]string{},
 	}

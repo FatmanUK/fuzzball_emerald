@@ -7,32 +7,71 @@ import (
 	"strings"
 	"testing"
 
+	"time"
+
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf/compiler"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
 // fakeHost is a minimal world for programs that reach outside themselves.
 type fakeHost struct {
 	told  []string
-	props map[string]string
+	props map[string]props.Value
 	names map[ref.Ref]string
 }
 
 func newHost() *fakeHost {
-	return &fakeHost{props: map[string]string{}, names: map[ref.Ref]string{}}
+	return &fakeHost{props: map[string]props.Value{}, names: map[ref.Ref]string{}}
 }
 
 func (h *fakeHost) Notify(_ ref.Ref, msg string) { h.told = append(h.told, msg) }
-func (h *fakeHost) GetPropStr(o ref.Ref, p string) string {
-	return h.props[o.String()+"/"+p]
+func (h *fakeHost) NotifyExcept(_ ref.Ref, _ []ref.Ref, msg string) {
+	h.told = append(h.told, msg)
 }
-func (h *fakeHost) SetPropStr(o ref.Ref, p, v string) { h.props[o.String()+"/"+p] = v }
-func (h *fakeHost) Name(o ref.Ref) string             { return h.names[o] }
-func (h *fakeHost) Location(ref.Ref) ref.Ref          { return ref.GlobalEnvironment }
-func (h *fakeHost) Owner(ref.Ref) ref.Ref             { return ref.God }
-func (h *fakeHost) Valid(o ref.Ref) bool              { return o.Ok() }
-func (h *fakeHost) ObjType(ref.Ref) ref.ObjType       { return ref.TypeThing }
+
+func (h *fakeHost) Name(o ref.Ref) string { return h.names[o] }
+func (h *fakeHost) SetName(o ref.Ref, n string) error {
+	h.names[o] = n
+	return nil
+}
+
+func (h *fakeHost) Location(ref.Ref) ref.Ref      { return ref.GlobalEnvironment }
+func (h *fakeHost) Owner(ref.Ref) ref.Ref         { return ref.God }
+func (h *fakeHost) Home(ref.Ref) ref.Ref          { return ref.GlobalEnvironment }
+func (h *fakeHost) Links(ref.Ref) []ref.Ref       { return nil }
+func (h *fakeHost) Contents(ref.Ref) []ref.Ref    { return nil }
+func (h *fakeHost) Exits(ref.Ref) []ref.Ref       { return nil }
+func (h *fakeHost) MoveTo(ref.Ref, ref.Ref) error { return nil }
+
+func (h *fakeHost) Valid(o ref.Ref) bool        { return o.Ok() }
+func (h *fakeHost) ObjType(ref.Ref) ref.ObjType { return ref.TypeThing }
+func (h *fakeHost) Flags(ref.Ref) ref.Flags     { return 0 }
+func (h *fakeHost) SetFlags(ref.Ref, ref.Flags) {}
+func (h *fakeHost) Top() ref.Ref                { return ref.Ref(100) }
+
+func (h *fakeHost) GetProp(o ref.Ref, p string) (props.Value, bool) {
+	v, ok := h.props[o.String()+"/"+p]
+	return v, ok
+}
+func (h *fakeHost) SetProp(o ref.Ref, p string, v props.Value) {
+	h.props[o.String()+"/"+p] = v
+}
+func (h *fakeHost) RemoveProp(o ref.Ref, p string) {
+	delete(h.props, o.String()+"/"+p)
+}
+func (h *fakeHost) PropChildren(ref.Ref, string) []string { return nil }
+
+func (h *fakeHost) Match(ref.Ref, string) ref.Ref { return ref.Nothing }
+func (h *fakeHost) MatchPlayer(string) ref.Ref    { return ref.Nothing }
+
+func (h *fakeHost) Connections(ref.Ref) int   { return 1 }
+func (h *fakeHost) Descriptors(ref.Ref) []int { return []int{1} }
+
+func (h *fakeHost) Now() time.Time        { return time.Unix(1_700_000_000, 0).UTC() }
+func (h *fakeHost) Uptime() time.Duration { return time.Hour }
+func (h *fakeHost) Version() string       { return "test" }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
@@ -294,7 +333,8 @@ func TestDivisionByZeroYieldsZeroAndAFlag(t *testing.T) {
 func TestUnimplementedPrimitiveIsReported(t *testing.T) {
 	// A primitive the compiler knows but the interpreter does not must say
 	// so, rather than silently doing nothing.
-	runFails(t, ": main DBTOP ;", "not implemented yet")
+	// An MCP-GUI primitive, which needs the MCP machinery from M7.
+	runFails(t, ": main GUI_DLOG_CREATE ;", "not implemented yet")
 }
 
 // TestRunawayProgramIsStopped checks the instruction ceiling.

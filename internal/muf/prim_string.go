@@ -35,7 +35,7 @@ func init() {
 		if v[0].Type != TypeString || v[1].Type != TypeString {
 			return nil, errf("STRCMP needs two strings")
 		}
-		return nil, f.Push(Int(int64(strings.Compare(v[0].Str, v[1].Str))))
+		return nil, f.Push(Int(int64(cStrcmp(v[0].Str, v[1].Str))))
 	})
 	register("STRINGCMP", func(f *Frame) (*Result, error) {
 		v, err := f.PopN(2)
@@ -45,7 +45,7 @@ func init() {
 		if v[0].Type != TypeString || v[1].Type != TypeString {
 			return nil, errf("STRINGCMP needs two strings")
 		}
-		return nil, f.Push(Int(int64(ascii.Compare(v[0].Str, v[1].Str))))
+		return nil, f.Push(Int(int64(cStrcasecmp(v[0].Str, v[1].Str))))
 	})
 	register("STRINGPFX", func(f *Frame) (*Result, error) {
 		v, err := f.PopN(2)
@@ -253,52 +253,60 @@ func init() {
 		}
 		return nil, nil
 	})
-	register("NAME", hostRefToStr(func(h Host, r ref.Ref) string { return h.Name(r) }))
-	register("GETPROPSTR", func(f *Frame) (*Result, error) {
-		path, err := f.popStr()
-		if err != nil {
-			return nil, err
+}
+
+// cStrcmp compares two strings the way C's strcmp does, returning the
+// difference between the first bytes that differ rather than -1, 0 or 1.
+//
+// That difference is observable from MUF: comparing "abcdef" with "abcxyz"
+// gives -20, not -1, and programs have been written against it.
+func cStrcmp(a, b string) int {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			return int(a[i]) - int(b[i])
 		}
-		obj, err := f.popRef()
-		if err != nil {
-			return nil, err
+	}
+	// One string ran out. C compares its terminating NUL with the other's
+	// next byte.
+	switch {
+	case len(a) < len(b):
+		return -int(b[n])
+	case len(a) > len(b):
+		return int(a[n])
+	}
+	return 0
+}
+
+// cStrcasecmp is the same, ignoring ASCII case.
+func cStrcasecmp(a, b string) int {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		x, y := lowerASCII(a[i]), lowerASCII(b[i])
+		if x != y {
+			return int(x) - int(y)
 		}
-		if f.host == nil {
-			return nil, errf("GETPROPSTR needs a running server")
-		}
-		return nil, f.Push(Str(f.host.GetPropStr(obj, path)))
-	})
-	register("SETPROP", func(f *Frame) (*Result, error) {
-		val, err := f.Pop()
-		if err != nil {
-			return nil, err
-		}
-		path, err := f.popStr()
-		if err != nil {
-			return nil, err
-		}
-		obj, err := f.popRef()
-		if err != nil {
-			return nil, err
-		}
-		if f.host == nil {
-			return nil, errf("SETPROP needs a running server")
-		}
-		f.host.SetPropStr(obj, path, val.String())
-		return nil, nil
-	})
-	register("LOCATION", hostRefToRef(func(h Host, r ref.Ref) ref.Ref { return h.Location(r) }))
-	register("OWNER", hostRefToRef(func(h Host, r ref.Ref) ref.Ref { return h.Owner(r) }))
-	register("OK?", func(f *Frame) (*Result, error) {
-		r, err := f.popRef()
-		if err != nil {
-			return nil, err
-		}
-		if f.host == nil {
-			return nil, f.Push(Bool(false))
-		}
-		return nil, f.Push(Bool(f.host.Valid(r)))
-	})
+	}
+	switch {
+	case len(a) < len(b):
+		return -int(lowerASCII(b[n]))
+	case len(a) > len(b):
+		return int(lowerASCII(a[n]))
+	}
+	return 0
+}
+
+func lowerASCII(c byte) byte {
+	if c >= 'A' && c <= 'Z' {
+		return c + ('a' - 'A')
+	}
+	return c
 }
 
 // popArray takes an array from the stack.
