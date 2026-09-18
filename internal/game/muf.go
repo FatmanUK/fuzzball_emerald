@@ -160,6 +160,33 @@ func (h *mufHost) Descriptors(player ref.Ref) []int {
 	return out
 }
 
+// Online lists the players with a live connection, in connection order.
+func (h *mufHost) Online() []ref.Ref {
+	seen := map[ref.Ref]bool{}
+	var out []ref.Ref
+	for _, d := range h.s.hub.Connected() {
+		if !seen[d.Player] {
+			seen[d.Player] = true
+			out = append(out, d.Player)
+		}
+	}
+	return out
+}
+
+func (h *mufHost) DescrPlayer(descr int) ref.Ref {
+	if d := h.s.hub.Get(descr); d != nil && d.Connected {
+		return d.Player
+	}
+	return ref.Nothing
+}
+
+func (h *mufHost) DescrSize(descr int) (int, int) {
+	if d := h.s.hub.Get(descr); d != nil {
+		return d.Width, d.Height
+	}
+	return 80, 24
+}
+
 func (h *mufHost) Now() time.Time { return h.w.Now() }
 
 func (h *mufHost) Uptime() time.Duration { return h.w.Now().Sub(h.s.started) }
@@ -338,6 +365,7 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 		loc = me.Location
 	}
 	f.SetReserved(c.who, loc, trigger, arg)
+	f.Descr = c.d.ID
 
 	c.w.Used(prog)
 

@@ -243,6 +243,19 @@ func (f *Frame) popInt() (int64, error) {
 	return v.Num, nil
 }
 
+// popStrArg takes a string, naming which argument it was when the type is
+// wrong. Upstream's messages carry that number and programs match on them.
+func (f *Frame) popStrArg(n int) (string, error) {
+	v, err := f.Pop()
+	if err != nil {
+		return "", err
+	}
+	if v.Type != TypeString {
+		return "", errf("Non-string argument (%d)", n)
+	}
+	return v.Str, nil
+}
+
 // popStr takes a string from the stack.
 func (f *Frame) popStr() (string, error) {
 	v, err := f.Pop()

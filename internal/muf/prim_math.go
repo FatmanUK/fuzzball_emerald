@@ -313,3 +313,47 @@ func leadingInt(s string) int64 {
 	}
 	return n
 }
+
+// Operator aliases and the increment family.
+
+func init() {
+	register("&", bitwise(func(a, b int64) int64 { return a & b }))
+	register("|", bitwise(func(a, b int64) int64 { return a | b }))
+	register("^", bitwise(func(a, b int64) int64 { return a ^ b }))
+	register("<<", bitwise(func(a, b int64) int64 {
+		if b < 0 || b >= 64 {
+			return 0
+		}
+		return a << uint(b)
+	}))
+
+	register("!=", func(f *Frame) (*Result, error) {
+		v, err := f.PopN(2)
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Bool(!v[0].Equal(v[1])))
+	})
+
+	register("++", step1(1))
+	register("--", step1(-1))
+}
+
+// step1 builds ++ and --, which add one to a number or to a dbref.
+func step1(by int64) primFunc {
+	return func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		switch v.Type {
+		case TypeInteger:
+			return nil, f.Push(Int(v.Num + by))
+		case TypeFloat:
+			return nil, f.Push(Float(v.Float + float64(by)))
+		case TypeObject:
+			return nil, f.Push(Obj(v.Ref + ref.Ref(by)))
+		}
+		return nil, errf("Invalid datatype.")
+	}
+}

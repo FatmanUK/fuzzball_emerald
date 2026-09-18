@@ -355,6 +355,62 @@ func TestCaughtErrorPrintsNothing(t *testing.T) {
 	})
 }
 
+func TestOperatorAliases(t *testing.T) {
+	runCase(t, Case{
+		Name: "operators",
+		Source: tellPrelude + `: main
+  12 10 & t
+  12 10 | t
+  12 10 ^ t
+  1 4 << t
+  5 ++ t
+  5 -- t
+  1 2 != t
+  2 2 != t
+  6 2 bitshift t
+  6 -1 bitshift t
+;`,
+	})
+}
+
+func TestEnvironmentProperties(t *testing.T) {
+	runCase(t, Case{
+		Name: "envprop",
+		Source: tellPrelude + `: main
+  loc @ "test/env" "from the room" setprop
+  me @ "test/env" envpropstr ts ts
+  me @ "test/missing" envpropstr ts ts
+;`,
+	})
+}
+
+func TestReflists(t *testing.T) {
+	runCase(t, Case{
+		Name: "reflists",
+		Source: tellPrelude + `: main
+  me @ "test/list" #1 reflist_add
+  me @ "test/list" #0 reflist_add
+  me @ "test/list" #1 reflist_find t
+  me @ "test/list" #0 reflist_find t
+  me @ "test/list" #3 reflist_find t
+  me @ "test/list" getpropstr ts
+  me @ "test/list" #1 reflist_del
+  me @ "test/list" getpropstr ts
+;`,
+	})
+}
+
+func TestUnparseAndPennies(t *testing.T) {
+	runCase(t, Case{
+		Name: "unparse",
+		Source: tellPrelude + `: main
+  me @ unparseobj ts
+  loc @ unparseobj ts
+  me @ pennies t
+;`,
+	})
+}
+
 // TestDivisionByZero checks that a failure reports the same way in both.
 func TestDivisionByZero(t *testing.T) {
 	runCase(t, Case{

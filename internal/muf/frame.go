@@ -62,6 +62,12 @@ type Host interface {
 	// Descriptors the descriptor numbers.
 	Connections(player ref.Ref) int
 	Descriptors(player ref.Ref) []int
+	// Online lists the players with a live connection.
+	Online() []ref.Ref
+	// DescrPlayer resolves a descriptor number to whoever is on it.
+	DescrPlayer(descr int) ref.Ref
+	// DescrSize is a connection's reported terminal width and height.
+	DescrSize(descr int) (width, height int)
 
 	// Now is the server's clock, which tests replace.
 	Now() time.Time
@@ -139,6 +145,8 @@ type Frame struct {
 	// variables and for permission checks.
 	Caller ref.Ref
 	Trig   ref.Ref
+	// Descr is the connection the program was started from.
+	Descr int
 
 	host Host
 }

@@ -235,7 +235,9 @@ func init() {
 	})
 
 	register("NOTIFY", func(f *Frame) (*Result, error) {
-		msg, err := f.popStr()
+		// Upstream names which argument was wrong, and programs read
+		// the message.
+		msg, err := f.popStrArg(2)
 		if err != nil {
 			return nil, err
 		}

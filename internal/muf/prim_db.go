@@ -1,6 +1,8 @@
 package muf
 
 import (
+	"strings"
+
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
@@ -497,4 +499,195 @@ func controls(h Host, who, what ref.Ref) bool {
 		owner = h.Owner(who)
 	}
 	return who == what || h.Owner(what) == owner
+}
+
+// Environment-walking property lookups, reflists, and the remaining object
+// queries.
+
+func init() {
+	// ENVPROP walks out through the environment tree until it finds the
+	// property, which is how a world puts a default on a parent room.
+	register("ENVPROP", func(f *Frame) (*Result, error) {
+		path, obj, h, err := f.propTarget()
+		if err != nil {
+			return nil, err
+		}
+		where, v := envProp(h, obj, path)
+		if err := f.Push(Obj(where)); err != nil {
+			return nil, err
+		}
+		return nil, f.Push(fromProp(v))
+	})
+	register("ENVPROPSTR", func(f *Frame) (*Result, error) {
+		path, obj, h, err := f.propTarget()
+		if err != nil {
+			return nil, err
+		}
+		where, v := envProp(h, obj, path)
+		if err := f.Push(Obj(where)); err != nil {
+			return nil, err
+		}
+		if v.Type == props.Int || v.Type == props.Float || v.Type == props.Ref {
+			return nil, f.Push(Str(""))
+		}
+		return nil, f.Push(Str(v.Str))
+	})
+
+	// A reflist is a property holding space-separated dbrefs, which older
+	// programs use where an array would serve today.
+	register("REFLIST_FIND", func(f *Frame) (*Result, error) {
+		target, err := f.popRef()
+		if err != nil {
+			return nil, err
+		}
+		path, obj, h, err := f.propTarget()
+		if err != nil {
+			return nil, err
+		}
+		list := readRefList(h, obj, path)
+		for i, r := range list {
+			if r == target {
+				// One-based, as the primitive reports it.
+				return nil, f.Push(Int(int64(i + 1)))
+			}
+		}
+		return nil, f.Push(Int(0))
+	})
+	register("REFLIST_ADD", func(f *Frame) (*Result, error) {
+		target, err := f.popRef()
+		if err != nil {
+			return nil, err
+		}
+		path, obj, h, err := f.propTarget()
+		if err != nil {
+			return nil, err
+		}
+		list := readRefList(h, obj, path)
+		for _, r := range list {
+			if r == target {
+				return nil, nil // already there
+			}
+		}
+		writeRefList(h, obj, path, append(list, target))
+		return nil, nil
+	})
+	register("REFLIST_DEL", func(f *Frame) (*Result, error) {
+		target, err := f.popRef()
+		if err != nil {
+			return nil, err
+		}
+		path, obj, h, err := f.propTarget()
+		if err != nil {
+			return nil, err
+		}
+		v, _ := h.GetProp(obj, path)
+		h.SetProp(obj, path, props.Value{
+			Type: props.String, Str: spliceRef(v.Str, target),
+		})
+		return nil, nil
+	})
+
+	register("UNPARSEOBJ", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, f.Push(Str("*NOTHING*"))
+		}
+		return nil, f.Push(Str(h.Name(obj) + "(" + obj.String() +
+			h.Flags(obj).Unparse() + ")"))
+	})
+
+	register("PENNIES", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		v, _ := h.GetProp(obj, propValue)
+		return nil, f.Push(Int(v.Num))
+	})
+	register("ADDPENNIES", func(f *Frame) (*Result, error) {
+		amount, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		v, _ := h.GetProp(obj, propValue)
+		h.SetProp(obj, propValue, props.Value{Type: props.Int, Num: v.Num + amount})
+		return nil, nil
+	})
+}
+
+// propValue is where an object's currency is kept, from include/db.h.
+const propValue = "@/value"
+
+// envProp looks a property up on an object and then on each of its containers
+// in turn, returning where it was found.
+func envProp(h Host, obj ref.Ref, path string) (ref.Ref, props.Value) {
+	// Bounded, so a cycle in a damaged environment tree terminates.
+	for i := 0; obj != ref.Nothing && i <= maxEnvDepth; i++ {
+		if v, ok := h.GetProp(obj, path); ok {
+			return obj, v
+		}
+		obj = h.Location(obj)
+	}
+	return ref.Nothing, props.Value{}
+}
+
+// maxEnvDepth bounds an environment walk.
+const maxEnvDepth = 256
+
+// readRefList parses a space-separated dbref property.
+func readRefList(h Host, obj ref.Ref, path string) []ref.Ref {
+	v, _ := h.GetProp(obj, path)
+	var out []ref.Ref
+	for _, field := range strings.Fields(v.Str) {
+		r, err := ref.Parse(field)
+		if err == nil {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// spliceRef removes one dbref from a reflist by cutting it out of the text.
+//
+// Upstream does the same, which leaves the separator that preceded the removed
+// entry: deleting #1 from "#1 #0" gives " #0", not "#0". That leading space is
+// observable, so it is reproduced rather than tidied away.
+func spliceRef(list string, target ref.Ref) string {
+	want := target.String()
+	for i := 0; i < len(list); i++ {
+		if list[i] != '#' {
+			continue
+		}
+		end := i + len(want)
+		if end > len(list) || list[i:end] != want {
+			continue
+		}
+		// The match must end at a separator or the end of the list, so
+		// "#1" does not match inside "#12".
+		if end < len(list) && list[end] != ' ' {
+			continue
+		}
+		return list[:i] + list[end:]
+	}
+	return list
+}
+
+// writeRefList stores a reflist, removing the property when it empties.
+func writeRefList(h Host, obj ref.Ref, path string, list []ref.Ref) {
+	if len(list) == 0 {
+		h.RemoveProp(obj, path)
+		return
+	}
+	parts := make([]string, len(list))
+	for i, r := range list {
+		parts[i] = r.String()
+	}
+	h.SetProp(obj, path, props.Value{Type: props.String, Str: strings.Join(parts, " ")})
 }
