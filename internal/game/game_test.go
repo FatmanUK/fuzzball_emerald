@@ -315,7 +315,7 @@ func TestBuildAndMove(t *testing.T) {
 
 	h.send("@dig Cellar")
 	got := h.out()
-	if !strings.Contains(got, "created with number") {
+	if !strings.Contains(got, "created.") {
 		t.Fatalf("@dig failed:\n%s", got)
 	}
 	cellar := dbrefFrom(t, got)
@@ -404,14 +404,20 @@ func TestOutputOverflowDisconnectsRatherThanStalling(t *testing.T) {
 // dbrefFrom pulls a "#123" out of a creation message.
 func dbrefFrom(t *testing.T, s string) string {
 	t.Helper()
-	i := strings.Index(s, "number #")
+	// Creation messages name the new object the way examine does, as
+	// "Name(#123FLAGS)", so the dbref runs from the '#' to the first
+	// non-digit after it.
+	i := strings.Index(s, "(#")
 	if i < 0 {
 		t.Fatalf("no dbref in %q", s)
 	}
-	rest := s[i+len("number "):]
-	end := strings.IndexAny(rest, " .,\n")
-	if end < 0 {
-		end = len(rest)
+	rest := s[i+1:]
+	end := 1
+	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+		end++
+	}
+	if end == 1 {
+		t.Fatalf("no dbref in %q", s)
 	}
 	return rest[:end]
 }

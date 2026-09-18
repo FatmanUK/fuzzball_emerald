@@ -84,12 +84,12 @@ func (s *Server) cmdDump(c *ctx) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		err := s.engine.Flush(ctx)
-		_ = s.engine.Go(func(*world.World) {
+		_ = s.engine.Go(func(w *world.World) {
 			if err != nil {
-				s.notify(who, "The flush failed: %v", err)
+				s.notify(w, who, "The flush failed: %v", err)
 				return
 			}
-			s.send(who, "Done.")
+			s.send(w, who, "Done.")
 		})
 	}()
 }
@@ -253,7 +253,7 @@ func (s *Server) cmdKill(c *ctx) {
 	}
 	s.procs.remove(pid)
 	if p.player != c.who {
-		s.send(p.player, "Your program was stopped.")
+		s.send(c.w, p.player, "Your program was stopped.")
 	}
 	c.tell("Process %d killed.", pid)
 }

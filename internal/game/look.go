@@ -58,7 +58,7 @@ func (s *Server) lookHere(w *world.World, who ref.Ref) {
 		return
 	}
 	if o.Location == ref.Nothing {
-		s.notify(who, "You are nowhere.")
+		s.notify(w, who, "You are nowhere.")
 		return
 	}
 	s.lookAt(w, who, o.Location)
@@ -68,17 +68,17 @@ func (s *Server) lookHere(w *world.World, who ref.Ref) {
 func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
 	o := w.Get(target)
 	if o == nil {
-		s.notify(who, "I don't see that here.")
+		s.notify(w, who, "I don't see that here.")
 		return
 	}
 
-	s.send(who, unparse(w, who, target))
+	s.send(w, who, unparse(w, who, target))
 
 	desc := s.mesgProp(w, who, target, propDesc)
 	if desc == "" {
 		desc = w.Tune.String("description_default")
 	}
-	s.send(who, desc)
+	s.send(w, who, desc)
 
 	w.Used(target)
 
@@ -114,9 +114,9 @@ func (s *Server) listContents(w *world.World, who, container ref.Ref) {
 	if len(names) == 0 {
 		return
 	}
-	s.notify(who, "Contents:")
+	s.notify(w, who, "Contents:")
 	for _, n := range names {
-		s.send(who, n)
+		s.send(w, who, n)
 	}
 }
 
@@ -137,7 +137,7 @@ func (s *Server) listExits(w *world.World, who, room ref.Ref) {
 	if len(names) == 0 {
 		return
 	}
-	s.notify(who, "Obvious exits: %s", strings.Join(names, ", "))
+	s.notify(w, who, "Obvious exits: %s", strings.Join(names, ", "))
 }
 
 // canSee reports whether a player may see an object in a listing.
@@ -154,19 +154,34 @@ func (s *Server) canSee(w *world.World, who, target ref.Ref) bool {
 }
 
 // controls reports whether a player may modify an object.
+//
+// The test is made on whoever owns the asking object, not the object itself,
+// so a puppet controls exactly what its owner does — which is what lets a
+// program running as a thing touch its owner's things.
+//
+// A wizard controls everything, with one exception: while strict_god_priv is
+// set, only God may touch God's objects. Without that a wizard could edit
+// God's programs and so give themselves God's powers.
 func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
-	p := w.Get(who)
 	o := w.Get(target)
-	if p == nil || o == nil {
+	if o == nil {
+		return false
+	}
+	owner := ownerOf(w, who)
+	p := w.Get(owner)
+	if p == nil {
 		return false
 	}
 	if p.Flags.IsWizard() {
+		if w.Tune.Bool("strict_god_priv") && o.Owner == ref.God && owner != ref.God {
+			return false
+		}
 		return true
 	}
 	if who == target {
 		return true
 	}
-	return o.Owner == who
+	return o.Owner == owner
 }
 
 // cmdExamine shows an object's details to someone who controls it.

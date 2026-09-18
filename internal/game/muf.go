@@ -28,7 +28,7 @@ type mufHost struct {
 	caller ref.Ref
 }
 
-func (h *mufHost) Notify(who ref.Ref, msg string) { h.s.send(who, msg) }
+func (h *mufHost) Notify(who ref.Ref, msg string) { h.s.send(h.w, who, msg) }
 
 func (h *mufHost) NotifyExcept(room ref.Ref, except []ref.Ref, msg string) {
 	h.s.notifyRoom(h.w, room, except, "%s", msg)
@@ -568,7 +568,7 @@ func (s *Server) reportMUFErrorTo(w *world.World, who ref.Ref, f *muf.Frame,
 	}
 
 	for _, line := range rep.Render(owned, nameOf(w, owner), progName, sourceLine) {
-		s.send(who, line)
+		s.send(w, who, line)
 	}
 
 	s.mufLog().Warn("runtime error",

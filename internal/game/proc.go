@@ -240,3 +240,21 @@ func (s *Server) readInput(w *world.World, descr int, line string) bool {
 	s.resume(w, p, &v)
 	return true
 }
+
+// killProcessesFor stops everything a player is running, which deleting or
+// disconnecting them has to do: a suspended program holds a frame naming an
+// object that may be about to change hands.
+func (s *Server) killProcessesFor(player ref.Ref) {
+	for _, p := range s.procs.all() {
+		if p.player == player {
+			s.procs.remove(p.pid)
+		}
+	}
+}
+
+// killProcessesOf stops every instance of one program.
+func (s *Server) killProcessesOf(program ref.Ref) {
+	for _, p := range s.procs.forProgram(program) {
+		s.procs.remove(p.pid)
+	}
+}

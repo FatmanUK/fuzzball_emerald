@@ -69,7 +69,7 @@ func (h *mpiHost) Match(who mpi.Ref, name string) mpi.Ref {
 	return mpi.Ref(match.New(h.w, ref.Ref(who), name).Everything().Player().Result())
 }
 
-func (h *mpiHost) Notify(obj mpi.Ref, msg string) { h.s.send(ref.Ref(obj), msg) }
+func (h *mpiHost) Notify(obj mpi.Ref, msg string) { h.s.send(h.w, ref.Ref(obj), msg) }
 
 func (h *mpiHost) Now() int64 { return h.w.Now().Unix() }
 

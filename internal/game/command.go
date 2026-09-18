@@ -16,17 +16,39 @@ type ctx struct {
 	w   *world.World
 	d   *session.Descriptor
 	who ref.Ref
+	// out is where this command's replies go. It is normally the
+	// descriptor that typed the line, but a forced command answers to
+	// whoever was forced, not to whoever did the forcing.
+	out func(string)
 	// verb is the command as typed, arg is the rest of the line.
 	verb string
 	arg  string
 }
 
-// tell sends a formatted line to the player who typed the command.
-func (c *ctx) tell(format string, args ...any) { c.d.Send(sprintf(format, args...)) }
+// tell sends a formatted line to the player the command is running for.
+func (c *ctx) tell(format string, args ...any) { c.out(sprintf(format, args...)) }
 
 // send delivers a line verbatim, for text that came from the world and must
 // not be read as a format string.
-func (c *ctx) send(text string) { c.d.Send(text) }
+func (c *ctx) send(text string) { c.out(text) }
+
+// noisyMatch reports a failed name resolution the way upstream's
+// noisy_match_result does, and reports whether the caller should go on.
+//
+// The wording quotes the name back, which matters: programs and players both
+// read these, and upstream's other failure messages ("I don't see that here.")
+// belong to commands that match quietly and complain in their own words.
+func noisyMatch(c *ctx, name string, r ref.Ref) bool {
+	switch r {
+	case ref.Nothing:
+		c.tell("I don't understand '%s'.", name)
+		return false
+	case ref.Ambiguous:
+		c.tell("I don't know which '%s' you mean!", name)
+		return false
+	}
+	return true
+}
 
 // handler runs one command.
 type handler func(s *Server, c *ctx)
@@ -56,6 +78,10 @@ var commands = map[string]handler{
 
 // atCommands maps an @-command to its handler. These are matched by prefix,
 // as Fuzzball does, so "@cr" reaches "@create".
+//
+// Commands that dispatch other commands — @force — register themselves in an
+// init instead, because naming them here makes the table refer to itself and
+// Go rejects that as an initialisation cycle.
 var atCommands = map[string]handler{
 	"@create":   (*Server).cmdCreate,
 	"@dig":      (*Server).cmdDig,
@@ -76,6 +102,9 @@ var atCommands = map[string]handler{
 	"@program":  (*Server).cmdProgram,
 	"@edit":     (*Server).cmdEdit,
 	"@list":     (*Server).cmdList,
+	"@toad":     (*Server).cmdToad,
+	"@boot":     (*Server).cmdBoot,
+	"@stats":    (*Server).cmdStats,
 	"@version":  (*Server).cmdVersion,
 }
 
@@ -85,12 +114,22 @@ var atCommands = map[string]handler{
 // engine contains the panic, and this reports it so the failure is visible at
 // both ends.
 func (s *Server) command(w *world.World, d *session.Descriptor, line string) {
+	s.commandAs(w, d, d.Player, line)
+}
+
+// commandAs dispatches a line on behalf of an object that is not the one that
+// typed it, which is what @force does. Replies go to that object.
+func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, line string) {
+	out := d.Send
+	if who != d.Player {
+		out = func(text string) { s.send(w, who, text) }
+	}
 	defer func() {
 		if r := recover(); r != nil {
-			d.Send("Something went wrong running that command. It has been logged.")
+			out("Something went wrong running that command. It has been logged.")
 			s.log.Error("panic handling a command",
 				"descriptor", d.ID,
-				"player", d.Player.String(),
+				"player", who.String(),
 				"line", line,
 				"panic", r,
 				"stack", string(debug.Stack()))
@@ -102,7 +141,7 @@ func (s *Server) command(w *world.World, d *session.Descriptor, line string) {
 		return
 	}
 
-	c := &ctx{w: w, d: d, who: d.Player}
+	c := &ctx{w: w, d: d, who: who, out: out}
 	c.verb, c.arg = trimCommand(line)
 
 	if w.Get(c.who) == nil {
@@ -193,14 +232,14 @@ func (s *Server) interfaceCommand(w *world.World, d *session.Descriptor, line st
 		return true
 	case line == quitCommand:
 		s.logCommand(w, d, line, "")
-		s.cmdQuit(&ctx{w: w, d: d, who: d.Player})
+		s.cmdQuit(&ctx{w: w, d: d, who: d.Player, out: d.Send})
 		return true
 	case line == nullCommand && w.Tune.Bool("recognize_null_command"):
 		return true
 	case !busy && strings.HasPrefix(line, whoCommand):
 		arg := strings.TrimSpace(line[len(whoCommand):])
 		s.logCommand(w, d, whoCommand, arg)
-		s.cmdWho(&ctx{w: w, d: d, who: d.Player, verb: whoCommand, arg: arg})
+		s.cmdWho(&ctx{w: w, d: d, who: d.Player, out: d.Send, verb: whoCommand, arg: arg})
 		return true
 	}
 	return false

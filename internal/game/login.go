@@ -6,6 +6,7 @@ import (
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/password"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
@@ -143,10 +144,26 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 		return
 	}
 
+	o, err := s.createPlayer(w, user, pass)
+	if err != nil {
+		d.Send(err.Error())
+		return
+	}
+
+	s.statusLog().Info("created player",
+		"player", o.Ref.String(), "name", user, "host", d.Hostname)
+	s.finishLogin(w, d, o.Ref)
+}
+
+// createPlayer makes a player and puts them at the starting room. The name is
+// expected to have been checked already.
+//
+// The name is recorded in a property as well as on the object, because a
+// player may be renamed and upstream keeps what they were first called.
+func (s *Server) createPlayer(w *world.World, user, pass string) (*world.Object, error) {
 	hashed, err := password.Hash(pass)
 	if err != nil {
-		d.Send("That password could not be used.")
-		return
+		return nil, errMsg("That password could not be used.")
 	}
 
 	start := w.Tune.Ref("player_start")
@@ -158,15 +175,21 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 	o.Owner = o.Ref // a player owns itself
 	o.PasswordHash = hashed
 	o.Home = start
+	o.Props.SetString(propCreatedAs, user)
+	o.Props.Set(propValue, props.Value{
+		Type: props.Int, Num: w.Tune.Int("start_pennies"),
+	})
+	applyTuneFlags(o, w.Tune.String("pcreate_flags"))
 	if err := w.MoveTo(o.Ref, start); err != nil {
 		s.statusLog().Error("could not place a new player",
 			"player", o.Ref.String(), "error", err)
 	}
-
-	s.statusLog().Info("created player",
-		"player", o.Ref.String(), "name", user, "host", d.Hostname)
-	s.finishLogin(w, d, o.Ref)
+	return o, nil
 }
+
+// propCreatedAs records the name a player was created with, from
+// include/game.h.
+const propCreatedAs = "@__sys__/name/created_as"
 
 // validPlayerName applies the rules a new name must satisfy.
 func validPlayerName(w *world.World, name string) error {

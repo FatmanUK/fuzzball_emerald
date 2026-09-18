@@ -67,14 +67,14 @@ func (s *Server) moveTo(w *world.World, who, dest, via ref.Ref) {
 		s.notifyRoom(w, from, []ref.Ref{who}, "%s has left.", o.Name)
 	}
 	if err := w.MoveTo(who, dest); err != nil {
-		s.notify(who, "You can't go that way.")
+		s.notify(w, who, "You can't go that way.")
 		return
 	}
 	s.notifyRoom(w, dest, []ref.Ref{who}, "%s has arrived.", o.Name)
 
 	if via != ref.Nothing {
 		if msg := s.mesgProp(w, who, via, propDrop); msg != "" {
-			s.send(who, msg)
+			s.send(w, who, msg)
 		}
 		if msg := s.mesgProp(w, who, via, propODrop); msg != "" {
 			s.notifyRoom(w, dest, []ref.Ref{who}, "%s %s", o.Name, msg)

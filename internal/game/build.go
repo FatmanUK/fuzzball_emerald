@@ -67,7 +67,7 @@ func (s *Server) cmdCreate(c *ctx) {
 		c.tell("Created, but it could not be given to you.")
 		return
 	}
-	c.tell("%s created with number %v.", name, o.Ref)
+	c.tell("Object %s created.", unparse(c.w, c.who, o.Ref))
 }
 
 // cmdDig makes a room.
@@ -101,8 +101,7 @@ func (s *Server) cmdDig(c *ctx) {
 		c.tell("Room created, but it could not be parented.")
 		return
 	}
-	c.tell("%s created with number %v, parented to %s.",
-		name, o.Ref, unparse(c.w, c.who, parent))
+	c.tell("Room %s created.", unparse(c.w, c.who, o.Ref))
 }
 
 // cmdOpen makes an exit in the current room.
@@ -132,7 +131,7 @@ func (s *Server) cmdOpen(c *ctx) {
 		c.tell("The exit could not be attached.")
 		return
 	}
-	c.tell("Exit opened with number %v.", o.Ref)
+	c.tell("Action %s created and attached.", unparse(c.w, c.who, o.Ref))
 
 	if hasDest {
 		if dest, ok := s.resolveLinkTarget(c, strings.TrimSpace(destName)); ok {
@@ -274,33 +273,62 @@ func (s *Server) cmdDescribe(c *ctx) {
 	c.tell("Description set.")
 }
 
-// settableFlags maps the names @set accepts to their bits. Internal flags are
-// deliberately absent: they describe live server state, not anything an
-// operator should be able to write.
-var settableFlags = map[string]ref.Flags{
-	"abode":     ref.Abode,
-	"builder":   ref.Builder,
-	"chown_ok":  ref.ChownOK,
-	"dark":      ref.Dark,
-	"guest":     ref.Guest,
-	"haven":     ref.Haven,
-	"jump_ok":   ref.JumpOK,
-	"kill_ok":   ref.KillOK,
-	"link_ok":   ref.LinkOK,
-	"overt":     ref.Overt,
-	"quell":     ref.Quell,
-	"sticky":    ref.Sticky,
-	"vehicle":   ref.Vehicle,
-	"wizard":    ref.Wizard,
-	"xforcible": ref.XForcible,
-	"yield":     ref.Yield,
-	"zombie":    ref.Zombie,
+// settableFlags lists the names @set accepts, in the order upstream's
+// str_to_flag tests them.
+//
+// Matching is by prefix, so "X" reaches XFORCIBLE and "dark" and "d" are the
+// same flag. The order is load-bearing for single letters: "n" is the second
+// mucker bit because "nucker" is tested before nothing else claims the letter,
+// and "t" is the wizard bit through "truewizard".
+//
+// Internal flags are deliberately absent, except INTERACTIVE, which upstream
+// exposes: they describe live server state rather than anything an operator
+// should write.
+var settableFlags = []struct {
+	names []string
+	bit   ref.Flags
+}{
+	{[]string{"abode", "autostart", "abate"}, ref.Abode},
+	{[]string{"builder", "bound"}, ref.Builder},
+	{[]string{"chown_ok", "color"}, ref.ChownOK},
+	{[]string{"dark", "debug"}, ref.Dark},
+	{[]string{"guest"}, ref.Guest},
+	{[]string{"haven", "hide", "harduid"}, ref.Haven},
+	{[]string{"jump_ok"}, ref.JumpOK},
+	{[]string{"kill_ok"}, ref.KillOK},
+	{[]string{"link_ok"}, ref.LinkOK},
+	{[]string{"mucker"}, ref.Mucker},
+	{[]string{"nucker"}, ref.SMucker},
+	{[]string{"overt"}, ref.Overt},
+	{[]string{"quell"}, ref.Quell},
+	{[]string{"sticky", "silent", "setuid"}, ref.Sticky},
+	{[]string{"vehicle", "viewable"}, ref.Vehicle},
+	{[]string{"wizard"}, ref.Wizard},
+	{[]string{"truewizard"}, ref.Wizard},
+	{[]string{"xforcible", "xpress"}, ref.XForcible},
+	{[]string{"yield"}, ref.Yield},
+	{[]string{"zombie"}, ref.Zombie},
+}
+
+// strToFlag resolves a flag name or any unambiguous prefix of one.
+func strToFlag(name string) (ref.Flags, bool) {
+	if name == "" {
+		return 0, false
+	}
+	for _, f := range settableFlags {
+		for _, n := range f.names {
+			if ascii.HasPrefix(n, name) {
+				return f.bit, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // wizardOnlyFlags may only be changed by a wizard.
-var wizardOnlyFlags = map[string]bool{
-	"wizard": true, "builder": true, "guest": true, "quell": true,
-	"xforcible": true, "overt": true,
+var wizardOnlyFlags = map[ref.Flags]bool{
+	ref.Wizard: true, ref.Builder: true, ref.Guest: true, ref.Quell: true,
+	ref.XForcible: true, ref.Overt: true,
 }
 
 // cmdSet changes a flag or a property.
@@ -341,54 +369,83 @@ func (s *Server) cmdSet(c *ctx) {
 	clear := strings.HasPrefix(rest, "!")
 	flagName := ascii.Fold(strings.TrimSpace(strings.TrimPrefix(rest, "!")))
 
-	// A bare mucker level, as Fuzzball accepts: "@set foo=M3".
-	if lvl, isMLev := parseMLevel(flagName); isMLev {
+	// Mucker levels are named where a flag would be, and are read before
+	// the flag table so "M2" is a level rather than a prefix of "mucker".
+	if flagName == "4" || flagName == "m4" {
+		c.tell("To set Mucker Level 4, set the Wizard bit and another Mucker bit.")
+		return
+	}
+	bit, isLevel := parseMLevel(flagName, clear)
+	if isLevel {
 		if !s.requireWizard(c) {
 			return
 		}
-		o := c.w.Get(target)
-		if clear {
-			lvl = 0
+		// Level zero, and clearing any level, both come to the same
+		// thing: remove both bits.
+		if flagName == "0" || flagName == "m0" || ascii.HasPrefix("mucker", flagName) && clear {
+			clear = true
 		}
-		o.Flags = o.Flags.SetMLevel(lvl)
-		c.w.Modified(target)
-		c.tell("Mucker level set to %d.", lvl)
-		return
-	}
-
-	bit, known := settableFlags[flagName]
-	if !known {
-		c.tell("I don't know that flag.")
-		return
-	}
-	if wizardOnlyFlags[flagName] && !c.w.Get(c.who).Flags.IsWizard() {
-		c.tell("Permission denied.")
-		return
+	} else {
+		var known bool
+		bit, known = strToFlag(flagName)
+		// @set refuses two names that str_to_flag resolves: "truewizard"
+		// is the wizard bit under another name, and "nucker" is half a
+		// mucker level. Both would set something other than they say.
+		if !known || ascii.HasPrefix("truewizard", flagName) ||
+			ascii.HasPrefix("nucker", flagName) {
+			c.tell("I don't recognize that flag.")
+			return
+		}
+		if wizardOnlyFlags[bit] && !c.w.Get(c.who).Flags.IsWizard() {
+			c.tell("Permission denied.")
+			return
+		}
 	}
 
 	o := c.w.Get(target)
+	// Setting either mucker bit replaces the level rather than adding to
+	// it, so a level is never assembled out of two commands.
+	if bit&(ref.Mucker|ref.SMucker) != 0 {
+		o.Flags &^= ref.Mucker | ref.SMucker
+	}
 	if clear {
 		o.Flags &^= bit
-		c.tell("Flag reset.")
 	} else {
 		o.Flags |= bit
-		c.tell("Flag set.")
 	}
 	c.w.Modified(target)
+
+	what := "Flag"
+	if bit&(ref.Mucker|ref.SMucker) != 0 {
+		what = "Mucker level"
+	}
+	if clear {
+		c.tell("%s reset.", what)
+	} else {
+		c.tell("%s set.", what)
+	}
 }
 
-// parseMLevel reads "m0".."m3", "1".."3" as a mucker level.
-func parseMLevel(s string) (int, bool) {
-	t := strings.TrimPrefix(s, "m")
-	if len(t) != 1 || t[0] < '0' || t[0] > '3' {
-		return 0, false
+// parseMLevel reads the names @set accepts for a mucker level, returning the
+// bits it sets. "mucker" is level 2, and negated is level 0.
+func parseMLevel(name string, negated bool) (ref.Flags, bool) {
+	switch name {
+	case "0", "m0":
+		return ref.Mucker | ref.SMucker, true
+	case "1", "m1":
+		return ref.SMucker, true
+	case "2", "m2":
+		return ref.Mucker, true
+	case "3", "m3":
+		return ref.Mucker | ref.SMucker, true
 	}
-	// Only treat a bare digit as a level when it came with the M, or is a
-	// lone digit; anything else is a flag name.
-	if s != t && len(s) != 2 {
-		return 0, false
+	if ascii.HasPrefix("mucker", name) {
+		if negated {
+			return ref.Mucker | ref.SMucker, true
+		}
+		return ref.Mucker, true
 	}
-	return int(t[0] - '0'), true
+	return 0, false
 }
 
 // cmdPassword changes the player's own password.
@@ -526,6 +583,6 @@ func (s *Server) evictEditors(w *world.World, program ref.Ref) {
 			continue
 		}
 		s.closeEditor(w, who, e)
-		s.send(who, "The program you were editing has been recycled.  Exiting Editor.")
+		s.send(w, who, "The program you were editing has been recycled.  Exiting Editor.")
 	}
 }

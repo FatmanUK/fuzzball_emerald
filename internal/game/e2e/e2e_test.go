@@ -198,13 +198,19 @@ func (c *client) drain(d time.Duration) string {
 // dbrefIn extracts the "#123" a creation message reports.
 func dbrefIn(t *testing.T, transcript string) string {
 	t.Helper()
-	i := strings.Index(transcript, "number #")
+	// Creation messages name the new object the way examine does, as
+	// "Name(#123FLAGS)", so the dbref runs from the '#' to the first
+	// non-digit after it.
+	i := strings.Index(transcript, "(#")
 	if i < 0 {
 		t.Fatalf("no dbref in %q", transcript)
 	}
-	rest := transcript[i+len("number "):]
-	end := strings.IndexAny(rest, " .,\r\n")
-	if end < 0 {
+	rest := transcript[i+1:]
+	end := 1
+	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+		end++
+	}
+	if end == 1 {
 		t.Fatalf("no dbref in %q", transcript)
 	}
 	return rest[:end]
@@ -259,7 +265,7 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 
 	// Building: make a room, an exit into it, and walk through.
 	c.send("@dig Test Chamber")
-	got = c.expect("created with number")
+	got = c.expect("created.")
 	t.Logf("dig: %s", strings.TrimSpace(got))
 	// A room that was just dug is somewhere else entirely, so it is linked
 	// by dbref, which is the normal idiom.

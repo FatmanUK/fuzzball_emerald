@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
@@ -45,6 +46,10 @@ type Server struct {
 	// editLine remembers each program's current line between sessions, as
 	// upstream keeps it on the program itself. It is not persisted.
 	editLine map[ref.Ref]int
+
+	// forceDepth counts how deep @force is nested, so a command that
+	// forces something that forces back cannot recurse without end.
+	forceDepth int
 
 	// procs holds suspended programs: those sleeping, waiting for input, or
 	// waiting for an event.
@@ -183,32 +188,99 @@ func (s *Server) OnTick() func(*world.World) {
 func (s *Server) Hub() *session.Hub { return s.hub }
 
 // notify sends a formatted line to every descriptor a player is connected on.
-func (s *Server) notify(player ref.Ref, format string, args ...any) {
-	s.hub.Tell(player, sprintf(format, args...))
+func (s *Server) notify(w *world.World, player ref.Ref, format string, args ...any) {
+	s.send(w, player, sprintf(format, args...))
 }
 
 // send delivers a line verbatim. Use it for text that came from the world,
 // such as a description or a player's own words, where a stray '%' must not be
 // read as a format verb.
-func (s *Server) send(player ref.Ref, text string) {
+//
+// A puppet's output is forwarded to whoever owns it, prefixed, because a THING
+// has no connection of its own. That is how anything a puppet is told — by a
+// program, or by @force — reaches a person at all.
+func (s *Server) send(w *world.World, player ref.Ref, text string) {
 	s.hub.Tell(player, text)
+	if owner, prefix, ok := puppetRelay(s, w, player); ok {
+		s.hub.Tell(owner, prefix+text)
+	}
 }
+
+// puppetRelay reports whether a target's output should also reach its owner,
+// and with what prefix.
+//
+// The conditions are upstream's, and each excludes a way of using a puppet to
+// spy: a DARK puppet is silent unless a wizard owns it, a room flagged ZOMBIE
+// is a no-puppet zone, and an owner who is themselves flagged ZOMBIE has opted
+// out of hearing any of it.
+func puppetRelay(s *Server, w *world.World, target ref.Ref) (ref.Ref, string, bool) {
+	if !w.Tune.Bool("allow_zombies") {
+		return ref.Nothing, "", false
+	}
+	o := w.Get(target)
+	if o == nil || o.Type() != ref.TypeThing || o.Flags&ref.Zombie == 0 {
+		return ref.Nothing, "", false
+	}
+	owner := w.Get(o.Owner)
+	if owner == nil || owner.Flags&ref.Zombie != 0 {
+		return ref.Nothing, "", false
+	}
+	wizardOwned := owner.Flags.IsWizard()
+	if o.Flags&ref.Dark != 0 && !wizardOwned {
+		return ref.Nothing, "", false
+	}
+	if room := w.Get(o.Location); !wizardOwned && room != nil &&
+		room.Type() == ref.TypeRoom && room.Flags&ref.Zombie != 0 {
+		return ref.Nothing, "", false
+	}
+
+	// Everything sent this way is a private message — room speech reaches
+	// people through notifyRoom instead — so upstream's "unless the owner
+	// is standing right here" test is always satisfied.
+	prefix := o.Name + "> "
+	if v, ok := w.GetProp(target, propPuppetEcho); ok && v.Type == props.String {
+		if got := s.evalMPI(w, target, target, v.Str, v.Blessed); got != "" {
+			prefix = got + " "
+		}
+	}
+	return o.Owner, prefix, true
+}
+
+// propPuppetEcho overrides the prefix a puppet's output reaches its owner
+// with, from include/db.h.
+const propPuppetEcho = "_/pecho"
 
 // notifyRoom sends a line to everyone in a room, optionally skipping some.
 //
-// Only players are notified for now; listener objects and the propqueues that
-// drive them arrive with MUF in M4.
+// The container itself hears it too when it is a player or a thing, which is
+// how someone carrying a puppet hears what the puppet says: upstream's
+// notify_except notifies the object the contents belong to before walking
+// them. Rooms are skipped, because a room is not an audience.
+//
+// Listener objects and the propqueues that drive them are not implemented.
 func (s *Server) notifyRoom(w *world.World, room ref.Ref, except []ref.Ref, format string, args ...any) {
 	text := sprintf(format, args...)
-	for _, r := range w.Contents(room) {
+
+	tell := func(r ref.Ref) {
 		o := w.Get(r)
-		if o == nil || o.Type() != ref.TypePlayer {
-			continue
+		if o == nil || containsRef(except, r) {
+			return
 		}
-		if containsRef(except, r) {
-			continue
+		switch o.Type() {
+		case ref.TypePlayer:
+			s.hub.Tell(r, text)
+		case ref.TypeThing:
+			// A thing hears nothing itself, but a puppet relays
+			// what it hears to whoever owns it.
+			if owner, prefix, ok := puppetRelay(s, w, r); ok {
+				s.hub.Tell(owner, prefix+text)
+			}
 		}
-		s.hub.Tell(r, text)
+	}
+
+	tell(room)
+	for _, r := range w.Contents(room) {
+		tell(r)
 	}
 }
 

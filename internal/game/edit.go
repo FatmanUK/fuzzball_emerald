@@ -121,7 +121,7 @@ func (s *Server) editing(who ref.Ref) *editSession { return s.editors[who] }
 // The line arrives untrimmed, because in insert mode leading whitespace is
 // part of the program text and an empty line is a blank line to insert.
 func (s *Server) editInput(w *world.World, d *session.Descriptor, line string) {
-	c := &ctx{w: w, d: d, who: d.Player}
+	c := &ctx{w: w, d: d, who: d.Player, out: d.Send}
 	e := s.editors[c.who]
 	if e == nil {
 		return
@@ -924,7 +924,7 @@ func (s *Server) requireMucker(c *ctx, cmd string) bool {
 // requireNotGuest refuses a command to a guest account, as NOGUEST does.
 func (s *Server) requireNotGuest(c *ctx, cmd string) bool {
 	o := c.w.Get(c.who)
-	if o == nil || o.Flags&ref.Guest == 0 || o.Flags.IsTrueWizard() {
+	if o == nil || o.Flags&ref.Guest == 0 || c.who == ref.God {
 		return true
 	}
 	s.log.Info("guest refused a command",

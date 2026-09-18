@@ -69,3 +69,15 @@ func (w *World) KillMacro(name string) bool {
 	w.macrosDirty = true
 	return true
 }
+
+// ChownMacros reassigns every macro owned by one object to another, which
+// deleting a player has to do: a macro outlives the player who defined it.
+func (w *World) ChownMacros(from, to ref.Ref) {
+	for k, m := range w.macros {
+		if m.Owner == from {
+			m.Owner = to
+			w.macros[k] = m
+			w.macrosDirty = true
+		}
+	}
+}

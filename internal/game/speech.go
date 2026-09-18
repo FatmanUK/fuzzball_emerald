@@ -66,7 +66,7 @@ func (s *Server) cmdWhisper(c *ctx) {
 
 	me := c.w.Get(c.who)
 	c.tell("You whisper, \"%s\" to %s.", text, c.w.Get(target).Name)
-	s.notify(target, "%s whispers, \"%s\"", me.Name, text)
+	s.notify(c.w, target, "%s whispers, \"%s\"", me.Name, text)
 }
 
 // cmdPage messages a player anywhere in the game.
@@ -91,9 +91,9 @@ func (s *Server) cmdPage(c *ctx) {
 	me := c.w.Get(c.who)
 	if text == "" {
 		c.tell("You page %s.", c.w.Get(target).Name)
-		s.notify(target, "You sense that %s is looking for you.", me.Name)
+		s.notify(c.w, target, "You sense that %s is looking for you.", me.Name)
 		return
 	}
 	c.tell("You page, \"%s\" to %s.", text, c.w.Get(target).Name)
-	s.notify(target, "%s pages: %s", me.Name, text)
+	s.notify(c.w, target, "%s pages: %s", me.Name, text)
 }
