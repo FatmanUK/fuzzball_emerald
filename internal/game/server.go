@@ -303,13 +303,31 @@ func nameOf(w *world.World, r ref.Ref) string {
 
 // unparse renders an object the way @examine and wizard output do: the name,
 // followed by its dbref when the viewer may see it.
+//
+// The virtual refs render as their names rather than as numbers, because they
+// are what a link or a location field says when it points at nothing real, and
+// a report that says "#-1" tells the reader less than "*NOTHING*" does.
+//
+// A viewer of ref.Nothing is the sanity checker rather than a person, and sees
+// everything: there is nobody to keep a secret from.
 func unparse(w *world.World, viewer, target ref.Ref) string {
+	switch target {
+	case ref.Nothing:
+		return "*NOTHING*"
+	case ref.Ambiguous:
+		return "*AMBIGUOUS*"
+	case ref.Home:
+		return "*HOME*"
+	case ref.Nil:
+		return "*NIL*"
+	}
 	o := w.Get(target)
 	if o == nil {
-		return target.String()
+		return "*INVALID*"
 	}
 	v := w.Get(viewer)
-	if v != nil && (v.Flags.IsWizard() || o.Owner == viewer || target == viewer) {
+	if viewer == ref.Nothing ||
+		v != nil && (v.Flags.IsWizard() || o.Owner == viewer || target == viewer) {
 		return o.Name + "(" + target.String() + o.Flags.Unparse() + ")"
 	}
 	return o.Name

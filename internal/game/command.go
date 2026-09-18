@@ -268,6 +268,13 @@ const (
 	poseToken     = ':'
 )
 
+// exactOnlyCommands may not be reached by an abbreviation. Upstream compares
+// these with strcmp rather than by prefix, and the reason is plain: each can
+// damage the database outright, and "@san" should not be enough to run one.
+var exactOnlyCommands = map[string]bool{
+	"@sanity": true, "@sanfix": true, "@sanchange": true,
+}
+
 // lookupAtCommand resolves an @-command by prefix. An exact name always wins,
 // and an ambiguous prefix matches nothing rather than picking arbitrarily.
 func lookupAtCommand(verb string) (handler, string) {
@@ -279,6 +286,9 @@ func lookupAtCommand(verb string) (handler, string) {
 	var name string
 	n := 0
 	for full, h := range atCommands {
+		if exactOnlyCommands[full] {
+			continue
+		}
 		if strings.HasPrefix(full, v) {
 			found, name = h, full
 			n++
