@@ -411,6 +411,90 @@ func TestUnparseAndPennies(t *testing.T) {
 	})
 }
 
+func TestSetOperations(t *testing.T) {
+	runCase(t, Case{
+		Name: "set ops",
+		Source: tellPrelude + `: main
+  { 1 2 3 }list { 3 4 5 }list 2 array_nunion array_count t
+  { 1 2 3 }list { 3 4 5 }list 2 array_nintersect array_count t
+  { 1 2 3 }list { 3 4 5 }list 2 array_ndiff array_count t
+  { 1 2 3 }list { 3 4 5 }list 2 array_nintersect array_vals t
+;`,
+	})
+}
+
+func TestArraySearching(t *testing.T) {
+	runCase(t, Case{
+		Name: "array search",
+		Source: tellPrelude + `: main
+  { 10 20 30 20 }list 20 array_findval array_count t
+  { 10 20 30 }list 99 array_findval array_count t
+  { 1 2 3 4 }list 2 array_cut array_count t
+  { 1 2 3 }list { 1 2 3 }list array_compare t
+  { 1 2 }list { 1 2 3 }list array_compare t
+;`,
+	})
+}
+
+func TestNestedArrays(t *testing.T) {
+	runCase(t, Case{
+		Name: "nested",
+		Source: tellPrelude + `: main
+  { }dict { "a" "b" }list 42 array_nested_set
+  { "a" "b" }list array_nested_get t
+;`,
+	})
+}
+
+func TestCharacterConversion(t *testing.T) {
+	runCase(t, Case{
+		Name: "ctoi",
+		Source: tellPrelude + `: main
+  "A" ctoi t
+  "" ctoi t
+  65 itoc ts
+  10 itoc ts
+  "hello" md5hash ts
+;`,
+	})
+}
+
+func TestErrorFlagNames(t *testing.T) {
+	runCase(t, Case{
+		Name: "error flags",
+		Source: tellPrelude + `: main
+  error_num t
+  "DIV_ZERO" error_bit t
+  "NOSUCH" error_bit t
+  0 error_name ts
+  1 error_name ts
+;`,
+	})
+}
+
+func TestPowerAndCoordinates(t *testing.T) {
+	runCase(t, Case{
+		Name: "power",
+		Source: tellPrelude + `: main
+  2.0 10.0 ** ftostr ts
+  3.0 4.0 0.0 dist3d ftostr ts
+  1.0 2.0 3.0 4.0 6.0 8.0 diff3 ftostr ts ftostr ts ftostr ts
+;`,
+	})
+}
+
+func TestRegex(t *testing.T) {
+	runCase(t, Case{
+		Name: "regex",
+		Source: tellPrelude + `: main
+  "hello world" "o w" "O W" 0 regsub ts
+  "hello world" "o" "0" 2 regsub ts
+  "Hello" "hello" "X" 1 regsub ts
+  "a1b2c3" "[0-9]" 0 regsplit array_count t
+;`,
+	})
+}
+
 // TestDivisionByZero checks that a failure reports the same way in both.
 func TestDivisionByZero(t *testing.T) {
 	runCase(t, Case{

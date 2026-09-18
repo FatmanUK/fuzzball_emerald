@@ -227,3 +227,69 @@ func logPrim(fn func(float64) float64) primFunc {
 		return nil, f.Push(Float(fn(x)))
 	}
 }
+
+// The remaining float primitives: the power operator and the coordinate
+// conversions.
+
+func init() {
+	register("**", float2(math.Pow))
+
+	register("DIFF3", func(f *Frame) (*Result, error) {
+		// Two points, six numbers, giving the vector between them.
+		v, err := f.popFloats(6)
+		if err != nil {
+			return nil, err
+		}
+		// The vector runs from the first point to the second.
+		for i := 0; i < 3; i++ {
+			if err := f.Push(Float(v[i+3] - v[i])); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	register("XYZ_TO_POLAR", func(f *Frame) (*Result, error) {
+		v, err := f.popFloats(3)
+		if err != nil {
+			return nil, err
+		}
+		x, y, z := v[0], v[1], v[2]
+		r := math.Sqrt(x*x + y*y + z*z)
+		if r == 0 {
+			for range 3 {
+				if err := f.Push(Float(0)); err != nil {
+					return nil, err
+				}
+			}
+			return nil, nil
+		}
+		theta := math.Atan2(y, x)
+		phi := math.Acos(z / r)
+		for _, out := range []float64{r, theta, phi} {
+			if err := f.Push(Float(out)); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	register("POLAR_TO_XYZ", func(f *Frame) (*Result, error) {
+		v, err := f.popFloats(3)
+		if err != nil {
+			return nil, err
+		}
+		r, theta, phi := v[0], v[1], v[2]
+		out := []float64{
+			r * math.Sin(phi) * math.Cos(theta),
+			r * math.Sin(phi) * math.Sin(theta),
+			r * math.Cos(phi),
+		}
+		for _, x := range out {
+			if err := f.Push(Float(x)); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+}

@@ -242,3 +242,28 @@ func (a *Array) Range(from, to Value) *Array {
 func inRange(k, from, to Value) bool {
 	return !valueLess(k, from, false) && !valueLess(to, k, false)
 }
+
+// Cut splits an array at a key, returning what comes before it and what comes
+// from it onwards.
+func (a *Array) Cut(at Value) (*Array, *Array) {
+	keys, vals := a.Keys(), a.Values()
+	split := len(keys)
+	for i, k := range keys {
+		if !valueLess(k, at, false) {
+			split = i
+			break
+		}
+	}
+	if a.IsList() {
+		return NewList(vals[:split]), NewList(vals[split:])
+	}
+	left, right := NewDict(), NewDict()
+	for i, k := range keys {
+		if i < split {
+			left.Set(k, vals[i])
+		} else {
+			right.Set(k, vals[i])
+		}
+	}
+	return left, right
+}

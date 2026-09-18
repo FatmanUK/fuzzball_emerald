@@ -458,3 +458,67 @@ func init() {
 		return nil, nil
 	})
 }
+
+// The remaining stack primitives.
+
+func init() {
+	register("CHECKARGS", func(f *Frame) (*Result, error) {
+		// CHECKARGS validates the stack against a type signature. The
+		// signature language is not implemented; accepting the string
+		// and checking nothing is wrong in a way that would hide a
+		// program's own bugs, so it reports itself instead.
+		return nil, errf("CHECKARGS is not implemented yet")
+	})
+
+	register("SHALLOW_COPY", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if v.Type == TypeArray && v.Array != nil {
+			return nil, f.Push(Arr(v.Array.Copy()))
+		}
+		return nil, f.Push(v)
+	})
+	register("DEEP_COPY", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(deepCopy(v))
+	})
+
+	register("SECURE_SYSVARS", func(f *Frame) (*Result, error) {
+		// Reset me, loc and trigger to what the interpreter started
+		// with, so a program that was handed altered ones can recover.
+		if len(f.Vars) >= ReservedVars {
+			f.Vars[VarMe] = Obj(f.Caller)
+			f.Vars[VarTrigger] = Obj(f.Trig)
+			if h := f.host; h != nil {
+				f.Vars[VarLoc] = Obj(h.Location(f.Caller))
+			}
+		}
+		return nil, nil
+	})
+}
+
+// deepCopy copies a value and everything nested inside it.
+func deepCopy(v Value) Value {
+	if v.Type != TypeArray || v.Array == nil {
+		return v
+	}
+	src := v.Array
+	if src.IsList() {
+		vals := src.Values()
+		for i := range vals {
+			vals[i] = deepCopy(vals[i])
+		}
+		return Arr(NewList(vals))
+	}
+	out := NewDict()
+	keys, vals := src.Keys(), src.Values()
+	for i := range keys {
+		out.Set(keys[i], deepCopy(vals[i]))
+	}
+	return Arr(out)
+}
