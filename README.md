@@ -26,9 +26,11 @@ properties, world goroutine, Postgres persistence), M2 (legacy importer) and M3
 starter world, connect a real MUCK client over TLS, walk around, talk and
 build.
 
-MUF and MPI are not implemented yet, so exits that run programs report that
-rather than working, and descriptions are shown as stored rather than
-evaluated. That is M4 to M6.
+M4 is partly done: MUF compiles and runs. Every program the starter world
+ships compiles except three that cannot compile anywhere, and the interpreter
+executes arithmetic, control flow, procedures, scoped variables, arrays and
+try/catch. Only about 60 of the 408 primitives are implemented so far, so most
+real programs still stop at one they need; that is M5. MPI is M6.
 
 ## Building
 
