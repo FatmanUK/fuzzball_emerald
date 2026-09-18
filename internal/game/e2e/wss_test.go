@@ -27,12 +27,22 @@ func startWSS(t *testing.T) (url string, client *tls.Config) {
 		t.Skipf("starter world unavailable: %v", err)
 	}
 
+	for _, prog := range res.Programs {
+		res.World.SetSource(prog.Ref, prog.Source)
+	}
+
 	engine := world.NewEngine(res.World, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- engine.Run(ctx) }()
 
 	gs := game.New(engine, game.Options{})
+	macros := map[string]string{}
+	for _, m := range res.Macros {
+		macros[strings.ToLower(m.Name)] = m.Definition
+	}
+	gs.SetMacros(macros)
+
 	serverTLS := selfSignedTLS(t)
 
 	ls, err := wss.New("127.0.0.1:0", serverTLS, gs, wss.Options{Path: "/muck"})
@@ -121,7 +131,8 @@ func TestWSSConnectAndLook(t *testing.T) {
 		t.Fatalf("login was refused:\n%s", got)
 	}
 
-	c.send("say hello over websockets")
+	// "say" is an exit in this world; "!" reaches the built-in.
+	c.send("!say hello over websockets")
 	c.expect(`You say, "hello over websockets"`)
 
 	// The same interface-command rules apply on both transports.

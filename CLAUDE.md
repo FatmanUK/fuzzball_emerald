@@ -43,6 +43,9 @@ make pod-import pod-run   # build image, import starter world, serve in a contai
 make connect          # openssl s_client to the running server
 make pod-logs         # follow the container
 make pod-stop         # stop it
+
+make golden-build     # build Fuzzball 7 from the C, once
+make golden           # diff this server against it
 ```
 
 Running a single test needs the database URL only for `internal/store`, which
@@ -110,7 +113,31 @@ sequences would rewrite every container on every boot.
 - `internal/transport/{tlsline,wss}` — the two listeners, terminating into one
   descriptor abstraction so session logic is written once
 
+## The golden-output harness
+
+`internal/golden` is the oracle. It builds a database holding a MUF snippet,
+drives the same script through Fuzzball 7 built from `origin/mother` and
+through this server, and diffs the transcripts. The C runs in a container over
+TCP; this server runs in-process.
+
+**Use it for every primitive ported in M5.** Reading the C and reasoning about
+it is guesswork; the harness answers directly. Its first run found three real
+divergences in an afternoon's work, all of which had passed unit tests written
+from the same C.
+
+Adding a case is a `Case{Source: ...}` in `golden_test.go`. The snippet becomes
+`test.muf`, reachable through an exit named `test`, and the harness compares
+what each server prints.
+
 ## Traps
+
+**A MUF program starts with one value on its stack**: the command's argument,
+which `interp()` pushes before the program runs. `depth` counts it. And unset
+variables read as integer `0`, not `#-1`.
+
+**MUF does not abort on integer division by zero.** The result is `0` and an
+error flag the program reads with `is_set?`. Aborting ends programs that
+upstream runs to completion.
 
 **`ref.Ref`'s zero value is `#0`, the global environment — not `NOTHING`.** Any
 struct holding refs must initialise them explicitly. This has already caused one

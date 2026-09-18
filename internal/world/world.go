@@ -26,6 +26,10 @@ type World struct {
 	dirty   map[ref.Ref]struct{}
 	deleted map[ref.Ref]struct{}
 
+	// programs holds MUF source by program ref. Source is loaded at boot and
+	// compiled on demand, so an edit only needs to invalidate a cache.
+	programs map[ref.Ref]string
+
 	Tune *tune.Set
 	// tuneDirty records that the parameter table changed.
 	tuneDirty bool
@@ -36,12 +40,13 @@ type World struct {
 // New returns an empty world.
 func New() *World {
 	return &World{
-		objs:    make(map[ref.Ref]*Object),
-		players: make(map[string]ref.Ref),
-		dirty:   make(map[ref.Ref]struct{}),
-		deleted: make(map[ref.Ref]struct{}),
-		Tune:    tune.NewSet(),
-		now:     time.Now,
+		objs:     make(map[ref.Ref]*Object),
+		players:  make(map[string]ref.Ref),
+		dirty:    make(map[ref.Ref]struct{}),
+		deleted:  make(map[ref.Ref]struct{}),
+		programs: make(map[ref.Ref]string),
+		Tune:     tune.NewSet(),
+		now:      time.Now,
 	}
 }
 
@@ -210,6 +215,15 @@ func (w *World) GetProp(r ref.Ref, path string) (props.Value, bool) {
 		return props.Value{}, false
 	}
 	return o.Props.Get(path)
+}
+
+// SetSource stores a program's MUF source.
+func (w *World) SetSource(r ref.Ref, src string) { w.programs[r] = src }
+
+// Source returns a program's MUF source.
+func (w *World) Source(r ref.Ref) (string, bool) {
+	src, ok := w.programs[r]
+	return src, ok
 }
 
 // SetTune changes a parameter and marks the table for persistence.

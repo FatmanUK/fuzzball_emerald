@@ -75,6 +75,9 @@ func startServer(t *testing.T) *testServer {
 		t.Skipf("starter world unavailable: %v", err)
 	}
 	w := res.World
+	for _, prog := range res.Programs {
+		w.SetSource(prog.Ref, prog.Source)
+	}
 
 	engine := world.NewEngine(w, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -82,6 +85,12 @@ func startServer(t *testing.T) *testServer {
 	go func() { worldDone <- engine.Run(ctx) }()
 
 	gs := game.New(engine, game.Options{})
+	macros := map[string]string{}
+	for _, m := range res.Macros {
+		macros[strings.ToLower(m.Name)] = m.Definition
+	}
+	gs.SetMacros(macros)
+
 	cfg := selfSignedTLS(t)
 
 	ln, err := tlsline.New("127.0.0.1:0", cfg, gs, nil)
@@ -233,7 +242,9 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	}
 
 	// Speech is echoed back.
-	c.send("say hello world")
+	// The starter world defines its own "say" exit, which wins over the
+	// built-in. A wizard's "!" prefix skips exit matching to reach ours.
+	c.send("!say hello world")
 	c.expect(`You say, "hello world"`)
 
 	// A pose uses the player's name.
@@ -259,7 +270,9 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	c.expect("Test Chamber")
 
 	// And back out again, by teleporting home.
-	c.send("@teleport me=#0")
+	// This world's "@tel" exit lists "@teleport" among its aliases, so the
+	// built-in needs the wizard override to reach.
+	c.send("!@teleport me=#0")
 	c.expect("Room Zero")
 
 	c.send("QUIT")
@@ -340,14 +353,16 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 	b.expect("Obvious exits")
 
 	// One is a wizard, so can bring the newcomer along.
-	a.send("@teleport Visitor=#0")
+	a.send("!@teleport Visitor=#0")
 	a.expect("Teleported")
 	b.drain(300 * time.Millisecond)
 	a.drain(300 * time.Millisecond)
 
-	b.send("say knock knock")
-	got := a.expect("knock knock")
-	if !strings.Contains(got, "Visitor says") {
-		t.Errorf("One did not hear Visitor:\n%s", got)
+	// One speaks and Visitor listens. The wizard override is needed to reach
+	// the built-in past this world's "say" exit, and only One has it.
+	a.send("!say knock knock")
+	got := b.expect("knock knock")
+	if !strings.Contains(got, "One says") {
+		t.Errorf("Visitor did not hear One:\n%s", got)
 	}
 }

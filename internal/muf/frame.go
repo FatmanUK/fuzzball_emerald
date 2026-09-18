@@ -80,6 +80,12 @@ type Frame struct {
 	// Err holds the error a TRY has not yet caught.
 	err *Error
 
+	// ErrorFlags records the arithmetic conditions a program can ask about
+	// with is_set?, rather than being told about by an abort. Fuzzball
+	// treats integer division by zero as a flag and a zero result, not a
+	// failure.
+	ErrorFlags ErrorFlags
+
 	// Caller identifies who is running the program, for the reserved
 	// variables and for permission checks.
 	Caller ref.Ref
@@ -97,18 +103,69 @@ func NewFrame(p *Program, host Host) *Frame {
 		LVars: make([]Value, len(p.LVars)),
 		host:  host,
 	}
-	// Every variable starts as #-1, which is what an unset MUF variable
-	// reads as.
+	// Every variable starts as integer zero, which is what interp() fills
+	// them with before overwriting the four reserved ones.
 	for i := range f.Vars {
-		f.Vars[i] = Obj(ref.Nothing)
+		f.Vars[i] = Int(0)
 	}
 	for i := range f.LVars {
-		f.LVars[i] = Obj(ref.Nothing)
+		f.LVars[i] = Int(0)
 	}
 	return f
 }
 
-// SetReserved fills the four variables every program starts with.
+// ErrorFlags are the arithmetic conditions is_set? reports. The order matches
+// the bits union error_mask defines, because is_set? takes the number.
+type ErrorFlags struct {
+	DivZero   bool
+	NaN       bool
+	Imaginary bool
+	FBounds   bool
+	IBounds   bool
+}
+
+// Get reads a flag by the number is_set? uses.
+func (e ErrorFlags) Get(n int) bool {
+	switch n {
+	case 0:
+		return e.DivZero
+	case 1:
+		return e.NaN
+	case 2:
+		return e.Imaginary
+	case 3:
+		return e.FBounds
+	case 4:
+		return e.IBounds
+	}
+	return false
+}
+
+// Set writes a flag by number.
+func (e *ErrorFlags) Set(n int, v bool) {
+	switch n {
+	case 0:
+		e.DivZero = v
+	case 1:
+		e.NaN = v
+	case 2:
+		e.Imaginary = v
+	case 3:
+		e.FBounds = v
+	case 4:
+		e.IBounds = v
+	}
+}
+
+// Clear resets every flag.
+func (e *ErrorFlags) Clear() { *e = ErrorFlags{} }
+
+// SetReserved fills the four variables every program starts with, and puts the
+// command's argument on the stack.
+//
+// That last part is easy to miss and load-bearing: interp() pushes the
+// argument string before the program runs, so a program starts with one value
+// on the stack rather than none, and "depth" reflects it.
 func (f *Frame) SetReserved(me, loc, trigger ref.Ref, command string) {
 	if len(f.Vars) < ReservedVars {
 		return
@@ -118,6 +175,7 @@ func (f *Frame) SetReserved(me, loc, trigger ref.Ref, command string) {
 	f.Vars[VarTrigger] = Obj(trigger)
 	f.Vars[VarCommand] = Str(command)
 	f.Caller, f.Trig = me, trigger
+	f.Stack = append(f.Stack, Str(command))
 }
 
 // Push puts a value on the stack.

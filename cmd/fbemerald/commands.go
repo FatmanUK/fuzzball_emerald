@@ -63,7 +63,22 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("loading the world: %w", err)
 	}
+	progs, err := st.LoadPrograms(ctx, func(r ref.Ref, src string) error {
+		w.SetSource(r, src)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("loading program source: %w", err)
+	}
+
+	macros, err := st.LoadMacros(ctx)
+	if err != nil {
+		return fmt.Errorf("loading macros: %w", err)
+	}
+
 	log.Info("world loaded",
+		"programs", progs,
+		"macros", len(macros),
 		"objects", rep.Objects,
 		"properties", rep.Properties,
 		"tune_params", rep.Tune,
@@ -87,6 +102,12 @@ func cmdServe(args []string) error {
 
 	game.Version = version
 	gs := game.New(engine, game.Options{Logger: base})
+
+	macroTable := make(map[string]string, len(macros))
+	for _, m := range macros {
+		macroTable[strings.ToLower(m.Name)] = m.Definition
+	}
+	gs.SetMacros(macroTable)
 
 	// Run the world first: the listeners enqueue work onto it from their
 	// own goroutines, so it has to be draining before they accept anyone.

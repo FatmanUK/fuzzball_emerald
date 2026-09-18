@@ -155,9 +155,12 @@ func (s *Server) command(w *world.World, d *session.Descriptor, line string) {
 	// Exits are matched before any built-in, which is what lets a world
 	// define its own "look" or "@view". The player's world beats ours.
 	if !overridden {
-		if r := match.New(w, c.who, line).Exits().Result(); r != ref.Nothing &&
-			r != ref.Ambiguous {
+		m := match.New(w, c.who, line).Exits()
+		if r := m.Result(); r != ref.Nothing && r != ref.Ambiguous {
 			s.logCommand(w, d, line, "")
+			// An exit that runs a program takes the rest of the line
+			// as its argument.
+			c.arg = m.Arg()
 			s.useExit(c, r)
 			return
 		}

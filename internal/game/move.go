@@ -37,9 +37,7 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 		return
 	}
 	if c.w.Get(dest).Type() == ref.TypeProgram {
-		// Exits that run programs need the MUF interpreter, which
-		// arrives in M4.
-		c.tell("That exit runs a program, which this server cannot do yet.")
+		s.runProgram(c, dest, exit, c.arg)
 		return
 	}
 

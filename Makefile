@@ -88,6 +88,7 @@ generate: ## Regenerate the @tune table from the Fuzzball sources
 .PHONY: clean
 clean: ## Remove build artefacts
 	rm -f $(BINARY) coverage.out coverage.html
+	rm -rf build
 
 .PHONY: distclean
 distclean: clean pod-clean ## Remove artefacts and containers
@@ -194,6 +195,32 @@ run: build certs db-up ## Run the server on the host
 connect: ## Connect to a running server with openssl
 	@echo "connecting to localhost:$(LINE_PORT) - type 'connect <name> <password>'"
 	@openssl s_client -quiet -connect localhost:$(LINE_PORT)
+
+# --- the golden-output oracle -----------------------------------------------
+
+# Fuzzball 7 built from the C sources on the mother branch. The golden tests
+# run the same session against it and against this server, and diff the two.
+ORACLE_IMAGE ?= localhost/fbmuck-oracle
+ORACLE_REF   ?= origin/mother
+
+.PHONY: golden-build
+golden-build: ## Build the C Fuzzball the golden tests compare against
+	@echo "extracting $(ORACLE_REF)..."
+	@rm -rf build/oracle && mkdir -p build/oracle
+	@git archive $(ORACLE_REF) | tar -x -C build/oracle
+	@cp deploy/golden/Containerfile.fbmuck build/oracle/
+	podman build -t $(ORACLE_IMAGE) -f build/oracle/Containerfile.fbmuck build/oracle
+	@rm -rf build/oracle
+
+.PHONY: golden
+golden: ## Run the differential tests against the C server
+	@podman image exists $(ORACLE_IMAGE) \
+		|| { echo "the oracle is not built; run 'make golden-build'"; exit 1; }
+	$(GO) test -v -count=1 ./internal/golden/
+
+.PHONY: golden-clean
+golden-clean: ## Remove the oracle image
+	-podman rmi -f $(ORACLE_IMAGE) 2>/dev/null
 
 # --- running in a container -------------------------------------------------
 

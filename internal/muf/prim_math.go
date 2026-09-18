@@ -133,6 +133,39 @@ func init() {
 		return nil, f.Push(Bool(convErr == nil))
 	})
 
+	register("IS_SET?", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Bool(f.ErrorFlags.Get(int(n))))
+	})
+	register("CLEAR", func(f *Frame) (*Result, error) {
+		f.ErrorFlags.Clear()
+		return nil, nil
+	})
+	register("ERROR?", func(f *Frame) (*Result, error) {
+		e := f.ErrorFlags
+		return nil, f.Push(Bool(e.DivZero || e.NaN || e.Imaginary ||
+			e.FBounds || e.IBounds))
+	})
+	register("SET_ERROR", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		f.ErrorFlags.Set(int(n), true)
+		return nil, nil
+	})
+	register("CLEAR_ERROR", func(f *Frame) (*Result, error) {
+		n, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		f.ErrorFlags.Set(int(n), false)
+		return nil, nil
+	})
+
 	register("BITOR", bitwise(func(a, b int64) int64 { return a | b }))
 	register("BITAND", bitwise(func(a, b int64) int64 { return a & b }))
 	register("BITXOR", bitwise(func(a, b int64) int64 { return a ^ b }))
@@ -193,22 +226,23 @@ func arith(op byte) primFunc {
 			return nil, f.Push(Int(a.Num - b.Num))
 		case '*':
 			return nil, f.Push(Int(a.Num * b.Num))
-		case '/':
+		case '/', '%':
+			// Dividing by zero is not a failure in MUF: the result
+			// is zero and a flag is raised, which a program reads
+			// with is_set?. Aborting here would end programs that
+			// upstream runs to completion.
 			if b.Num == 0 {
-				return nil, errf("division by zero")
-			}
-			// Go and C agree on truncation toward zero, except that
-			// Go panics on this one case.
-			if a.Num == math.MinInt64 && b.Num == -1 {
-				return nil, f.Push(Int(math.MinInt64))
-			}
-			return nil, f.Push(Int(a.Num / b.Num))
-		case '%':
-			if b.Num == 0 {
-				return nil, errf("modulus by zero")
-			}
-			if a.Num == math.MinInt64 && b.Num == -1 {
+				f.ErrorFlags.DivZero = true
 				return nil, f.Push(Int(0))
+			}
+			// The one case where the quotient does not fit, which
+			// would panic in Go and raises a bounds flag upstream.
+			if a.Num == math.MinInt64 && b.Num == -1 {
+				f.ErrorFlags.IBounds = true
+				return nil, f.Push(Int(0))
+			}
+			if op == '/' {
+				return nil, f.Push(Int(a.Num / b.Num))
 			}
 			return nil, f.Push(Int(a.Num % b.Num))
 		}

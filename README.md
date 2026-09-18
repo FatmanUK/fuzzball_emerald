@@ -183,6 +183,18 @@ the recovery path: on load the chains are checked against what the objects
 claim, and any that disagree are rebuilt rather than silently orphaning
 everything past the break.
 
+## Checking against real Fuzzball
+
+The MUF port is verified against Fuzzball 7 itself rather than against reading
+of its source. `make golden-build` compiles the C server from the `mother`
+branch into a container; `make golden` then runs the same MUF through both and
+diffs what they print.
+
+```bash
+make golden-build   # once, takes a few minutes
+make golden
+```
+
 ## Testing
 
 ```bash

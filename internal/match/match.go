@@ -64,7 +64,18 @@ type Matcher struct {
 	// does.
 	level   int
 	longest int
+
+	// arg is what followed the matched exit alias, for an exit that runs a
+	// program and so matches a prefix of the line.
+	arg string
 }
+
+// Arg returns the text that followed a matched exit's name.
+//
+// An exit that leads to a program may match just the first word of what the
+// player typed, and the rest becomes the program's argument: "@shout hello"
+// reaches the "@shout" exit with "hello" as its argument.
+func (m *Matcher) Arg() string { return m.arg }
 
 // New starts a search for name on behalf of who.
 func New(w *world.World, who ref.Ref, name string) *Matcher {
@@ -266,17 +277,17 @@ func (m *Matcher) matchExitsOn(on ref.Ref) {
 		if e == nil {
 			continue
 		}
-		alias, ok := matchAlias(e.Name, m.name)
+		alias, arg, ok := matchAlias(e.Name, m.name, m.runsProgram(e))
 		if !ok {
 			continue
 		}
 		lev := priority(e.Flags)
 		switch {
 		case lev > m.level:
-			m.level, m.longest = lev, len(alias)
+			m.level, m.longest, m.arg = lev, len(alias), arg
 			m.exact, m.last, m.count = r, r, 1
 		case lev == m.level && len(alias) > m.longest:
-			m.longest = len(alias)
+			m.longest, m.arg = len(alias), arg
 			m.exact, m.last, m.count = r, r, 1
 		case lev == m.level && len(alias) == m.longest && r != m.last:
 			m.count++
@@ -284,16 +295,56 @@ func (m *Matcher) matchExitsOn(on ref.Ref) {
 	}
 }
 
-// matchAlias reports whether name matches any of an exit's ';'-separated
-// aliases, returning the alias that matched.
-func matchAlias(exitName, name string) (string, bool) {
-	for _, alias := range strings.Split(exitName, string(ExitDelimiter)) {
-		alias = strings.TrimSpace(alias)
-		if alias != "" && ascii.EqualFold(alias, name) {
-			return alias, true
+// runsProgram reports whether an exit leads somewhere that takes an argument
+// rather than moving the player.
+//
+// Such an exit matches only the first word of what was typed, leaving the rest
+// as its argument. HAVEN marks an exit as taking one even when it does not
+// lead to a program.
+func (m *Matcher) runsProgram(e *world.Object) bool {
+	if e.Flags&ref.Haven != 0 {
+		return true
+	}
+	for _, d := range e.Dest {
+		if d == ref.Nil {
+			return true
+		}
+		if o := m.w.Get(d); o != nil && o.Type() == ref.TypeProgram {
+			return true
 		}
 	}
-	return "", false
+	return false
+}
+
+// matchAlias reports whether name matches any of an exit's ';'-separated
+// aliases. It returns the alias that matched and whatever followed it.
+//
+// An exit that takes an argument matches a prefix ending at a space; any other
+// exit must match the whole of what was typed.
+func matchAlias(exitName, name string, takesArg bool) (alias, arg string, ok bool) {
+	first := name
+	rest := ""
+	if takesArg {
+		if before, after, found := strings.Cut(name, " "); found {
+			first, rest = before, strings.TrimSpace(after)
+		}
+	}
+
+	for _, a := range strings.Split(exitName, string(ExitDelimiter)) {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		if ascii.EqualFold(a, name) {
+			// An exact match on the whole line wins, and leaves no
+			// argument.
+			return a, "", true
+		}
+		if takesArg && ascii.EqualFold(a, first) {
+			return a, rest, true
+		}
+	}
+	return "", "", false
 }
 
 // priority is Fuzzball's PLevel: an exit's mucker bits raise how strongly it

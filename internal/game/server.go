@@ -31,6 +31,10 @@ type Server struct {
 
 	// shutdown asks the process to stop, set by the server binary.
 	shutdown func()
+
+	// programs caches compiled MUF, and macros is the editor's macro table.
+	programs map[ref.Ref]compiled
+	macros   map[string]string
 }
 
 // OnShutdown sets what @shutdown calls.
@@ -53,10 +57,12 @@ func New(engine *world.Engine, opts Options) *Server {
 		welcome = defaultWelcome()
 	}
 	return &Server{
-		engine:  engine,
-		hub:     session.NewHub(),
-		log:     opts.Logger,
-		welcome: welcome,
+		engine:   engine,
+		hub:      session.NewHub(),
+		log:      opts.Logger,
+		welcome:  welcome,
+		programs: map[ref.Ref]compiled{},
+		macros:   map[string]string{},
 	}
 }
 
@@ -201,6 +207,9 @@ func unparse(w *world.World, viewer, target ref.Ref) string {
 
 // statusLog returns the logger for server-lifecycle messages.
 func (s *Server) statusLog() *slog.Logger { return logging.On(s.log, logging.Status) }
+
+// mufLog returns the logger for MUF diagnostics.
+func (s *Server) mufLog() *slog.Logger { return logging.On(s.log, logging.MUFError) }
 
 // commandLog returns the logger for player commands.
 func (s *Server) commandLog() *slog.Logger { return logging.On(s.log, logging.Command) }

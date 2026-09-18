@@ -71,12 +71,22 @@ func runFails(t *testing.T, src, want string) {
 	}
 }
 
-// stack returns the final stack as strings, which reads well in failures.
+// stack returns the final stack as strings, minus the argument the
+// interpreter puts there before a program starts.
+//
+// A MUF program is handed its command's argument on the stack, so an empty
+// argument still leaves one value below whatever the program produced.
+// TestProgramStartsWithItsArgument covers that directly; every other test
+// looks past it.
 func stack(f *muf.Frame) []string {
-	out := make([]string, f.Depth())
-	for i := range out {
-		v, _ := f.Peek(f.Depth() - 1 - i)
-		out[i] = v.String()
+	depth := f.Depth()
+	out := make([]string, 0, depth)
+	for i := depth - 1; i >= 0; i-- {
+		v, _ := f.Peek(i)
+		out = append(out, v.String())
+	}
+	if len(out) > 0 {
+		return out[1:]
 	}
 	return out
 }
@@ -104,9 +114,10 @@ func TestArithmetic(t *testing.T) {
 	wantStack(t, ": main 7.5 2.5 / ;", "3")
 }
 
-func TestDivisionByZeroFails(t *testing.T) {
-	runFails(t, ": main 1 0 / ;", "division by zero")
-	runFails(t, ": main 1 0 % ;", "modulus by zero")
+func TestDivisionByBadTypeFails(t *testing.T) {
+	// Integer division by zero is not a failure; see
+	// TestDivisionByZeroYieldsZeroAndAFlag. Dividing by a non-number is.
+	runFails(t, `: main 1 "x" / ;`, "needs two numbers")
 }
 
 func TestStackOperations(t *testing.T) {
@@ -117,7 +128,9 @@ func TestStackOperations(t *testing.T) {
 	wantStack(t, ": main 1 2 3 rot ;", "2 3 1")
 	wantStack(t, ": main 1 2 nip ;", "2")
 	wantStack(t, ": main 1 2 tuck ;", "2 1 2")
-	wantStack(t, ": main 1 2 3 depth ;", "1 2 3 3")
+	// depth counts the command argument the interpreter pushed, so three
+	// values pushed here read as four.
+	wantStack(t, ": main 1 2 3 depth ;", "1 2 3 4")
 	wantStack(t, ": main 1 2 3 2 pick ;", "1 2 3 2")
 }
 
@@ -195,7 +208,7 @@ func TestArrays(t *testing.T) {
 
 func TestTryCatch(t *testing.T) {
 	// A failure inside TRY lands in the handler with the message.
-	f, _ := run(t, ": main try 1 0 / catch pop 999 endcatch ;")
+	f, _ := run(t, `: main try "x" 0 / catch pop 999 endcatch ;`)
 	if got := stack(f); len(got) != 1 || got[0] != "999" {
 		t.Errorf("stack = %v, want [999]", got)
 	}
@@ -207,7 +220,7 @@ func TestTryCatch(t *testing.T) {
 // TestTryRestoresTheStack checks that catching unwinds what the guarded block
 // left behind, rather than handing the handler a half-built stack.
 func TestTryRestoresTheStack(t *testing.T) {
-	wantStack(t, ": main 42 try 1 2 3 1 0 / catch pop endcatch ;", "42")
+	wantStack(t, `: main 42 try 1 2 3 "x" 0 / catch pop endcatch ;`, "42")
 }
 
 func TestNotify(t *testing.T) {
@@ -238,8 +251,44 @@ func TestReservedVariables(t *testing.T) {
 }
 
 func TestStackUnderflowIsReported(t *testing.T) {
-	runFails(t, ": main pop ;", "stack underflow")
-	runFails(t, ": main 1 + ;", "stack underflow")
+	// Two pops, because one value is already there: the argument.
+	runFails(t, ": main pop pop ;", "stack underflow")
+	runFails(t, ": main pop 1 + ;", "stack underflow")
+}
+
+// TestProgramStartsWithItsArgument pins a detail that is easy to miss and that
+// programs depend on: interp() pushes the command's argument before the
+// program runs, so "depth" is one higher than what the program itself pushed.
+func TestProgramStartsWithItsArgument(t *testing.T) {
+	p, err := compiler.Compile(": main depth ;", compiler.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := muf.NewFrame(p, newHost())
+	f.SetReserved(ref.God, ref.GlobalEnvironment, ref.Nothing, "some args")
+	if _, err := f.Run(muf.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	// The argument, then the depth that counted it.
+	depth, _ := f.Peek(0)
+	if depth.String() != "1" {
+		t.Errorf("depth = %s, want 1: the argument should already be on the stack", depth)
+	}
+	arg, _ := f.Peek(1)
+	if arg.String() != "some args" {
+		t.Errorf("the value below is %q, want the command argument", arg.String())
+	}
+}
+
+// TestDivisionByZeroYieldsZeroAndAFlag covers a difference the golden harness
+// found: MUF does not abort on integer division by zero. The result is zero
+// and a flag the program can read with is_set?.
+func TestDivisionByZeroYieldsZeroAndAFlag(t *testing.T) {
+	wantStack(t, ": main 1 0 / ;", "0")
+	wantStack(t, ": main 1 0 % ;", "0")
+	wantStack(t, ": main 1 0 / pop 0 is_set? ;", "1")
+	// Nothing is flagged when the division is fine.
+	wantStack(t, ": main 4 2 / pop 0 is_set? ;", "0")
 }
 
 func TestUnimplementedPrimitiveIsReported(t *testing.T) {

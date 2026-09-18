@@ -1,0 +1,23 @@
+# Builds Fuzzball 7 from the C sources on the mother branch, to serve as the
+# oracle the Go implementation is checked against.
+#
+# The build context is a checkout of that branch, which the Makefile produces
+# with git archive.
+FROM docker.io/library/debian:12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential autoconf automake autoconf-archive \
+        libpcre3-dev libssl-dev zlib1g-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+# --without-ssl: the oracle is driven over a local pipe, never a network, and
+# the TLS build pulls in OpenSSL APIs this old source no longer matches.
+RUN ./configure --without-ssl --prefix=/opt/fbmuck \
+    && make -j"$(nproc)" \
+    && make install
+
+WORKDIR /game
+ENTRYPOINT ["/opt/fbmuck/bin/fbmuck"]
