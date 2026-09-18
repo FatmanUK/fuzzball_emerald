@@ -601,6 +601,43 @@ func init() {
 			h.Flags(obj).Unparse() + ")"))
 	})
 
+	register("PARSEPROP", func(f *Frame) (*Result, error) {
+		// "object propname arg flags parseprop"
+		flags, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		arg, err := f.popStr()
+		if err != nil {
+			return nil, errf("String expected. (3)")
+		}
+		path, err := f.popStr()
+		if err != nil {
+			return nil, errf("String expected. (2)")
+		}
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if v.Type != TypeObject {
+			return nil, errf("Non-object argument. (1)")
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(v.Ref) {
+			return nil, errf("Invalid object. (1)")
+		}
+		// A non-zero flag marks the evaluation private, which stops it
+		// producing messages to anyone but the caller.
+		out, err := h.ParseProp(v.Ref, path, arg, flags != 0)
+		if err != nil {
+			return nil, errf("%s", err.Error())
+		}
+		return nil, f.Push(Str(out))
+	})
+
 	register("PENNIES", func(f *Frame) (*Result, error) {
 		obj, h, err := f.refAndHost()
 		if err != nil {

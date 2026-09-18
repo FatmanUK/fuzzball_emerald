@@ -129,6 +129,20 @@ Adding a case is a `Case{Source: ...}` in `golden_test.go`. The snippet becomes
 `test.muf`, reachable through an exit named `test`, and the harness compares
 what each server prints.
 
+## MPI
+
+`internal/mpi` evaluates the macro language inside property values. It is
+generated from `mfun_list` in `include/mfun.h`, which carries each function's
+arity and the flags that decide how its arguments are handled before the
+implementation runs.
+
+Two things about it are easy to get wrong. An MPI failure is **reported to the
+player and yields empty text** — it does not abort the MUF program or command
+that was reading the property, so `Eval` is what callers want and `Parse` is
+the inner form. And `{and}`, `{or}` and `{if}` do **not** pre-evaluate their
+arguments, which is what the `Parse` flag in the table controls; evaluating a
+branch they will not use would be visible, because MPI has side effects.
+
 ## Traps
 
 **A MUF program starts with one value on its stack**: the command's argument,

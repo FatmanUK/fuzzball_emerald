@@ -89,6 +89,10 @@ func (h *fakeHost) Online() []ref.Ref        { return []ref.Ref{ref.God} }
 func (h *fakeHost) DescrPlayer(int) ref.Ref  { return ref.God }
 func (h *fakeHost) DescrSize(int) (int, int) { return 80, 24 }
 
+func (h *fakeHost) ParseProp(ref.Ref, string, string, bool) (string, error) {
+	return "", nil
+}
+
 func (h *fakeHost) Now() time.Time        { return time.Unix(1_700_000_000, 0).UTC() }
 func (h *fakeHost) Uptime() time.Duration { return time.Hour }
 func (h *fakeHost) Version() string       { return "test" }

@@ -88,6 +88,11 @@ type Host interface {
 	// DescrSize is a connection's reported terminal width and height.
 	DescrSize(descr int) (width, height int)
 
+	// ParseProp evaluates the MPI in a property and returns the result. It
+	// is a host method because MUF and MPI are separate languages that the
+	// server joins, not layers of one another.
+	ParseProp(obj ref.Ref, path, arg string, private bool) (string, error)
+
 	// Now is the server's clock, which tests replace.
 	Now() time.Time
 	// Uptime is how long the server has been running.

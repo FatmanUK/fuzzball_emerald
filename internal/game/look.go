@@ -74,7 +74,7 @@ func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
 
 	s.send(who, unparse(w, who, target))
 
-	desc := getMesg(w, target, propDesc)
+	desc := s.mesgProp(w, who, target, propDesc)
 	if desc == "" {
 		desc = w.Tune.String("description_default")
 	}

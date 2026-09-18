@@ -412,6 +412,83 @@ var cases = []Case{
   me @ "wrong" checkpassword t
 ;`,
 	},
+	{
+		// MPI is evaluated when a description is read, so the program
+		// stores one and then looks at itself.
+		Name: "mpi_text",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  "plain text" show
+  "{null:ignored}" show
+  "{toupper:shout}" show
+  "{strip:  spaced  }|" show
+  "{strlen:hello}" show
+  "{subst:one two one,one,X}" show
+;`,
+	},
+	{
+		Name: "mpi_arithmetic",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  "{add:2,3}" show
+  "{subt:10,3}" show
+  "{mult:6,7}" show
+  "{div:20,4}" show
+  "{div:1,0}" show
+  "{mod:17,5}" show
+  "{abs:-5}" show
+  "{max:3,9,2}" show
+  "{min:3,9,2}" show
+;`,
+	},
+	{
+		Name: "mpi_logic",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  "{if:1,yes,no}" show
+  "{if:0,yes,no}" show
+  "{if:,yes,no}" show
+  "{not:1}" show
+  "{not:0}" show
+  "{eq:2,2}" show
+  "{gt:3,2}" show
+  "{and:1,1}" show
+  "{and:1,0}" show
+  "{or:0,1}" show
+;`,
+	},
+	{
+		Name: "mpi_literal",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  "{{not a call}" show
+  "{lit:{add:1,2}}" show
+;`,
+	},
+	{
+		Name: "mpi_objects",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  "{name:me}" show
+  "{name:here}" show
+  "{owner:me}" show
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

@@ -7,6 +7,7 @@ import (
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
+	"github.com/FatmanUK/fuzzball_emerald/internal/mpi"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf/compiler"
 	"github.com/FatmanUK/fuzzball_emerald/internal/password"
@@ -22,6 +23,9 @@ import (
 type mufHost struct {
 	s *Server
 	w *world.World
+	// caller is the player the program is running for, which MPI needs as
+	// the audience for what it evaluates.
+	caller ref.Ref
 }
 
 func (h *mufHost) Notify(who ref.Ref, msg string) { h.s.send(who, msg) }
@@ -325,6 +329,33 @@ func (h *mufHost) SetPassword(player ref.Ref, pass string) error {
 	return nil
 }
 
+// ParseProp evaluates a property's MPI, which is how MUF reaches the other
+// language.
+func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string, error) {
+	o := h.w.Get(obj)
+	if o == nil {
+		return "", errMsg("no such object")
+	}
+	v, ok := o.Props.Get(path)
+	if !ok {
+		return "", nil
+	}
+
+	env := &mpi.Env{
+		Who:     mpi.Ref(h.caller),
+		What:    mpi.Ref(obj),
+		Perms:   mpi.Ref(obj),
+		Blessed: v.Blessed,
+		Host:    &mpiHost{s: h.s, w: h.w},
+	}
+	if arg != "" {
+		if err := env.SetVar("arg", arg); err != nil {
+			return "", err
+		}
+	}
+	return mpi.Eval(env, v.StringValue()), nil
+}
+
 func (h *mufHost) Now() time.Time { return h.w.Now() }
 
 func (h *mufHost) Uptime() time.Duration { return h.w.Now().Sub(h.s.started) }
@@ -502,7 +533,7 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 		return
 	}
 
-	host := &mufHost{s: s, w: c.w}
+	host := &mufHost{s: s, w: c.w, caller: c.who}
 	f := muf.NewFrame(p, host)
 
 	me := c.w.Get(c.who)

@@ -15,7 +15,7 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 	c.w.Used(exit)
 
 	if len(e.Dest) == 0 {
-		if msg := getMesg(c.w, exit, propFail); msg != "" {
+		if msg := s.mesgProp(c.w, c.who, exit, propFail); msg != "" {
 			c.send(msg)
 		} else {
 			c.tell("That exit doesn't go anywhere.")
@@ -47,10 +47,10 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 
 // exitMessages shows an exit's success messages to the player and the room.
 func (s *Server) exitMessages(c *ctx, exit ref.Ref) {
-	if msg := getMesg(c.w, exit, propSucc); msg != "" {
+	if msg := s.mesgProp(c.w, c.who, exit, propSucc); msg != "" {
 		c.send(msg)
 	}
-	if msg := getMesg(c.w, exit, propOSucc); msg != "" {
+	if msg := s.mesgProp(c.w, c.who, exit, propOSucc); msg != "" {
 		o := c.w.Get(c.who)
 		if o.Location != ref.Nothing {
 			s.notifyRoom(c.w, o.Location, []ref.Ref{c.who}, "%s %s", o.Name, msg)
@@ -73,10 +73,10 @@ func (s *Server) moveTo(w *world.World, who, dest, via ref.Ref) {
 	s.notifyRoom(w, dest, []ref.Ref{who}, "%s has arrived.", o.Name)
 
 	if via != ref.Nothing {
-		if msg := getMesg(w, via, propDrop); msg != "" {
+		if msg := s.mesgProp(w, who, via, propDrop); msg != "" {
 			s.send(who, msg)
 		}
-		if msg := getMesg(w, via, propODrop); msg != "" {
+		if msg := s.mesgProp(w, who, via, propODrop); msg != "" {
 			s.notifyRoom(w, dest, []ref.Ref{who}, "%s %s", o.Name, msg)
 		}
 	}

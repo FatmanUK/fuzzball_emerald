@@ -26,11 +26,13 @@ properties, world goroutine, Postgres persistence), M2 (legacy importer) and M3
 starter world, connect a real MUCK client over TLS, walk around, talk and
 build.
 
-M4 is partly done: MUF compiles and runs. Every program the starter world
+M4 is done and M5 and M6 are partly done: MUF compiles and runs, and MPI is
+evaluated in descriptions and exit messages. Every program the starter world
 ships compiles except three that cannot compile anywhere, and the interpreter
 executes arithmetic, control flow, procedures, scoped variables, arrays and
-try/catch. Only about 60 of the 408 primitives are implemented so far, so most
-real programs still stop at one they need; that is M5. MPI is M6.
+try/catch. 286 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
+real program may still stop at one it needs. What is left mostly needs the
+process queue and MCP from M7 rather than just an implementation.
 
 ## Building
 
