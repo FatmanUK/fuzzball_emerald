@@ -300,6 +300,61 @@ func TestTimeAndVersion(t *testing.T) {
 	})
 }
 
+// TestProgramErrorFormat checks the block a failing program prints, which
+// players and programs have read for decades: a header, the program and line,
+// then a backtrace with the failing source line under each level.
+func TestProgramErrorFormat(t *testing.T) {
+	runCase(t, Case{
+		Name: "error format",
+		Source: `: main
+  "not a number" 2 +
+;`,
+	})
+}
+
+// TestErrorInsideAProcedure checks that the backtrace names the procedure and
+// shows the call above it.
+func TestErrorInsideAProcedure(t *testing.T) {
+	runCase(t, Case{
+		Name: "nested error",
+		Source: `: inner
+  "bad" 2 +
+;
+: outer
+  inner
+;
+: main
+  outer
+;`,
+	})
+}
+
+// TestErrorWithArguments checks that a procedure's arguments appear in the
+// backtrace.
+func TestErrorWithArguments(t *testing.T) {
+	runCase(t, Case{
+		Name: "error with args",
+		Source: `: boom[ str:what int:n -- ]
+  what @ n @ +
+;
+: main
+  "text" 7 boom
+;`,
+	})
+}
+
+// TestCaughtErrorPrintsNothing checks that a failure inside TRY is silent,
+// which is what makes TRY usable.
+func TestCaughtErrorPrintsNothing(t *testing.T) {
+	runCase(t, Case{
+		Name: "caught",
+		Source: tellPrelude + `: main
+  0 try "bad" 2 + catch ts endcatch
+  "still here" ts
+;`,
+	})
+}
+
 // TestDivisionByZero checks that a failure reports the same way in both.
 func TestDivisionByZero(t *testing.T) {
 	runCase(t, Case{

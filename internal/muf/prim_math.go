@@ -93,13 +93,13 @@ func init() {
 			return nil, f.Push(v)
 		case TypeFloat:
 			if math.IsNaN(v.Float) || math.IsInf(v.Float, 0) {
-				return nil, errf("cannot convert %s to an integer", formatFloat(v.Float))
+				return nil, errf("Invalid argument type.")
 			}
 			return nil, f.Push(Int(int64(v.Float)))
 		case TypeObject:
 			return nil, f.Push(Int(int64(v.Ref)))
 		}
-		return nil, errf("cannot convert a %v to an integer", v.Type)
+		return nil, errf("Invalid argument type.")
 	})
 	register("DBREF", func(f *Frame) (*Result, error) {
 		n, err := f.popInt()
@@ -197,7 +197,7 @@ func arith(op byte) primFunc {
 			x, xok := a.asFloat()
 			y, yok := b.asFloat()
 			if !xok || !yok {
-				return nil, errf("%c needs two numbers", op)
+				return nil, errf("Invalid argument type.")
 			}
 			switch op {
 			case '+':
@@ -217,7 +217,7 @@ func arith(op byte) primFunc {
 		}
 
 		if a.Type != TypeInteger || b.Type != TypeInteger {
-			return nil, errf("%c needs two numbers", op)
+			return nil, errf("Invalid argument type.")
 		}
 		switch op {
 		case '+':
@@ -266,7 +266,7 @@ func compare(ok func(int) bool) primFunc {
 		x, xok := a.asFloat()
 		y, yok := b.asFloat()
 		if !xok || !yok {
-			return nil, errf("cannot compare a %v with a %v", a.Type, b.Type)
+			return nil, errf("Invalid argument type.")
 		}
 		switch {
 		case x < y:
@@ -286,7 +286,7 @@ func bitwise(op func(a, b int64) int64) primFunc {
 			return nil, err
 		}
 		if v[0].Type != TypeInteger || v[1].Type != TypeInteger {
-			return nil, errf("bitwise operators need two integers")
+			return nil, errf("Invalid argument type.")
 		}
 		return nil, f.Push(Int(op(v[0].Num, v[1].Num)))
 	}

@@ -149,7 +149,7 @@ func TestScopedVariablesArePerProcedure(t *testing.T) {
 func TestUnterminatedBlocksAreReported(t *testing.T) {
 	mustFail(t, ": main 1 if 2 ;", "unterminated IF-THEN")
 	mustFail(t, ": main begin 1 ;", "unterminated loop")
-	mustFail(t, ": main try 1 ;", "unterminated TRY")
+	mustFail(t, ": main 0 try 1 ;", "unterminated TRY")
 	mustFail(t, ": main 1 ", "unterminated procedure")
 	mustFail(t, ": main then ;", "THEN without IF")
 	mustFail(t, ": main else ;", "ELSE without IF")
@@ -370,7 +370,7 @@ func TestJumpTargetsAreInRange(t *testing.T) {
 }
 
 func TestTryCatch(t *testing.T) {
-	p := compile(t, ": main try 1 pop catch pop endcatch ;")
+	p := compile(t, ": main 0 try 1 pop catch pop endcatch ;")
 	var trys int
 	for _, in := range p.Code {
 		if in.Type == muf.TypeTry {

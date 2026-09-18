@@ -97,7 +97,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("STRNCMP needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Int(int64(cStrcmp(
 			truncate(v[0].Str, n), truncate(v[1].Str, n)))))

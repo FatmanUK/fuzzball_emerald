@@ -86,7 +86,7 @@ func init() {
 		}
 		x, ok := v.asFloat()
 		if !ok {
-			return nil, errf("FLOAT needs a number")
+			return nil, errf("Invalid argument type.")
 		}
 		return nil, f.Push(Float(x))
 	})
@@ -144,7 +144,7 @@ func (f *Frame) popFloat() (float64, error) {
 	}
 	x, ok := v.asFloat()
 	if !ok {
-		return 0, errf("expected a number, got a %v", v.Type)
+		return 0, errf("Invalid argument type.")
 	}
 	return x, nil
 }
@@ -159,7 +159,7 @@ func (f *Frame) popFloats(n int) ([]float64, error) {
 	for i, v := range vals {
 		x, ok := v.asFloat()
 		if !ok {
-			return nil, errf("expected a number, got a %v", v.Type)
+			return nil, errf("Invalid argument type.")
 		}
 		out[i] = x
 	}

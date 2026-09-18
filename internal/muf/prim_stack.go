@@ -196,18 +196,18 @@ func (f *Frame) readVar(v Value) (Value, error) {
 	switch v.Type {
 	case TypeVar:
 		if int(v.Num) >= len(f.Vars) {
-			return Value{}, errf("variable out of range")
+			return Value{}, errf("Variable number out of range.")
 		}
 		return f.Vars[v.Num], nil
 	case TypeLVar:
 		if int(v.Num) >= len(f.LVars) {
-			return Value{}, errf("local variable out of range")
+			return Value{}, errf("Variable number out of range.")
 		}
 		return f.LVars[v.Num], nil
 	case TypeSVar:
 		return f.getScoped(int(v.Num))
 	}
-	return Value{}, errf("@ needs a variable")
+	return Value{}, errf("Invalid datatype in variable.")
 }
 
 // writeVar stores a value through a variable reference.
@@ -215,20 +215,20 @@ func (f *Frame) writeVar(target, val Value) error {
 	switch target.Type {
 	case TypeVar:
 		if int(target.Num) >= len(f.Vars) {
-			return errf("variable out of range")
+			return errf("Variable number out of range.")
 		}
 		f.Vars[target.Num] = val
 		return nil
 	case TypeLVar:
 		if int(target.Num) >= len(f.LVars) {
-			return errf("local variable out of range")
+			return errf("Variable number out of range.")
 		}
 		f.LVars[target.Num] = val
 		return nil
 	case TypeSVar:
 		return f.setScoped(int(target.Num), val)
 	}
-	return errf("! needs a variable")
+	return errf("Invalid datatype in variable.")
 }
 
 // popInt takes an integer from the stack.
@@ -238,7 +238,7 @@ func (f *Frame) popInt() (int64, error) {
 		return 0, err
 	}
 	if v.Type != TypeInteger {
-		return 0, errf("expected an integer, got a %v", v.Type)
+		return 0, errf("Non-integer argument.")
 	}
 	return v.Num, nil
 }
@@ -250,7 +250,7 @@ func (f *Frame) popStr() (string, error) {
 		return "", err
 	}
 	if v.Type != TypeString {
-		return "", errf("expected a string, got a %v", v.Type)
+		return "", errf("Non-string argument.")
 	}
 	return v.Str, nil
 }
@@ -262,7 +262,7 @@ func (f *Frame) popRef() (ref.Ref, error) {
 		return ref.Nothing, err
 	}
 	if v.Type != TypeObject {
-		return ref.Nothing, errf("expected a dbref, got a %v", v.Type)
+		return ref.Nothing, errf("Non-object argument.")
 	}
 	return v.Ref, nil
 }

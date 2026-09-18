@@ -135,6 +135,21 @@ what each server prints.
 which `interp()` pushes before the program runs. `depth` counts it. And unset
 variables read as integer `0`, not `#-1`.
 
+**TRY takes a count off the stack**: how many items the guarded block
+consumes. Catching unwinds to exactly the depth below them, so the idiom is
+`0 try ... catch ... endcatch`, not a bare `try`.
+
+**A failing program prints a fixed block**, not a line: a header, the program
+and line, then a backtrace with the failing source under each level, ending
+`*done*`. `muf.Report` builds it and `Render` formats it. The backtrace shows
+only to someone who controls the program, and the header differs for a
+non-owner. Upstream leaves the argument list's opening parenthesis unclosed;
+that is reproduced, because transcripts are compared against it.
+
+**Error messages are upstream's wording**, not descriptions: "Invalid argument
+type.", "Non-string argument.", "Variable number out of range." Programs match
+on them.
+
 **MUF does not abort on integer division by zero.** The result is `0` and an
 error flag the program reads with `is_set?`. Aborting ends programs that
 upstream runs to completion.

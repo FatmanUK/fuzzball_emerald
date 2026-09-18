@@ -196,9 +196,31 @@ func (f *Frame) step(in Inst) (*Result, error) {
 		return nil, f.call(target)
 
 	case TypeTry:
+		// TRY takes a count: how many stack items the guarded block
+		// consumes. Catching unwinds to exactly the depth below them,
+		// so the handler sees the stack as it was before the block ran
+		// rather than whatever it left half-built.
+		n, err := f.Pop()
+		if err != nil {
+			return nil, errf("Stack Underflow.")
+		}
+		if n.Type != TypeInteger || n.Num < 0 {
+			return nil, errf("Argument is not a positive integer.")
+		}
+		if int(n.Num) > len(f.Stack) {
+			return nil, errf("Stack Underflow.")
+		}
+		// A nested TRY may not reach below what the one outside it
+		// protects.
+		if len(f.trys) > 0 {
+			outer := f.trys[len(f.trys)-1]
+			if len(f.Stack)-outer.stackTop < int(n.Num) {
+				return nil, errf("Stack protection fault.")
+			}
+		}
 		f.trys = append(f.trys, tryBlock{
 			catchPC:  int(in.Num),
-			stackTop: len(f.Stack),
+			stackTop: len(f.Stack) - int(n.Num),
 			callTop:  len(f.calls),
 			forTop:   len(f.fors),
 			scopeTop: len(f.scopes),
@@ -251,7 +273,7 @@ func (f *Frame) ret() {
 func (f *Frame) getScoped(slot int) (Value, error) {
 	s := f.scope()
 	if slot < 0 || slot >= len(s) {
-		return Value{}, errf("scoped variable out of range")
+		return Value{}, errf("Scoped variable number out of range.")
 	}
 	return s[slot], nil
 }

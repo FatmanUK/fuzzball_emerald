@@ -269,6 +269,51 @@ func (s *Server) includerFor(w *world.World) func(string) (map[string]string, bo
 	}
 }
 
+// reportMUFError tells a player their program failed, in the shape Fuzzball
+// uses.
+//
+// Two conditions are upstream's, not decoration. The header differs depending
+// on whether the player owns the program, because a stranger cannot act on the
+// message and is told whom to tell instead. And the backtrace appears only to
+// someone who controls the program, since it exposes its source.
+func (s *Server) reportMUFError(c *ctx, f *muf.Frame, prog ref.Ref, err error) {
+	rep := f.Report(err)
+
+	owner := ref.Nothing
+	if o := c.w.Get(prog); o != nil {
+		owner = o.Owner
+	}
+	owned := owner == c.who
+	if !s.controls(c.w, c.who, prog) {
+		// Without control there is no backtrace to show.
+		rep.Frames = nil
+	}
+
+	progName := func(r ref.Ref) string { return nameOf(c.w, r) }
+	sourceLine := func(r ref.Ref, line int) (string, bool) {
+		src, ok := c.w.Source(r)
+		if !ok || line < 1 {
+			return "", false
+		}
+		lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
+		if line > len(lines) {
+			return "", false
+		}
+		return lines[line-1], true
+	}
+
+	for _, line := range rep.Render(owned, nameOf(c.w, owner), progName, sourceLine) {
+		c.send(line)
+	}
+
+	s.mufLog().Warn("runtime error",
+		"program", prog.String(),
+		"player", c.who.String(),
+		"line", rep.Line,
+		"instruction", rep.Inst,
+		"error", rep.Msg)
+}
+
 // runProgram compiles and runs a program on behalf of a player.
 //
 // It runs to completion on the world goroutine, in instruction slices so a
@@ -299,11 +344,7 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 	for {
 		res, err := f.Run(muf.Limits{})
 		if err != nil {
-			c.tell("Programmer Error: %s", err.Error())
-			s.mufLog().Warn("runtime error",
-				"program", prog.String(),
-				"player", c.who.String(),
-				"error", err.Error())
+			s.reportMUFError(c, f, prog, err)
 			return
 		}
 		switch res {

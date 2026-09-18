@@ -16,7 +16,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("STRCAT needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Str(v[0].Str + v[1].Str))
 	})
@@ -33,7 +33,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("STRCMP needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Int(int64(cStrcmp(v[0].Str, v[1].Str))))
 	})
@@ -43,7 +43,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("STRINGCMP needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Int(int64(cStrcasecmp(v[0].Str, v[1].Str))))
 	})
@@ -53,7 +53,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("STRINGPFX needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Bool(ascii.HasPrefix(v[0].Str, v[1].Str)))
 	})
@@ -65,7 +65,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeInteger || v[2].Type != TypeInteger {
-			return nil, errf("MIDSTR needs a string and two integers")
+			return nil, errf("Invalid argument type.")
 		}
 		// MUF indexes strings from one.
 		s, start, length := v[0].Str, v[1].Num, v[2].Num
@@ -91,7 +91,7 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("SPLIT needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		before, after, found := strings.Cut(v[0].Str, v[1].Str)
 		if !found {
@@ -109,10 +109,10 @@ func init() {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("EXPLODE needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		if v[1].Str == "" {
-			return nil, errf("EXPLODE needs a non-empty separator")
+			return nil, errf("Empty string argument (2)")
 		}
 		parts := strings.Split(v[0].Str, v[1].Str)
 		// EXPLODE pushes the parts in reverse, then the count, so the
@@ -316,7 +316,7 @@ func (f *Frame) popArray() (*Array, error) {
 		return nil, err
 	}
 	if v.Type != TypeArray || v.Array == nil {
-		return nil, errf("expected an array, got a %v", v.Type)
+		return nil, errf("Argument not an array.")
 	}
 	return v.Array, nil
 }
@@ -340,7 +340,7 @@ func instr(fromEnd bool) primFunc {
 			return nil, err
 		}
 		if v[0].Type != TypeString || v[1].Type != TypeString {
-			return nil, errf("INSTR needs two strings")
+			return nil, errf("Non-string argument.")
 		}
 		var i int
 		if fromEnd {

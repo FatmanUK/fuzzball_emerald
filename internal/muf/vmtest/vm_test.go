@@ -156,7 +156,8 @@ func TestArithmetic(t *testing.T) {
 func TestDivisionByBadTypeFails(t *testing.T) {
 	// Integer division by zero is not a failure; see
 	// TestDivisionByZeroYieldsZeroAndAFlag. Dividing by a non-number is.
-	runFails(t, `: main 1 "x" / ;`, "needs two numbers")
+	// Upstream's wording, which programs and players read.
+	runFails(t, `: main 1 "x" / ;`, "Invalid argument type.")
 }
 
 func TestStackOperations(t *testing.T) {
@@ -247,19 +248,19 @@ func TestArrays(t *testing.T) {
 
 func TestTryCatch(t *testing.T) {
 	// A failure inside TRY lands in the handler with the message.
-	f, _ := run(t, `: main try "x" 0 / catch pop 999 endcatch ;`)
+	f, _ := run(t, `: main 0 try "x" 0 / catch pop 999 endcatch ;`)
 	if got := stack(f); len(got) != 1 || got[0] != "999" {
 		t.Errorf("stack = %v, want [999]", got)
 	}
 
 	// Without a failure the handler is skipped.
-	wantStack(t, ": main try 111 catch pop 999 endcatch ;", "111")
+	wantStack(t, ": main 0 try 111 catch pop 999 endcatch ;", "111")
 }
 
 // TestTryRestoresTheStack checks that catching unwinds what the guarded block
 // left behind, rather than handing the handler a half-built stack.
 func TestTryRestoresTheStack(t *testing.T) {
-	wantStack(t, `: main 42 try 1 2 3 "x" 0 / catch pop endcatch ;`, "42")
+	wantStack(t, `: main 42 0 try 1 2 3 "x" 0 / catch pop endcatch ;`, "42")
 }
 
 func TestNotify(t *testing.T) {
