@@ -383,9 +383,12 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 		return nil, err
 	}
 
-	// A program runs at its own mucker level, bounded by its owner's: a
-	// programmer cannot grant a program more authority than they hold by
-	// setting bits on it.
+	// A program runs at the lower of its own mucker level and its owner's,
+	// which is what find_mlev computes. A programmer cannot grant a program
+	// more authority than they hold by setting bits on it.
+	//
+	// Note that a wizard with no mucker bits has level 0, so programs it
+	// owns are capped there.
 	o := w.Get(r)
 	mlev := 1
 	if o != nil {
@@ -481,41 +484,7 @@ func (s *Server) includerFor(w *world.World) func(string) (map[string]string, bo
 // message and is told whom to tell instead. And the backtrace appears only to
 // someone who controls the program, since it exposes its source.
 func (s *Server) reportMUFError(c *ctx, f *muf.Frame, prog ref.Ref, err error) {
-	rep := f.Report(err)
-
-	owner := ref.Nothing
-	if o := c.w.Get(prog); o != nil {
-		owner = o.Owner
-	}
-	owned := owner == c.who
-	if !s.controls(c.w, c.who, prog) {
-		// Without control there is no backtrace to show.
-		rep.Frames = nil
-	}
-
-	progName := func(r ref.Ref) string { return nameOf(c.w, r) }
-	sourceLine := func(r ref.Ref, line int) (string, bool) {
-		src, ok := c.w.Source(r)
-		if !ok || line < 1 {
-			return "", false
-		}
-		lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
-		if line > len(lines) {
-			return "", false
-		}
-		return lines[line-1], true
-	}
-
-	for _, line := range rep.Render(owned, nameOf(c.w, owner), progName, sourceLine) {
-		c.send(line)
-	}
-
-	s.mufLog().Warn("runtime error",
-		"program", prog.String(),
-		"player", c.who.String(),
-		"line", rep.Line,
-		"instruction", rep.Inst,
-		"error", rep.Msg)
+	s.reportMUFErrorTo(c.w, c.who, f, prog, err)
 }
 
 // runProgram compiles and runs a program on behalf of a player.
@@ -546,23 +515,56 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 
 	c.w.Used(prog)
 
-	for {
-		res, err := f.Run(muf.Limits{})
-		if err != nil {
-			s.reportMUFError(c, f, prog, err)
-			return
-		}
-		switch res {
-		case muf.Done:
-			return
-		case muf.Blocked:
-			// READ and SLEEP need the process queue.
-			c.tell("That program tried to wait for input, which this server cannot do yet.")
-			return
-		case muf.Yielded:
-			// Give the world goroutine a chance to breathe between
-			// slices by re-queueing rather than looping here.
-			continue
-		}
+	proc := &process{
+		frame:   f,
+		player:  c.who,
+		program: prog,
+		trigger: trigger,
+		descr:   c.d.ID,
+		command: c.verb,
+		started: c.w.Now(),
 	}
+	s.procs.add(proc)
+	s.step(c.w, proc)
+}
+
+// reportMUFErrorTo is reportMUFError for a process, which has no command
+// context to report through.
+func (s *Server) reportMUFErrorTo(w *world.World, who ref.Ref, f *muf.Frame,
+	prog ref.Ref, err error) {
+
+	rep := f.Report(err)
+
+	owner := ref.Nothing
+	if o := w.Get(prog); o != nil {
+		owner = o.Owner
+	}
+	owned := owner == who
+	if !s.controls(w, who, prog) {
+		rep.Frames = nil
+	}
+
+	progName := func(r ref.Ref) string { return nameOf(w, r) }
+	sourceLine := func(r ref.Ref, line int) (string, bool) {
+		src, ok := w.Source(r)
+		if !ok || line < 1 {
+			return "", false
+		}
+		lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
+		if line > len(lines) {
+			return "", false
+		}
+		return lines[line-1], true
+	}
+
+	for _, line := range rep.Render(owned, nameOf(w, owner), progName, sourceLine) {
+		s.send(who, line)
+	}
+
+	s.mufLog().Warn("runtime error",
+		"program", prog.String(),
+		"player", who.String(),
+		"line", rep.Line,
+		"instruction", rep.Inst,
+		"error", rep.Msg)
 }

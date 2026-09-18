@@ -108,6 +108,7 @@ func cmdServe(args []string) error {
 		macroTable[strings.ToLower(m.Name)] = m.Definition
 	}
 	gs.SetMacros(macroTable)
+	engine.OnTick(gs.OnTick())
 
 	// Run the world first: the listeners enqueue work onto it from their
 	// own goroutines, so it has to be draining before they accept anyone.

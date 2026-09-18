@@ -38,6 +38,10 @@ type Server struct {
 	// programs caches compiled MUF, and macros is the editor's macro table.
 	programs map[ref.Ref]compiled
 	macros   map[string]string
+
+	// procs holds suspended programs: those sleeping, waiting for input, or
+	// waiting for an event.
+	procs *procQueue
 }
 
 // OnShutdown sets what @shutdown calls.
@@ -66,6 +70,7 @@ func New(engine *world.Engine, opts Options) *Server {
 		welcome:  welcome,
 		started:  time.Now(),
 		programs: map[ref.Ref]compiled{},
+		procs:    newProcQueue(),
 		macros:   map[string]string{},
 	}
 }
@@ -110,6 +115,11 @@ func (s *Server) Input(d *session.Descriptor, line string) {
 	_ = s.engine.Go(func(w *world.World) {
 		d.LastActive = w.Now()
 		if d.Connected {
+			// A program waiting on a READ takes the line instead of
+			// the command parser.
+			if s.readInput(w, d.ID, line) {
+				return
+			}
 			s.command(w, d, line)
 			return
 		}
@@ -143,6 +153,12 @@ func (s *Server) Resize(d *session.Descriptor, ws session.WindowSize) {
 			d.Height = ws.Height
 		}
 	})
+}
+
+// Tick is called on the world goroutine at each flush interval. It runs
+// whatever the process queue has due, which is how a sleeping program wakes.
+func (s *Server) OnTick() func(*world.World) {
+	return func(w *world.World) { s.Tick(w) }
 }
 
 // Hub exposes the connection hub. Only the world goroutine may use it.

@@ -46,7 +46,14 @@ type Engine struct {
 	// onPanic, when set, is called after a recovered panic so the caller
 	// can tell whoever triggered it that their command failed.
 	onPanic func(any)
+
+	// onTick, when set, runs on the world goroutine at each interval. The
+	// process queue uses it to wake sleeping programs.
+	onTick func(*World)
 }
+
+// OnTick sets a callback run on the world goroutine at each flush interval.
+func (e *Engine) OnTick(fn func(*World)) { e.onTick = fn }
 
 // OnPanic sets a callback run after a recovered panic in a world operation.
 // It runs on the world goroutine.
@@ -178,6 +185,9 @@ func (e *Engine) Run(ctx context.Context) error {
 			e.apply(op)
 
 		case <-ticker.C:
+			if e.onTick != nil {
+				e.apply(operation{fn: e.onTick})
+			}
 			if err := e.flush(ctx); err != nil {
 				// A failed write is not fatal: the objects stay
 				// dirty and the next tick tries again. Losing

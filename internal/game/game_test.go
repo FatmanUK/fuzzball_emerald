@@ -38,7 +38,11 @@ func newHarness(t *testing.T) *harness {
 	room := w.Create("The Study", ref.TypeRoom, ref.God)
 	wiz := w.Create("Wizard", ref.TypePlayer, ref.Nothing)
 	wiz.Owner = wiz.Ref
+	// A wizard with no mucker bits has mucker level 0, so programs it owns
+	// are capped there: find_mlev takes the lower of the program's level
+	// and its owner's.
 	wiz.Flags |= ref.Wizard | ref.Builder
+	wiz.Flags = wiz.Flags.SetMLevel(3)
 	wiz.Home = room.Ref
 	hashed, err := password.Hash("secret")
 	if err != nil {
@@ -410,4 +414,150 @@ func dbrefFrom(t *testing.T, s string) string {
 		end = len(rest)
 	}
 	return rest[:end]
+}
+
+// installProgram compiles a program into the test world and gives it an exit,
+// returning the exit's name.
+func (h *harness) installProgram(t *testing.T, name, src string) string {
+	t.Helper()
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz := h.wizRef()
+		here := w.Get(wiz).Location
+
+		prog := w.Create(name+".muf", ref.TypeProgram, wiz)
+		prog.Flags = prog.Flags.SetMLevel(3)
+		w.SetSource(prog.Ref, src)
+
+		e := w.Create(name, ref.TypeExit, wiz)
+		e.Dest = []ref.Ref{prog.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Error(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.out()
+	return name
+}
+
+// TestMufReadTakesTheNextLine covers what the golden harness structurally
+// cannot: a program that waits for input.
+//
+// The harness marks the end of a command's output by sending a pose and
+// reading until it appears, and a program waiting on a READ consumes that
+// marker as its input. There is no marker a READ would not eat, so the
+// behaviour is pinned here instead.
+func TestMufReadTakesTheNextLine(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.installProgram(t, "asknane", `: main
+  me @ "Your name?" notify
+  read
+  "Hello, " swap strcat me @ swap notify
+;`)
+
+	h.send("asknane")
+	if got := h.out(); !strings.Contains(got, "Your name?") {
+		t.Fatalf("the program did not run:\n%s", got)
+	}
+
+	// The next line goes to the program, not the command parser.
+	h.send("Igor")
+	got := h.out()
+	if !strings.Contains(got, "Hello, Igor") {
+		t.Errorf("the read did not receive the line:\n%s", got)
+	}
+	if strings.Contains(got, "I don't understand") {
+		t.Errorf("the line reached the command parser instead:\n%s", got)
+	}
+}
+
+// TestBreakEscapesARead checks that a player can get out of a program that is
+// waiting on them.
+func TestBreakEscapesARead(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.installProgram(t, "waits", `: main
+  me @ "waiting" notify
+  read
+  pop
+;`)
+	h.send("waits")
+	h.out()
+
+	h.send("@Q")
+	if got := h.out(); !strings.Contains(got, "aborted") {
+		t.Errorf("@Q should have escaped the read:\n%s", got)
+	}
+
+	// The command parser is reachable again.
+	h.send("!look")
+	if got := h.out(); !strings.Contains(got, "The Study") {
+		t.Errorf("commands should work again after escaping:\n%s", got)
+	}
+}
+
+// TestProcessListing checks that a suspended program shows up in @ps and can
+// be killed.
+func TestProcessListing(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	// A sleeping program rather than a reading one: a program waiting on a
+	// READ would consume the "@ps" as its input.
+	h.installProgram(t, "naps", `: main
+  me @ "sleeping" notify
+  30 sleep
+  pop
+;`)
+	h.send("naps")
+	h.out()
+
+	h.send("@ps")
+	got := h.out()
+	if !strings.Contains(got, "sleep") {
+		t.Errorf("@ps should list the sleeping program:\n%s", got)
+	}
+	if !strings.Contains(got, "1 process") {
+		t.Errorf("@ps should report one process:\n%s", got)
+	}
+
+	// The pid is the first column of the listing's second line.
+	h.send("@kill 1")
+	if got := h.out(); !strings.Contains(got, "killed") {
+		t.Errorf("@kill did not stop it:\n%s", got)
+	}
+
+	h.send("@ps")
+	if got := h.out(); !strings.Contains(got, "0 processes") {
+		t.Errorf("the process should be gone:\n%s", got)
+	}
+}
+
+// TestSleepingProgramResumes checks that a tick wakes a sleeper.
+func TestSleepingProgramResumes(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.installProgram(t, "naps", `: main
+  me @ "before" notify
+  0 sleep
+  me @ "after" notify
+;`)
+	h.send("naps")
+	if got := h.out(); !strings.Contains(got, "before") {
+		t.Fatalf("the program did not start:\n%s", got)
+	}
+
+	// A tick is what resumes it.
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		h.s.Tick(w)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.out(); !strings.Contains(got, "after") {
+		t.Errorf("the sleeper did not resume:\n%s", got)
+	}
 }

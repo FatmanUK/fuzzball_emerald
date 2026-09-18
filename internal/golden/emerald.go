@@ -18,12 +18,13 @@ import (
 // their own tests, and what is being compared here is what the game says, not
 // how it is delivered.
 func RunEmerald(ctx context.Context, fx *Fixture, script Script) (string, error) {
-	steps, err := RunEmeraldSteps(ctx, fx, script)
+	steps, err := RunEmeraldSteps(ctx, fx, script, nil)
 	return strings.Join(steps, ""), err
 }
 
 // RunEmeraldSteps is the same, returning each command's output separately.
-func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script) ([]string, error) {
+func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
+	pauses map[int]time.Duration) ([]string, error) {
 	res, err := importer.Load(importer.Source{
 		DumpPath: fx.DumpPath,
 		MufDir:   fx.MufDir,
@@ -36,7 +37,8 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script) ([]string,
 		w.SetSource(p.Ref, p.Source)
 	}
 
-	engine := world.NewEngine(w, world.Options{Interval: time.Hour})
+	// A short interval, because the tick is what wakes a sleeping program.
+	engine := world.NewEngine(w, world.Options{Interval: 50 * time.Millisecond})
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := make(chan error, 1)
@@ -48,6 +50,7 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script) ([]string,
 		macros[strings.ToLower(m.Name)] = m.Definition
 	}
 	gs.SetMacros(macros)
+	engine.OnTick(gs.OnTick())
 
 	d, err := gs.Connect(session.TransportLine, "golden")
 	if err != nil {
@@ -81,10 +84,18 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script) ([]string,
 	drain() // the banner and login output are not compared
 
 	out := make([]string, 0, len(script))
-	for _, cmd := range script {
+	for i, cmd := range script {
 		gs.Input(d, cmd)
 		if err := settle(); err != nil {
 			return out, err
+		}
+		// A program that suspends itself needs the ticks that resume it
+		// to run before its output is collected.
+		if pause, ok := pauses[i]; ok {
+			time.Sleep(pause)
+			if err := settle(); err != nil {
+				return out, err
+			}
 		}
 		out = append(out, drain())
 	}

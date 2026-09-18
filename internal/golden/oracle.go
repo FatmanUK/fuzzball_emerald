@@ -30,13 +30,14 @@ const (
 
 // RunOracle drives the C server through a script and returns one transcript.
 func RunOracle(ctx context.Context, fx *Fixture, script Script) (string, error) {
-	steps, err := RunOracleSteps(ctx, fx, script)
+	steps, err := RunOracleSteps(ctx, fx, script, nil)
 	return strings.Join(steps, ""), err
 }
 
 // RunOracleSteps is the same, returning each command's output separately so a
 // failure names the case it belongs to.
-func RunOracleSteps(ctx context.Context, fx *Fixture, script Script) ([]string, error) {
+func RunOracleSteps(ctx context.Context, fx *Fixture, script Script,
+	pauses map[int]time.Duration) ([]string, error) {
 	if err := os.MkdirAll(fx.Dir+"/logs", 0o755); err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func RunOracleSteps(ctx context.Context, fx *Fixture, script Script) ([]string, 
 	}
 	defer conn.Close()
 
-	return drive(conn, script)
+	return drive(conn, script, pauses)
 }
 
 // dialWithRetry waits for the oracle to start listening.
@@ -99,7 +100,7 @@ func dialWithRetry(ctx context.Context, addr string) (net.Conn, error) {
 // Each command is followed by a marker pose, so the harness reads until the
 // marker rather than waiting a fixed time. That keeps the transcript
 // deterministic even when a command produces output slowly.
-func drive(conn net.Conn, script Script) ([]string, error) {
+func drive(conn net.Conn, script Script, pauses map[int]time.Duration) ([]string, error) {
 	br := bufio.NewReader(conn)
 	out := make([]string, 0, len(script))
 
@@ -141,9 +142,15 @@ func drive(conn net.Conn, script Script) ([]string, error) {
 		return nil, fmt.Errorf("logging in: %w", err)
 	}
 
-	for _, cmd := range script {
+	for i, cmd := range script {
 		if err := send(cmd); err != nil {
 			return out, err
+		}
+		// A program that suspends itself needs time to resume before
+		// the marker is sent, or its later output lands in the next
+		// step's transcript.
+		if d, ok := pauses[i]; ok {
+			time.Sleep(d)
 		}
 		if err := send("!pose " + doneMarker); err != nil {
 			return out, err

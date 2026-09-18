@@ -143,6 +143,22 @@ the inner form. And `{and}`, `{or}` and `{if}` do **not** pre-evaluate their
 arguments, which is what the `Parse` flag in the table controls; evaluating a
 branch they will not use would be visible, because MPI has side effects.
 
+## Processes
+
+`internal/game/proc.go` holds suspended programs. A program that hits `READ`,
+`SLEEP` or `EVENT_WAITFOR` reports why through `muf.Frame.Block`, and the
+scheduler files it under that. The engine's tick, which runs at the flush
+interval, wakes sleepers.
+
+A line typed while a program is reading goes to **that program**, not the
+command parser — `@Q` is how a player escapes one. This is worth remembering
+when writing tests: a reading program eats whatever comes next, including a
+test harness's own marker.
+
+A program runs at the **lower** of its own mucker level and its owner's, which
+is `find_mlev`. A wizard with no mucker bits has level 0, so programs it owns
+are capped there.
+
 ## Traps
 
 **A MUF program starts with one value on its stack**: the command's argument,

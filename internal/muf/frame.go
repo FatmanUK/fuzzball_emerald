@@ -153,8 +153,12 @@ type Frame struct {
 	Instructions int
 
 	// Mode is the multitasking mode, which decides how readily the program
-	// yields. The scheduler that acts on it arrives with the process queue.
+	// yields.
 	Mode int
+
+	// Block says why the program stopped, when Run returned Blocked. The
+	// scheduler reads it to decide what the program is waiting for.
+	Block BlockReason
 
 	// Err holds the error a TRY has not yet caught.
 	err *Error
@@ -194,6 +198,28 @@ func NewFrame(p *Program, host Host) *Frame {
 	}
 	return f
 }
+
+// BlockReason says what a suspended program is waiting for.
+type BlockReason struct {
+	Kind BlockKind
+	// Seconds is how long a SLEEP asked for.
+	Seconds int64
+	// Events lists what an EVENT_WAITFOR is waiting on.
+	Events []string
+}
+
+// BlockKind enumerates the ways a program can suspend.
+type BlockKind int
+
+const (
+	BlockNone BlockKind = iota
+	// BlockRead waits for a line of input from the player.
+	BlockRead
+	// BlockSleep waits for a time to pass.
+	BlockSleep
+	// BlockEvent waits for a named event.
+	BlockEvent
+)
 
 // Multitasking modes, from the MODE and SETMODE primitives.
 const (

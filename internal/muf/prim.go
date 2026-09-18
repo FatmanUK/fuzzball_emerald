@@ -64,8 +64,38 @@ func (f *Frame) primitive(n int) (*Result, error) {
 		return nil, nil
 	case InCatch, InCatchDetailed:
 		return nil, f.enterCatch(n == InCatchDetailed)
-	case InRead, InSleep, InEventWaitFor:
-		// Blocking needs the process queue, which arrives with M7.
+	case InRead:
+		// The program stops here; the scheduler resumes it with the
+		// line the player types, which READ leaves on the stack.
+		f.Block = BlockReason{Kind: BlockRead}
+		f.PC++
+		blocked := Blocked
+		return &blocked, nil
+
+	case InSleep:
+		secs, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		if secs < 0 {
+			return nil, errf("Invalid argument.")
+		}
+		f.Block = BlockReason{Kind: BlockSleep, Seconds: secs}
+		f.PC++
+		blocked := Blocked
+		return &blocked, nil
+
+	case InEventWaitFor:
+		a, err := f.popArray()
+		if err != nil {
+			return nil, err
+		}
+		var events []string
+		for _, v := range a.Values() {
+			events = append(events, v.String())
+		}
+		f.Block = BlockReason{Kind: BlockEvent, Events: events}
+		f.PC++
 		blocked := Blocked
 		return &blocked, nil
 	}

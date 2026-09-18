@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -197,4 +198,62 @@ func (s *Server) boot(player ref.Ref, why string) {
 		}
 		d.Close()
 	}
+}
+
+// Process control.
+
+func init() {
+	atCommands["@ps"] = (*Server).cmdPs
+	atCommands["@kill"] = (*Server).cmdKill
+}
+
+// cmdPs lists the running and suspended programs.
+func (s *Server) cmdPs(c *ctx) {
+	procs := s.procs.all()
+	wizard := c.w.Get(c.who).Flags.IsWizard()
+
+	c.tell("%5s %-16s %-6s %-20s %s", "PID", "Player", "State", "Program", "Command")
+	shown := 0
+	for _, p := range procs {
+		// A player sees their own processes; a wizard sees them all.
+		if !wizard && p.player != c.who {
+			continue
+		}
+		c.tell("%5d %-16s %-6s %-20s %s",
+			p.pid, nameOf(c.w, p.player), p.state,
+			unparse(c.w, c.who, p.program), p.command)
+		shown++
+	}
+	c.tell("%d process%s.", shown, pluralES(shown))
+}
+
+func pluralES(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "es"
+}
+
+// cmdKill stops a process.
+func (s *Server) cmdKill(c *ctx) {
+	pid, err := strconv.Atoi(strings.TrimSpace(c.arg))
+	if err != nil {
+		c.tell("Usage: @kill <process id>")
+		return
+	}
+	p := s.procs.get(pid)
+	if p == nil {
+		c.tell("There is no process %d.", pid)
+		return
+	}
+	// A player may stop their own; a wizard may stop anyone's.
+	if p.player != c.who && !c.w.Get(c.who).Flags.IsWizard() {
+		c.tell("Permission denied.")
+		return
+	}
+	s.procs.remove(pid)
+	if p.player != c.who {
+		s.send(p.player, "Your program was stopped.")
+	}
+	c.tell("Process %d killed.", pid)
 }

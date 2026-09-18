@@ -2,6 +2,7 @@ package golden
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -13,6 +14,13 @@ type Case struct {
 	Name string
 	// Source is the program's MUF.
 	Source string
+	// Then is typed after the exit, one line per entry. A program that
+	// reads input needs it; everything else leaves it empty.
+	Then []string
+	// Pause is how long to wait before reading the case's output, for a
+	// program that suspends itself and resumes later. Most cases finish
+	// within the command and leave it zero.
+	Pause time.Duration
 }
 
 // requireOracle skips unless the C server has been built.
@@ -489,6 +497,21 @@ var cases = []Case{
   "{owner:me}" show
 ;`,
 	},
+	// READ is deliberately not tested here. The harness marks the end of a
+	// command's output by sending a pose and reading until it appears, and
+	// a program waiting on a READ consumes that marker as its input. There
+	// is no marker a READ would not eat, so READ is covered by a unit test
+	// in internal/game instead.
+	{
+		// Sleeping suspends the program and resumes it later.
+		Name: "muf_sleep",
+		Source: tellPrelude + `: main
+  "before" ts
+  1 sleep
+  "after" ts
+;`,
+		Pause: 2 * time.Second,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this
@@ -498,9 +521,20 @@ func TestAgainstFuzzball(t *testing.T) {
 
 	programs := make([]Program, len(cases))
 	script := make(Script, 0, len(cases))
+	// steps[i] is how many script entries belong to case i, so its output
+	// can be gathered back together.
+	steps := make([]int, len(cases))
+	// pauses[i] delays reading step i's output, for a program that resumes
+	// after suspending itself.
+	pauses := map[int]time.Duration{}
 	for i, c := range cases {
 		programs[i] = Program{Name: c.Name, Source: c.Source}
 		script = append(script, c.Name)
+		script = append(script, c.Then...)
+		steps[i] = 1 + len(c.Then)
+		if c.Pause > 0 {
+			pauses[len(script)-1] = c.Pause
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -517,26 +551,31 @@ func TestAgainstFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oracleOut, err := RunOracleSteps(ctx, oracleFx, script)
+	oracleOut, err := RunOracleSteps(ctx, oracleFx, script, pauses)
 	if err != nil {
 		t.Fatalf("running the oracle: %v", err)
 	}
-	emeraldOut, err := RunEmeraldSteps(ctx, emeraldFx, script)
+	emeraldOut, err := RunEmeraldSteps(ctx, emeraldFx, script, pauses)
 	if err != nil {
 		t.Fatalf("running emerald: %v", err)
 	}
-	if len(oracleOut) != len(cases) || len(emeraldOut) != len(cases) {
-		t.Fatalf("got %d oracle and %d emerald transcripts for %d cases",
-			len(oracleOut), len(emeraldOut), len(cases))
+	if len(oracleOut) != len(script) || len(emeraldOut) != len(script) {
+		t.Fatalf("got %d oracle and %d emerald transcripts for %d steps",
+			len(oracleOut), len(emeraldOut), len(script))
 	}
 
 	// Each case is reported on its own, so one failure names itself rather
 	// than shifting every line after it.
+	at := 0
 	for i, c := range cases {
+		oracle := strings.Join(oracleOut[at:at+steps[i]], "")
+		emerald := strings.Join(emeraldOut[at:at+steps[i]], "")
+		at += steps[i]
+
 		t.Run(c.Name, func(t *testing.T) {
-			if diffs := Compare(oracleOut[i], emeraldOut[i]); len(diffs) > 0 {
+			if diffs := Compare(oracle, emerald); len(diffs) > 0 {
 				t.Errorf("transcripts differ:\n%s\nfuzzball said:\n%s\nemerald said:\n%s",
-					Render(diffs), oracleOut[i], emeraldOut[i])
+					Render(diffs), oracle, emerald)
 			}
 		})
 	}

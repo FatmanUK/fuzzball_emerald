@@ -30,7 +30,10 @@ M4 is done and M5 and M6 are partly done: MUF compiles and runs, and MPI is
 evaluated in descriptions and exit messages. Every program the starter world
 ships compiles except three that cannot compile anywhere, and the interpreter
 executes arithmetic, control flow, procedures, scoped variables, arrays and
-try/catch. 286 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
+try/catch. Programs can now wait: `READ` suspends one until the player types a line,
+`SLEEP` until a time passes, and `@ps` and `@kill` manage what is waiting.
+
+286 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
 real program may still stop at one it needs. What is left mostly needs the
 process queue and MCP from M7 rather than just an implementation.
 
