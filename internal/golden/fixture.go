@@ -62,15 +62,30 @@ const md5OfGodPassword = "CuG4ZtGvyRbfJubgNISTcg=="
 
 // WriteFixture builds a database holding one MUF program, an exit that runs
 // it, a room and a wizard player.
+func WriteFixture(dir, source string) (*Fixture, error) {
+	return WriteMultiFixture(dir, []Program{{Name: "test", Source: source}})
+}
+
+// Program is one test program in a fixture, reachable through an exit of the
+// same name.
+type Program struct {
+	Name   string
+	Source string
+}
+
+// WriteMultiFixture builds a database holding several programs, each with its
+// own exit.
+//
+// Several rather than one because starting a container costs about two
+// seconds: putting every case in one database turns a per-case cost into a
+// per-run one.
 //
 // The layout mirrors the minimal database Fuzzball ships: #0 is the room, #1
-// is the wizard, and the program and its exit follow.
-func WriteFixture(dir, source string) (*Fixture, error) {
+// is the wizard, and the programs and their exits follow in pairs.
+func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 	const (
-		room    = 0
-		god     = 1
-		program = 2
-		exit    = 3
+		room = 0
+		god  = 1
 	)
 
 	mufDir := filepath.Join(dir, "muf")
@@ -81,6 +96,15 @@ func WriteFixture(dir, source string) (*Fixture, error) {
 		}
 	}
 
+	if len(programs) == 0 {
+		return nil, fmt.Errorf("a fixture needs at least one program")
+	}
+
+	// Programs go in the wizard's inventory and exits on the room, each
+	// chain threaded through the next field.
+	firstProg := 2
+	firstExit := firstProg + len(programs)
+
 	objs := []object{
 		{
 			ref: room, name: "Room Zero",
@@ -88,41 +112,58 @@ func WriteFixture(dir, source string) (*Fixture, error) {
 			flags: typeRoom,
 			props: []string{"_/de:2:A featureless test room."},
 			// drop-to, exits, owner
-			tail: []string{"-1", itoa(exit), itoa(god)},
+			tail: []string{"-1", itoa(firstExit), itoa(god)},
 		},
 		{
 			ref: god, name: "One",
-			location: room, contents: program, next: -1,
-			// A wizard at mucker level 3, so the program may do
-			// whatever it likes.
+			location: room, contents: firstProg, next: -1,
+			// A wizard at mucker level 3, so the programs may do
+			// whatever they like.
 			flags: typePlayer | flagWizard | flagMucker | flagSMuck,
 			props: []string{"_/de:2:The test wizard."},
 			// home, exits, password
 			tail: []string{itoa(room), "-1", md5OfGodPassword},
 		},
-		{
-			ref: program, name: "test.muf",
-			location: god, contents: -1, next: -1,
-			flags: typeProgram | flagMucker | flagSMuck | flagLinkOK,
-			// owner
-			tail: []string{itoa(god)},
-		},
-		{
-			ref: exit, name: "test",
-			location: room, contents: -1, next: -1,
-			flags: typeExit,
-			// destination count, destinations, owner
-			tail: []string{"1", itoa(program), itoa(god)},
-		},
+	}
+
+	for i, prog := range programs {
+		progRef := firstProg + i
+		exitRef := firstExit + i
+
+		nextProg := -1
+		if i+1 < len(programs) {
+			nextProg = progRef + 1
+		}
+		nextExit := -1
+		if i+1 < len(programs) {
+			nextExit = exitRef + 1
+		}
+
+		objs = append(objs,
+			object{
+				ref: progRef, name: prog.Name + ".muf",
+				location: god, contents: -1, next: nextProg,
+				flags: typeProgram | flagMucker | flagSMuck | flagLinkOK,
+				tail:  []string{itoa(god)},
+			},
+			object{
+				ref: exitRef, name: prog.Name,
+				location: room, contents: -1, next: nextExit,
+				flags: typeExit,
+				// destination count, destinations, owner
+				tail: []string{"1", itoa(progRef), itoa(god)},
+			})
 	}
 
 	dump := filepath.Join(dataDir, "test.db")
 	if err := writeDump(dump, objs); err != nil {
 		return nil, err
 	}
-	srcPath := filepath.Join(mufDir, fmt.Sprintf("%d.m", program))
-	if err := os.WriteFile(srcPath, []byte(source), 0o644); err != nil {
-		return nil, err
+	for i, prog := range programs {
+		srcPath := filepath.Join(mufDir, fmt.Sprintf("%d.m", firstProg+i))
+		if err := os.WriteFile(srcPath, []byte(prog.Source), 0o644); err != nil {
+			return nil, err
+		}
 	}
 	// An empty macro table, so neither server falls back to a stale one.
 	if err := os.WriteFile(filepath.Join(mufDir, "macros"), nil, 0o644); err != nil {

@@ -28,15 +28,22 @@ const (
 	doneMarker    = "EMERALDDONE"
 )
 
-// RunOracle drives the C server through a script and returns its transcript.
+// RunOracle drives the C server through a script and returns one transcript.
 func RunOracle(ctx context.Context, fx *Fixture, script Script) (string, error) {
+	steps, err := RunOracleSteps(ctx, fx, script)
+	return strings.Join(steps, ""), err
+}
+
+// RunOracleSteps is the same, returning each command's output separately so a
+// failure names the case it belongs to.
+func RunOracleSteps(ctx context.Context, fx *Fixture, script Script) ([]string, error) {
 	if err := os.MkdirAll(fx.Dir+"/logs", 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	port, err := freePort()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	name := fmt.Sprintf("fbgold-%d", port)
 
@@ -54,7 +61,7 @@ func RunOracle(ctx context.Context, fx *Fixture, script Script) (string, error) 
 		"-nodetach",
 	)
 	if out, err := run.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("starting the oracle: %v: %s", err, out)
+		return nil, fmt.Errorf("starting the oracle: %v: %s", err, out)
 	}
 	defer func() {
 		_ = exec.Command("podman", "rm", "-f", name).Run()
@@ -63,7 +70,7 @@ func RunOracle(ctx context.Context, fx *Fixture, script Script) (string, error) 
 	conn, err := dialWithRetry(ctx, fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		logs, _ := exec.Command("podman", "logs", name).CombinedOutput()
-		return "", fmt.Errorf("connecting to the oracle: %w (logs: %s)", err, logs)
+		return nil, fmt.Errorf("connecting to the oracle: %w (logs: %s)", err, logs)
 	}
 	defer conn.Close()
 
@@ -86,14 +93,15 @@ func dialWithRetry(ctx context.Context, addr string) (net.Conn, error) {
 	return nil, fmt.Errorf("the oracle never started listening on %s", addr)
 }
 
-// drive runs a script against a connected server and returns what it said.
+// drive runs a script against a connected server, returning each command's
+// output separately.
 //
 // Each command is followed by a marker pose, so the harness reads until the
 // marker rather than waiting a fixed time. That keeps the transcript
 // deterministic even when a command produces output slowly.
-func drive(conn net.Conn, script Script) (string, error) {
+func drive(conn net.Conn, script Script) ([]string, error) {
 	br := bufio.NewReader(conn)
-	var transcript strings.Builder
+	out := make([]string, 0, len(script))
 
 	send := func(line string) error {
 		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -123,32 +131,32 @@ func drive(conn net.Conn, script Script) (string, error) {
 	}
 
 	if err := send("connect One " + godPassword); err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := send("!pose " + connectMarker); err != nil {
-		return "", err
+		return nil, err
 	}
 	// The welcome banner and login output are not part of what is compared.
 	if _, err := readTo(connectMarker); err != nil {
-		return "", fmt.Errorf("logging in: %w", err)
+		return nil, fmt.Errorf("logging in: %w", err)
 	}
 
 	for _, cmd := range script {
 		if err := send(cmd); err != nil {
-			return transcript.String(), err
+			return out, err
 		}
 		if err := send("!pose " + doneMarker); err != nil {
-			return transcript.String(), err
+			return out, err
 		}
-		out, err := readTo(doneMarker)
-		transcript.WriteString(out)
+		got, err := readTo(doneMarker)
+		out = append(out, got)
 		if err != nil {
-			return transcript.String(), err
+			return out, err
 		}
 	}
 
 	_ = send("@shutdown")
-	return transcript.String(), nil
+	return out, nil
 }
 
 // freePort asks the kernel for a port nothing is using.

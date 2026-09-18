@@ -18,12 +18,18 @@ import (
 // their own tests, and what is being compared here is what the game says, not
 // how it is delivered.
 func RunEmerald(ctx context.Context, fx *Fixture, script Script) (string, error) {
+	steps, err := RunEmeraldSteps(ctx, fx, script)
+	return strings.Join(steps, ""), err
+}
+
+// RunEmeraldSteps is the same, returning each command's output separately.
+func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script) ([]string, error) {
 	res, err := importer.Load(importer.Source{
 		DumpPath: fx.DumpPath,
 		MufDir:   fx.MufDir,
 	})
 	if err != nil {
-		return "", fmt.Errorf("importing the fixture: %w", err)
+		return nil, fmt.Errorf("importing the fixture: %w", err)
 	}
 	w := res.World
 	for _, p := range res.Programs {
@@ -45,7 +51,7 @@ func RunEmerald(ctx context.Context, fx *Fixture, script Script) (string, error)
 
 	d, err := gs.Connect(session.TransportLine, "golden")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Output is drained after each command rather than in the background: a
@@ -70,17 +76,17 @@ func RunEmerald(ctx context.Context, fx *Fixture, script Script) (string, error)
 
 	gs.Input(d, "connect One "+godPassword)
 	if err := settle(); err != nil {
-		return "", err
+		return nil, err
 	}
 	drain() // the banner and login output are not compared
 
-	var transcript strings.Builder
+	out := make([]string, 0, len(script))
 	for _, cmd := range script {
 		gs.Input(d, cmd)
 		if err := settle(); err != nil {
-			return transcript.String(), err
+			return out, err
 		}
-		transcript.WriteString(drain())
+		out = append(out, drain())
 	}
 
 	d.Close()
@@ -88,7 +94,7 @@ func RunEmerald(ctx context.Context, fx *Fixture, script Script) (string, error)
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		return transcript.String(), fmt.Errorf("the world goroutine did not stop")
+		return out, fmt.Errorf("the world goroutine did not stop")
 	}
-	return transcript.String(), nil
+	return out, nil
 }

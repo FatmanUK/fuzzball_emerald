@@ -8,12 +8,11 @@ import (
 
 // Case is one differential test: a MUF program, and what to type at it.
 type Case struct {
+	// Name identifies the case and names the exit that runs it, so it must
+	// be a single word a player could type.
 	Name string
-	// Source is the program's MUF. It is installed as test.muf and run by
-	// an exit named "test".
+	// Source is the program's MUF.
 	Source string
-	// Script is what to type. When empty, the exit is triggered once.
-	Script Script
 }
 
 // requireOracle skips unless the C server has been built.
@@ -24,53 +23,19 @@ func requireOracle(t *testing.T) {
 	}
 }
 
-// runCase drives both servers and reports any difference.
-func runCase(t *testing.T, c Case) {
-	t.Helper()
-	requireOracle(t)
-
-	script := c.Script
-	if len(script) == 0 {
-		script = Script{"test"}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-
-	// Each server gets its own copy, so neither can see what the other left
-	// behind in the database.
-	oracleFx, err := WriteFixture(t.TempDir(), c.Source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	emeraldFx, err := WriteFixture(t.TempDir(), c.Source)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	oracleOut, err := RunOracle(ctx, oracleFx, script)
-	if err != nil {
-		t.Fatalf("running the oracle: %v\ntranscript so far:\n%s", err, oracleOut)
-	}
-	emeraldOut, err := RunEmerald(ctx, emeraldFx, script)
-	if err != nil {
-		t.Fatalf("running emerald: %v\ntranscript so far:\n%s", err, emeraldOut)
-	}
-
-	if diffs := Compare(oracleOut, emeraldOut); len(diffs) > 0 {
-		t.Errorf("transcripts differ:\n%s\nfuzzball said:\n%s\nemerald said:\n%s",
-			Render(diffs), oracleOut, emeraldOut)
-	}
-}
-
 // tell is the idiom the cases use to report a value, so a program's output is
 // one line per result.
 const tellPrelude = `: t[ x -- ] me @ x @ intostr notify ;
 : ts[ s -- ] me @ s @ notify ;
 `
 
-func TestArithmetic(t *testing.T) {
-	runCase(t, Case{
+// cases are run together against one server each.
+//
+// Starting a container costs about two seconds, so a case per container made
+// the suite's runtime grow with the number of cases. Putting every program in
+// one database turns that into a single cost per run.
+var cases = []Case{
+	{
 		Name: "arithmetic",
 		Source: tellPrelude + `: main
   2 3 + t
@@ -82,11 +47,8 @@ func TestArithmetic(t *testing.T) {
   -7 2 % t
   0 5 - t
 ;`,
-	})
-}
-
-func TestComparisons(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "comparisons",
 		Source: tellPrelude + `: main
   1 2 < t
@@ -99,11 +61,8 @@ func TestComparisons(t *testing.T) {
   1 0 or t
   1 1 xor t
 ;`,
-	})
-}
-
-func TestStrings(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "strings",
 		Source: tellPrelude + `: main
   "foo" "bar" strcat ts
@@ -116,11 +75,8 @@ func TestStrings(t *testing.T) {
   "hello" "zz" instr t
   "abc" "abd" stringcmp t
 ;`,
-	})
-}
-
-func TestStackOperations(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "stack",
 		Source: tellPrelude + `: main
   1 2 swap t t
@@ -130,11 +86,8 @@ func TestStackOperations(t *testing.T) {
   1 2 nip t
   1 2 3 depth t pop pop pop
 ;`,
-	})
-}
-
-func TestControlFlow(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "control",
 		Source: tellPrelude + `: main
   1 if 111 t else 222 t then
@@ -144,11 +97,8 @@ func TestControlFlow(t *testing.T) {
   var sum 0 sum !
   1 5 1 for sum @ + sum ! repeat sum @ t
 ;`,
-	})
-}
-
-func TestProcedures(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "procedures",
 		Source: tellPrelude + `: double[ int:n -- int:r ] n @ 2 * ;
 : add[ int:a int:b -- int:r ] a @ b @ + ;
@@ -157,22 +107,16 @@ func TestProcedures(t *testing.T) {
   2 3 add t
   1 double double double t
 ;`,
-	})
-}
-
-func TestArrays(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "arrays",
 		Source: tellPrelude + `: main
   { 1 2 3 }list array_count t
   { 10 20 30 }list 1 array_getitem t
   { "a" "b" "c" }list "," array_join ts
 ;`,
-	})
-}
-
-func TestStringFormatting(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "fmtstring",
 		Source: tellPrelude + `: main
   "plain" "%s" fmtstring ts
@@ -183,11 +127,8 @@ func TestStringFormatting(t *testing.T) {
   1 2 "%i and %i" fmtstring ts
   "100%% sure" ts
 ;`,
-	})
-}
-
-func TestStringCutAndCompare(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "strcut",
 		Source: tellPrelude + `: main
   "hello world" 5 strcut ts ts
@@ -197,11 +138,8 @@ func TestStringCutAndCompare(t *testing.T) {
   "abcdef" "abcxyz" 4 strncmp t
   "one two one" "one" "X" subst ts
 ;`,
-	})
-}
-
-func TestPatternMatching(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "smatch",
 		Source: tellPrelude + `: main
   "hello" "h*" smatch t
@@ -211,11 +149,8 @@ func TestPatternMatching(t *testing.T) {
   "HELLO" "hello" smatch t
   "hello" "{hello|goodbye}" smatch t
 ;`,
-	})
-}
-
-func TestObjectQueries(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "objects",
 		Source: tellPrelude + `: main
   me @ name ts
@@ -228,11 +163,8 @@ func TestObjectQueries(t *testing.T) {
   me @ "dark" flag? t
   me @ me @ controls t
 ;`,
-	})
-}
-
-func TestProperties(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "properties",
 		Source: tellPrelude + `: main
   me @ "test/str" "a value" setprop
@@ -243,22 +175,16 @@ func TestProperties(t *testing.T) {
   me @ "test/str" getpropstr ts
   me @ "test" propdir? t
 ;`,
-	})
-}
-
-func TestStackRotation(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "rotate",
 		Source: tellPrelude + `: main
   1 2 3 3 rotate t t t
   1 2 3 -3 rotate t t t
   1 2 3 2 rotate t t t
 ;`,
-	})
-}
-
-func TestFloats(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "floats",
 		Source: tellPrelude + `: main
   2.5 ftostr ts
@@ -272,12 +198,9 @@ func TestFloats(t *testing.T) {
   "2.5" strtof ftostr ts
   7.0 2.0 fmod ftostr ts
 ;`,
-	})
-}
-
-func TestArrayOperations(t *testing.T) {
-	runCase(t, Case{
-		Name: "array ops",
+	},
+	{
+		Name: "array_ops",
 		Source: tellPrelude + `: main
   { 3 1 2 }list 0 array_sort array_vals t t t
   { 1 2 3 4 5 }list 1 3 array_getrange array_count t
@@ -285,11 +208,8 @@ func TestArrayOperations(t *testing.T) {
   { "a" 1 "b" 2 }dict array_count t
   { 1 2 3 }list 1 array_delitem array_count t
 ;`,
-	})
-}
-
-func TestTimeAndVersion(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "timesplit",
 		Source: tellPrelude + `: main
   0 timesplit
@@ -297,26 +217,15 @@ func TestTimeAndVersion(t *testing.T) {
   "%Y-%m-%d" 0 timefmt ts
   "%H:%M:%S" 0 timefmt ts
 ;`,
-	})
-}
-
-// TestProgramErrorFormat checks the block a failing program prints, which
-// players and programs have read for decades: a header, the program and line,
-// then a backtrace with the failing source line under each level.
-func TestProgramErrorFormat(t *testing.T) {
-	runCase(t, Case{
-		Name: "error format",
+	},
+	{
+		Name: "error_format",
 		Source: `: main
   "not a number" 2 +
 ;`,
-	})
-}
-
-// TestErrorInsideAProcedure checks that the backtrace names the procedure and
-// shows the call above it.
-func TestErrorInsideAProcedure(t *testing.T) {
-	runCase(t, Case{
-		Name: "nested error",
+	},
+	{
+		Name: "nested_error",
 		Source: `: inner
   "bad" 2 +
 ;
@@ -326,37 +235,24 @@ func TestErrorInsideAProcedure(t *testing.T) {
 : main
   outer
 ;`,
-	})
-}
-
-// TestErrorWithArguments checks that a procedure's arguments appear in the
-// backtrace.
-func TestErrorWithArguments(t *testing.T) {
-	runCase(t, Case{
-		Name: "error with args",
+	},
+	{
+		Name: "error_with_args",
 		Source: `: boom[ str:what int:n -- ]
   what @ n @ +
 ;
 : main
   "text" 7 boom
 ;`,
-	})
-}
-
-// TestCaughtErrorPrintsNothing checks that a failure inside TRY is silent,
-// which is what makes TRY usable.
-func TestCaughtErrorPrintsNothing(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "caught",
 		Source: tellPrelude + `: main
   0 try "bad" 2 + catch ts endcatch
   "still here" ts
 ;`,
-	})
-}
-
-func TestOperatorAliases(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "operators",
 		Source: tellPrelude + `: main
   12 10 & t
@@ -370,22 +266,16 @@ func TestOperatorAliases(t *testing.T) {
   6 2 bitshift t
   6 -1 bitshift t
 ;`,
-	})
-}
-
-func TestEnvironmentProperties(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "envprop",
 		Source: tellPrelude + `: main
   loc @ "test/env" "from the room" setprop
   me @ "test/env" envpropstr ts ts
   me @ "test/missing" envpropstr ts ts
 ;`,
-	})
-}
-
-func TestReflists(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "reflists",
 		Source: tellPrelude + `: main
   me @ "test/list" #1 reflist_add
@@ -397,35 +287,26 @@ func TestReflists(t *testing.T) {
   me @ "test/list" #1 reflist_del
   me @ "test/list" getpropstr ts
 ;`,
-	})
-}
-
-func TestUnparseAndPennies(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "unparse",
 		Source: tellPrelude + `: main
   me @ unparseobj ts
   loc @ unparseobj ts
   me @ pennies t
 ;`,
-	})
-}
-
-func TestSetOperations(t *testing.T) {
-	runCase(t, Case{
-		Name: "set ops",
+	},
+	{
+		Name: "set_ops",
 		Source: tellPrelude + `: main
   { 1 2 3 }list { 3 4 5 }list 2 array_nunion array_count t
   { 1 2 3 }list { 3 4 5 }list 2 array_nintersect array_count t
   { 1 2 3 }list { 3 4 5 }list 2 array_ndiff array_count t
   { 1 2 3 }list { 3 4 5 }list 2 array_nintersect array_vals t
 ;`,
-	})
-}
-
-func TestArraySearching(t *testing.T) {
-	runCase(t, Case{
-		Name: "array search",
+	},
+	{
+		Name: "array_search",
 		Source: tellPrelude + `: main
   { 10 20 30 20 }list 20 array_findval array_count t
   { 10 20 30 }list 99 array_findval array_count t
@@ -433,21 +314,15 @@ func TestArraySearching(t *testing.T) {
   { 1 2 3 }list { 1 2 3 }list array_compare t
   { 1 2 }list { 1 2 3 }list array_compare t
 ;`,
-	})
-}
-
-func TestNestedArrays(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "nested",
 		Source: tellPrelude + `: main
   { }dict { "a" "b" }list 42 array_nested_set
   { "a" "b" }list array_nested_get t
 ;`,
-	})
-}
-
-func TestCharacterConversion(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "ctoi",
 		Source: tellPrelude + `: main
   "A" ctoi t
@@ -456,12 +331,9 @@ func TestCharacterConversion(t *testing.T) {
   10 itoc ts
   "hello" md5hash ts
 ;`,
-	})
-}
-
-func TestErrorFlagNames(t *testing.T) {
-	runCase(t, Case{
-		Name: "error flags",
+	},
+	{
+		Name: "error_flags",
 		Source: tellPrelude + `: main
   error_num t
   "DIV_ZERO" error_bit t
@@ -469,22 +341,16 @@ func TestErrorFlagNames(t *testing.T) {
   0 error_name ts
   1 error_name ts
 ;`,
-	})
-}
-
-func TestPowerAndCoordinates(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "power",
 		Source: tellPrelude + `: main
   2.0 10.0 ** ftostr ts
   3.0 4.0 0.0 dist3d ftostr ts
   1.0 2.0 3.0 4.0 6.0 8.0 diff3 ftostr ts ftostr ts ftostr ts
 ;`,
-	})
-}
-
-func TestRegex(t *testing.T) {
-	runCase(t, Case{
+	},
+	{
 		Name: "regex",
 		Source: tellPrelude + `: main
   "hello world" "o w" "O W" 0 regsub ts
@@ -492,13 +358,60 @@ func TestRegex(t *testing.T) {
   "Hello" "hello" "X" 1 regsub ts
   "a1b2c3" "[0-9]" 0 regsplit array_count t
 ;`,
-	})
+	},
+	{
+		Name:   "divide_by_zero",
+		Source: `: main 1 0 / me @ swap intostr notify ;`,
+	},
 }
 
-// TestDivisionByZero checks that a failure reports the same way in both.
-func TestDivisionByZero(t *testing.T) {
-	runCase(t, Case{
-		Name:   "divide by zero",
-		Source: `: main 1 0 / me @ swap intostr notify ;`,
-	})
+// TestAgainstFuzzball runs every case against the C server and against this
+// one, and reports where their transcripts differ.
+func TestAgainstFuzzball(t *testing.T) {
+	requireOracle(t)
+
+	programs := make([]Program, len(cases))
+	script := make(Script, 0, len(cases))
+	for i, c := range cases {
+		programs[i] = Program{Name: c.Name, Source: c.Source}
+		script = append(script, c.Name)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Each server gets its own copy, so neither can see what the other left
+	// behind in the database.
+	oracleFx, err := WriteMultiFixture(t.TempDir(), programs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emeraldFx, err := WriteMultiFixture(t.TempDir(), programs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oracleOut, err := RunOracleSteps(ctx, oracleFx, script)
+	if err != nil {
+		t.Fatalf("running the oracle: %v", err)
+	}
+	emeraldOut, err := RunEmeraldSteps(ctx, emeraldFx, script)
+	if err != nil {
+		t.Fatalf("running emerald: %v", err)
+	}
+	if len(oracleOut) != len(cases) || len(emeraldOut) != len(cases) {
+		t.Fatalf("got %d oracle and %d emerald transcripts for %d cases",
+			len(oracleOut), len(emeraldOut), len(cases))
+	}
+
+	// Each case is reported on its own, so one failure names itself rather
+	// than shifting every line after it.
+	for i, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			if diffs := Compare(oracleOut[i], emeraldOut[i]); len(diffs) > 0 {
+				t.Errorf("transcripts differ:\n%s\nfuzzball said:\n%s\nemerald said:\n%s",
+					Render(diffs), oracleOut[i], emeraldOut[i])
+			}
+		})
+	}
 }
