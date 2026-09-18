@@ -207,7 +207,7 @@ func (f *Frame) readVar(v Value) (Value, error) {
 	case TypeSVar:
 		return f.getScoped(int(v.Num))
 	}
-	return Value{}, errf("Invalid datatype in variable.")
+	return Value{}, errf("Non-variable argument.")
 }
 
 // writeVar stores a value through a variable reference.
@@ -228,7 +228,7 @@ func (f *Frame) writeVar(target, val Value) error {
 	case TypeSVar:
 		return f.setScoped(int(target.Num), val)
 	}
-	return errf("Invalid datatype in variable.")
+	return errf("Non-variable argument.")
 }
 
 // popInt takes an integer from the stack.

@@ -135,6 +135,18 @@ what each server prints.
 which `interp()` pushes before the program runs. `depth` counts it. And unset
 variables read as integer `0`, not `#-1`.
 
+**Privileged primitives are gated by mucker level.** `internal/muf/mlev_gen.go`
+is generated from the `mlev <` checks in the C; without it a level-1 program
+could read passwords and change ownership. The table records only
+*unconditional* floors: a check written `(mlev < 4) && !permissions(...)` means
+"a wizard **or** the owner", not a floor, and treating it as one would refuse
+the owner. The extractor is approximate — it skips conditions mentioning
+permissions, ownership, flags or types — so a primitive that behaves oddly at
+low mucker level is worth checking against the C.
+
+**A program runs at its own mucker level**, bounded by its owner's — not at its
+owner's level.
+
 **TRY takes a count off the stack**: how many items the guarded block
 consumes. Catching unwinds to exactly the depth below them, so the idiom is
 `0 try ... catch ... endcatch`, not a bare `try`.

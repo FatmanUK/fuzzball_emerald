@@ -32,6 +32,27 @@ func PrimName(n int) string {
 	return primNames[n-1]
 }
 
+// primLevels indexes the mucker-level floors by primitive number, so the
+// dispatcher can check one without a string lookup per instruction.
+var primLevels = func() []int {
+	out := make([]int, len(primNames)+1)
+	for name, lv := range primMLevel {
+		if n := primIndex[ascii.Fold(name)]; n != 0 {
+			out[n] = lv
+		}
+	}
+	return out
+}()
+
+// PrimMLevel is the mucker level a primitive requires, or zero when any
+// program may call it.
+func PrimMLevel(n int) int {
+	if n < 1 || n >= len(primLevels) {
+		return 0
+	}
+	return primLevels[n]
+}
+
 // PrimCount is how many names the table holds.
 func PrimCount() int { return len(primNames) }
 

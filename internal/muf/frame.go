@@ -53,10 +53,29 @@ type Host interface {
 	// PropChildren lists the names directly under a property path.
 	PropChildren(obj ref.Ref, path string) []string
 
-	// Match resolves a name the way a player's command would, and
-	// MatchPlayer looks only at player names.
+	// Match resolves a name the way a player's command would, MatchPlayer
+	// looks only at player names, and MatchPlayerPrefix accepts a partial
+	// one.
 	Match(who ref.Ref, name string) ref.Ref
 	MatchPlayer(name string) ref.Ref
+	MatchPlayerPrefix(name string) ref.Ref
+
+	// Create makes an object and returns its ref.
+	Create(t ref.ObjType, name string, parent, owner ref.Ref) (ref.Ref, error)
+	// Recycle destroys one.
+	Recycle(obj ref.Ref) error
+	// SetOwner and SetLinks change what an object belongs to and points at.
+	SetOwner(obj, owner ref.Ref)
+	SetLinks(obj ref.Ref, dests []ref.Ref)
+	// Timestamps returns when an object was created, modified and last
+	// used, and how often.
+	Timestamps(obj ref.Ref) (created, modified, used int64, count int32)
+	// Entrances lists the exits that lead to an object.
+	Entrances(target ref.Ref) []ref.Ref
+
+	// CheckPassword and SetPassword handle a player's credential.
+	CheckPassword(player ref.Ref, pass string) bool
+	SetPassword(player ref.Ref, pass string) error
 
 	// Connections returns how many times a player is connected, and
 	// Descriptors the descriptor numbers.
@@ -241,6 +260,10 @@ func (f *Frame) SetReserved(me, loc, trigger ref.Ref, command string) {
 	f.Caller, f.Trig = me, trigger
 	f.Stack = append(f.Stack, Str(command))
 }
+
+// MLevel is the mucker level the program runs at, which bounds what its
+// primitives may do.
+func (f *Frame) MLevel() int { return f.Prog.MLevel }
 
 // Push puts a value on the stack.
 func (f *Frame) Push(v Value) error {

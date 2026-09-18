@@ -5,9 +5,11 @@ import (
 
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf/compiler"
+	"github.com/FatmanUK/fuzzball_emerald/internal/password"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
@@ -187,6 +189,142 @@ func (h *mufHost) DescrSize(descr int) (int, int) {
 	return 80, 24
 }
 
+func (h *mufHost) MatchPlayerPrefix(name string) ref.Ref {
+	name = strings.TrimPrefix(name, "*")
+	if r, ok := h.w.PlayerNamed(name); ok {
+		return r
+	}
+	// No exact match, so accept a unique prefix.
+	found := ref.Nothing
+	h.w.Each(func(o *world.Object) bool {
+		if o.Type() != ref.TypePlayer || !ascii.HasPrefix(o.Name, name) {
+			return true
+		}
+		if found != ref.Nothing {
+			found = ref.Ambiguous
+			return false
+		}
+		found = o.Ref
+		return true
+	})
+	if found == ref.Ambiguous {
+		return ref.Nothing
+	}
+	return found
+}
+
+func (h *mufHost) Create(t ref.ObjType, name string, parent, owner ref.Ref) (ref.Ref, error) {
+	if !h.w.Valid(parent) && t != ref.TypeRoom {
+		return ref.Nothing, errMsg("that parent does not exist")
+	}
+	o := h.w.Create(name, t, owner)
+	switch t {
+	case ref.TypeRoom:
+		o.Dropto = ref.Nothing
+	case ref.TypeThing:
+		o.Home = parent
+	}
+	if h.w.Valid(parent) {
+		if err := h.w.MoveTo(o.Ref, parent); err != nil {
+			return o.Ref, err
+		}
+	}
+	return o.Ref, nil
+}
+
+func (h *mufHost) Recycle(obj ref.Ref) error { return h.w.Recycle(obj) }
+
+func (h *mufHost) SetOwner(obj, owner ref.Ref) {
+	if o := h.w.Get(obj); o != nil {
+		o.Owner = owner
+		h.w.Modified(obj)
+	}
+}
+
+// SetLinks writes what an object points at, which differs by type.
+func (h *mufHost) SetLinks(obj ref.Ref, dests []ref.Ref) {
+	o := h.w.Get(obj)
+	if o == nil {
+		return
+	}
+	switch o.Type() {
+	case ref.TypeExit:
+		o.Dest = dests
+	case ref.TypeRoom:
+		o.Dropto = firstOr(dests, ref.Nothing)
+	case ref.TypeThing, ref.TypePlayer:
+		o.Home = firstOr(dests, ref.Nothing)
+	}
+	h.w.Modified(obj)
+}
+
+func firstOr(refs []ref.Ref, fallback ref.Ref) ref.Ref {
+	if len(refs) == 0 {
+		return fallback
+	}
+	return refs[0]
+}
+
+func (h *mufHost) Timestamps(obj ref.Ref) (int64, int64, int64, int32) {
+	o := h.w.Get(obj)
+	if o == nil {
+		return 0, 0, 0, 0
+	}
+	return o.Created.Unix(), o.Modified.Unix(), o.LastUsed.Unix(), o.UseCount
+}
+
+// Entrances lists everything that points at an object, which needs a scan:
+// nothing records the reverse direction.
+//
+// Exits that lead there count, and so do a thing's or player's home and a
+// room's drop-to, because all three are links to the same place.
+func (h *mufHost) Entrances(target ref.Ref) []ref.Ref {
+	var out []ref.Ref
+	h.w.Each(func(o *world.Object) bool {
+		switch o.Type() {
+		case ref.TypeExit:
+			for _, d := range o.Dest {
+				if d == target {
+					out = append(out, o.Ref)
+					return true
+				}
+			}
+		case ref.TypeThing, ref.TypePlayer:
+			if o.Home == target {
+				out = append(out, o.Ref)
+			}
+		case ref.TypeRoom:
+			if o.Dropto == target {
+				out = append(out, o.Ref)
+			}
+		}
+		return true
+	})
+	return out
+}
+
+func (h *mufHost) CheckPassword(player ref.Ref, pass string) bool {
+	o := h.w.Get(player)
+	if o == nil || o.Type() != ref.TypePlayer {
+		return false
+	}
+	return password.Verify(o.PasswordHash, pass).OK
+}
+
+func (h *mufHost) SetPassword(player ref.Ref, pass string) error {
+	o := h.w.Get(player)
+	if o == nil || o.Type() != ref.TypePlayer {
+		return errMsg("that is not a player")
+	}
+	hashed, err := password.Hash(pass)
+	if err != nil {
+		return err
+	}
+	o.PasswordHash = hashed
+	h.w.Modified(player)
+	return nil
+}
+
 func (h *mufHost) Now() time.Time { return h.w.Now() }
 
 func (h *mufHost) Uptime() time.Duration { return h.w.Now().Sub(h.s.started) }
@@ -214,10 +352,18 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 		return nil, err
 	}
 
+	// A program runs at its own mucker level, bounded by its owner's: a
+	// programmer cannot grant a program more authority than they hold by
+	// setting bits on it.
 	o := w.Get(r)
 	mlev := 1
 	if o != nil {
-		mlev = w.Get(o.Owner).Flags.MLevel()
+		mlev = o.Flags.MLevel()
+		if owner := w.Get(o.Owner); owner != nil {
+			if lim := owner.Flags.MLevel(); lim < mlev {
+				mlev = lim
+			}
+		}
 	}
 
 	prog, err := compiler.Compile(src, compiler.Options{

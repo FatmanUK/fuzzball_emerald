@@ -63,8 +63,24 @@ func (h *fakeHost) RemoveProp(o ref.Ref, p string) {
 }
 func (h *fakeHost) PropChildren(ref.Ref, string) []string { return nil }
 
-func (h *fakeHost) Match(ref.Ref, string) ref.Ref { return ref.Nothing }
-func (h *fakeHost) MatchPlayer(string) ref.Ref    { return ref.Nothing }
+func (h *fakeHost) Match(ref.Ref, string) ref.Ref    { return ref.Nothing }
+func (h *fakeHost) MatchPlayer(string) ref.Ref       { return ref.Nothing }
+func (h *fakeHost) MatchPlayerPrefix(string) ref.Ref { return ref.Nothing }
+
+func (h *fakeHost) Create(ref.ObjType, string, ref.Ref, ref.Ref) (ref.Ref, error) {
+	return ref.Ref(50), nil
+}
+func (h *fakeHost) Recycle(ref.Ref) error       { return nil }
+func (h *fakeHost) SetOwner(ref.Ref, ref.Ref)   {}
+func (h *fakeHost) SetLinks(ref.Ref, []ref.Ref) {}
+func (h *fakeHost) Entrances(ref.Ref) []ref.Ref { return nil }
+
+func (h *fakeHost) Timestamps(ref.Ref) (int64, int64, int64, int32) {
+	return 1, 2, 3, 4
+}
+
+func (h *fakeHost) CheckPassword(ref.Ref, string) bool { return false }
+func (h *fakeHost) SetPassword(ref.Ref, string) error  { return nil }
 
 func (h *fakeHost) Connections(ref.Ref) int   { return 1 }
 func (h *fakeHost) Descriptors(ref.Ref) []int { return []int{1} }
@@ -80,7 +96,7 @@ func (h *fakeHost) Version() string       { return "test" }
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
 	t.Helper()
-	p, err := compiler.Compile(src, compiler.Options{})
+	p, err := compiler.Compile(src, compiler.Options{MLevel: 3})
 	if err != nil {
 		t.Fatalf("compiling %q: %v", src, err)
 	}
@@ -101,7 +117,7 @@ func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
 // runFails requires the program to fail with a message containing want.
 func runFails(t *testing.T, src, want string) {
 	t.Helper()
-	p, err := compiler.Compile(src, compiler.Options{})
+	p, err := compiler.Compile(src, compiler.Options{MLevel: 3})
 	if err != nil {
 		t.Fatalf("compiling %q: %v", src, err)
 	}
@@ -304,7 +320,7 @@ func TestStackUnderflowIsReported(t *testing.T) {
 // programs depend on: interp() pushes the command's argument before the
 // program runs, so "depth" is one higher than what the program itself pushed.
 func TestProgramStartsWithItsArgument(t *testing.T) {
-	p, err := compiler.Compile(": main depth ;", compiler.Options{})
+	p, err := compiler.Compile(": main depth ;", compiler.Options{MLevel: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +360,7 @@ func TestUnimplementedPrimitiveIsReported(t *testing.T) {
 
 // TestRunawayProgramIsStopped checks the instruction ceiling.
 func TestRunawayProgramIsStopped(t *testing.T) {
-	p, err := compiler.Compile(": main begin 1 pop 0 until ;", compiler.Options{})
+	p, err := compiler.Compile(": main begin 1 pop 0 until ;", compiler.Options{MLevel: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +375,7 @@ func TestRunawayProgramIsStopped(t *testing.T) {
 // rather than monopolising the goroutine it runs on.
 func TestSlicingYields(t *testing.T) {
 	p, err := compiler.Compile(": main var i 0 i ! begin i @ 1 + i ! i @ 10000 >= until i @ ;",
-		compiler.Options{})
+		compiler.Options{MLevel: 3})
 	if err != nil {
 		t.Fatal(err)
 	}

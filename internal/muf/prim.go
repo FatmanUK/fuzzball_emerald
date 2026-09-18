@@ -70,6 +70,17 @@ func (f *Frame) primitive(n int) (*Result, error) {
 		return &blocked, nil
 	}
 
+	// Privileged primitives are gated by the program's mucker level.
+	// Without this a program at level 1 could read passwords, change
+	// ownership and boot connections.
+	if need := PrimMLevel(n); need > 0 && f.MLevel() < need {
+		// Upstream names the wizard bit when that is what is missing.
+		if need >= 4 {
+			return nil, errf("Permission denied.  Requires Wizbit.")
+		}
+		return nil, errf("Permission denied.")
+	}
+
 	fn, ok := prims[n]
 	if !ok {
 		return nil, errf("%s is not implemented yet", PrimName(n))

@@ -363,6 +363,55 @@ var cases = []Case{
 		Name:   "divide_by_zero",
 		Source: `: main 1 0 / me @ swap intostr notify ;`,
 	},
+	{
+		Name: "creation",
+		Source: tellPrelude + `: main
+  me @ "a test widget" newobject
+  dup name ts
+  dup owner me @ = t
+  dup location me @ = t
+  recycle
+;`,
+	},
+	{
+		// NEWOBJECT rejects a room as the parent, which is an upstream
+		// bug its own message contradicts. Reproduced, so a program
+		// behaves the same on both.
+		Name: "creation_in_a_room",
+		Source: tellPrelude + `: main
+  0 try loc @ "in a room" newobject recycle "created" ts catch ts endcatch
+;`,
+	},
+	{
+		Name: "links",
+		Source: tellPrelude + `: main
+  loc @ "linktest" newexit
+  dup me @ setlink
+  dup getlink me @ = t
+  recycle
+;`,
+	},
+	{
+		Name: "mlevel",
+		Source: tellPrelude + `: main
+  me @ mlevel t
+  #-1 mlevel t
+;`,
+	},
+	{
+		Name: "entrances",
+		Source: tellPrelude + `: main
+  loc @ entrances_array array_count t
+  me @ entrances_array array_count t
+;`,
+	},
+	{
+		Name: "passwords",
+		Source: tellPrelude + `: main
+  me @ "potrzebie" checkpassword t
+  me @ "wrong" checkpassword t
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

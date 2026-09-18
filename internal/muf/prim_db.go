@@ -3,6 +3,8 @@ package muf
 import (
 	"strings"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
@@ -690,4 +692,263 @@ func writeRefList(h Host, obj ref.Ref, path string, list []ref.Ref) {
 		parts[i] = r.String()
 	}
 	h.SetProp(obj, path, props.Value{Type: props.String, Str: strings.Join(parts, " ")})
+}
+
+// Object creation, ownership, links and locks.
+
+func init() {
+	register("NEWOBJECT", create(ref.TypeThing))
+	register("NEWROOM", create(ref.TypeRoom))
+	register("NEWEXIT", create(ref.TypeExit))
+	register("NEWPROGRAM", func(f *Frame) (*Result, error) {
+		// A program's source is edited rather than supplied, and the
+		// editor arrives with the rest of the interactive machinery.
+		return nil, errf("NEWPROGRAM is not implemented yet")
+	})
+
+	register("RECYCLE", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if err := h.Recycle(obj); err != nil {
+			return nil, errf("%s", err.Error())
+		}
+		return nil, nil
+	})
+
+	register("SETOWN", func(f *Frame) (*Result, error) {
+		owner, err := f.popRef()
+		if err != nil {
+			return nil, err
+		}
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		h.SetOwner(obj, owner)
+		return nil, nil
+	})
+
+	register("SETLINK", func(f *Frame) (*Result, error) {
+		dest, err := f.popRef()
+		if err != nil {
+			return nil, err
+		}
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		// SETLINK needs a real object; there is no unlinking through it.
+		if !h.Valid(dest) {
+			return nil, errf("Invalid object. (2)")
+		}
+		h.SetLinks(obj, []ref.Ref{dest})
+		return nil, nil
+	})
+	register("SETLINKS_ARRAY", func(f *Frame) (*Result, error) {
+		a, err := f.popArray()
+		if err != nil {
+			return nil, err
+		}
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		var dests []ref.Ref
+		for _, v := range a.Values() {
+			if v.Type != TypeObject {
+				return nil, errf("Argument not an array of dbrefs.")
+			}
+			dests = append(dests, v.Ref)
+		}
+		h.SetLinks(obj, dests)
+		return nil, nil
+	})
+
+	register("MLEVEL", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		// #-1 asks about the running program rather than an object.
+		if obj == ref.Nothing {
+			return nil, f.Push(Int(int64(f.MLevel())))
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object.")
+		}
+		return nil, f.Push(Int(int64(h.Flags(obj).RawMLevel())))
+	})
+
+	register("TIMESTAMPS", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		created, modified, used, count := h.Timestamps(obj)
+		// Created, last used, modified, then the use count.
+		for _, t := range []int64{created, used, modified} {
+			if err := f.Push(Int(t)); err != nil {
+				return nil, err
+			}
+		}
+		return nil, f.Push(Int(int64(count)))
+	})
+
+	register("MOVEPENNIES", func(f *Frame) (*Result, error) {
+		amount, err := f.popInt()
+		if err != nil {
+			return nil, err
+		}
+		to, err := f.popRef()
+		if err != nil {
+			return nil, err
+		}
+		from, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		fromVal, _ := h.GetProp(from, propValue)
+		toVal, _ := h.GetProp(to, propValue)
+		h.SetProp(from, propValue, props.Value{Type: props.Int, Num: fromVal.Num - amount})
+		h.SetProp(to, propValue, props.Value{Type: props.Int, Num: toVal.Num + amount})
+		return nil, nil
+	})
+
+	register("PART_PMATCH", func(f *Frame) (*Result, error) {
+		name, err := f.popStr()
+		if err != nil {
+			return nil, err
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Obj(h.MatchPlayerPrefix(name)))
+	})
+
+	register("RMATCH", func(f *Frame) (*Result, error) {
+		name, err := f.popStr()
+		if err != nil {
+			return nil, err
+		}
+		around, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		// A remote match looks only at what the given object holds.
+		for _, r := range append(h.Contents(around), h.Exits(around)...) {
+			if ascii.EqualFold(h.Name(r), name) {
+				return nil, f.Push(Obj(r))
+			}
+		}
+		return nil, f.Push(Obj(ref.Nothing))
+	})
+
+	register("CHECKPASSWORD", func(f *Frame) (*Result, error) {
+		pass, err := f.popStr()
+		if err != nil {
+			return nil, err
+		}
+		player, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Bool(h.CheckPassword(player, pass)))
+	})
+	register("NEWPASSWORD", func(f *Frame) (*Result, error) {
+		pass, err := f.popStr()
+		if err != nil {
+			return nil, err
+		}
+		player, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if err := h.SetPassword(player, pass); err != nil {
+			return nil, errf("%s", err.Error())
+		}
+		return nil, nil
+	})
+
+	register("ENTRANCES_ARRAY", func(f *Frame) (*Result, error) {
+		target, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Arr(refList(h.Entrances(target))))
+	})
+
+	register("NEXTOWNED", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		owner := h.Owner(obj)
+		for r := obj + 1; r < h.Top(); r++ {
+			if h.Valid(r) && h.Owner(r) == owner {
+				return nil, f.Push(Obj(r))
+			}
+		}
+		return nil, f.Push(Obj(ref.Nothing))
+	})
+
+	register("OBJMEM", func(f *Frame) (*Result, error) {
+		// A byte count of an object's storage, which means nothing here:
+		// the shape is Go's, not the C's, so any number would be
+		// fiction. Report zero, which upstream also does for an object
+		// with nothing loaded.
+		if _, _, err := f.refAndHost(); err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Int(0))
+	})
+}
+
+// create builds the NEWOBJECT family, which take a parent and a name.
+func create(t ref.ObjType) primFunc {
+	return func(f *Frame) (*Result, error) {
+		name, err := f.popStrArg(2)
+		if err != nil {
+			return nil, err
+		}
+		parent, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if t == ref.TypeThing && !validNewObjectParent(h, parent) {
+			return nil, errf("Invalid player or room object (1)")
+		}
+		if !h.Valid(parent) {
+			return nil, errf("Invalid object (1)")
+		}
+		r, err := h.Create(t, name, parent, f.Caller)
+		if err != nil {
+			return nil, errf("%s", err.Error())
+		}
+		return nil, f.Push(Obj(r))
+	}
+}
+
+// validNewObjectParent reproduces NEWOBJECT's check on where a thing may be
+// created, which is not what its error message says.
+//
+// The C reads:
+//
+//	Typeof(x) != TYPE_PLAYER && Typeof(x) == TYPE_ROOM
+//
+// so it rejects rooms and accepts anything else, when the "!=" in the second
+// half was plainly meant. The message still says "player or room".
+//
+// This is reproduced rather than corrected. A program written against the real
+// server works here; a program written against a corrected version would fail
+// there, and a world author testing on Emerald would not find out until they
+// deployed.
+func validNewObjectParent(h Host, parent ref.Ref) bool {
+	if !h.Valid(parent) {
+		return false
+	}
+	t := h.ObjType(parent)
+	return !(t != ref.TypePlayer && t == ref.TypeRoom)
 }
