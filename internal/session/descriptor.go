@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/mcp"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
@@ -62,11 +63,16 @@ type Descriptor struct {
 	// overflowed records that output was dropped because the client fell
 	// too far behind, so the disconnect can say why.
 	overflowed atomic.Bool
+
+	// MCP is this connection's out-of-band protocol state. It is never
+	// nil: a client that never negotiates simply leaves it disabled, and
+	// every line then passes through untouched.
+	MCP *mcp.Frame
 }
 
 // newDescriptor builds a descriptor. Transports get one from a Hub.
 func newDescriptor(id int, tr Transport, host string, now time.Time) *Descriptor {
-	return &Descriptor{
+	d := &Descriptor{
 		ID:         id,
 		Transport:  tr,
 		Hostname:   host,
@@ -77,6 +83,8 @@ func newDescriptor(id int, tr Transport, host string, now time.Time) *Descriptor
 		out:        make(chan string, outputDepth),
 		done:       make(chan struct{}),
 	}
+	d.MCP = mcp.NewFrame(d.sendRaw, MCPPackages())
+	return d
 }
 
 // Output is the stream a transport writes to the client.
@@ -107,6 +115,14 @@ func (d *Descriptor) Drain() []string {
 // stopped reading is marked for disconnection rather than allowed to stall the
 // world goroutine.
 func (d *Descriptor) Send(text string) {
+	// Text that would look like an out-of-band message is quoted, so a
+	// player cannot make everyone else's client obey a line they typed.
+	d.MCP.SendInband(text)
+}
+
+// sendRaw queues a line exactly as given. MCP messages go out this way,
+// because they must not be quoted as the text they resemble.
+func (d *Descriptor) sendRaw(text string) {
 	select {
 	case <-d.done:
 		return

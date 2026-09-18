@@ -195,7 +195,7 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 			h(s, c)
 			return
 		}
-		c.tell("I don't know that command.")
+		c.send(w.Tune.String("huh_mesg"))
 		return
 	}
 
@@ -205,7 +205,9 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 		return
 	}
 
-	c.tell("I don't understand that.")
+	// What an unrecognised command says is a @tune parameter, so a world
+	// can answer in its own voice.
+	c.send(w.Tune.String("huh_mesg"))
 }
 
 // interfaceCommand handles the lines the descriptor layer answers itself,

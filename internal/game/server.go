@@ -109,6 +109,12 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 	err := s.engine.Go(func(w *world.World) {
 		d = s.hub.Add(tr, host, w.Now())
 		close(done)
+
+		// MCP is offered before the banner, so a client that speaks it
+		// has answered by the time anything else arrives. A client that
+		// does not simply sees a line it ignores.
+		d.MCP.StartNegotiation()
+
 		for _, line := range s.welcome {
 			d.Send(line)
 		}
@@ -127,6 +133,15 @@ func (s *Server) Input(d *session.Descriptor, line string) {
 	}
 	_ = s.engine.Go(func(w *world.World) {
 		d.LastActive = w.Now()
+
+		// Out-of-band messages are taken off the line before anything
+		// else sees it. A line the client quoted comes back as the
+		// text it was quoting.
+		line, ok := d.MCP.ProcessInput(line)
+		if !ok {
+			return
+		}
+
 		if d.Connected {
 			// The order here is do_command's. Interface commands are
 			// answered first, then a program waiting on a READ takes

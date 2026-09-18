@@ -358,7 +358,7 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 	b.send("create Visitor hunter2")
 	// A new character starts wherever player_start points, which in the
 	// starter world is not Room Zero.
-	b.expect("Obvious exits")
+	b.expect("Cave of Awakening")
 
 	// One is a wizard, so can bring the newcomer along.
 	a.send("!@teleport Visitor=#0")

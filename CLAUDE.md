@@ -211,6 +211,30 @@ editor resumes where the last one left off (`Server.editLine`, not persisted).
 `h` is the one deliberate divergence: upstream reads `data/edit-help.txt` and
 this has no game directory, so the summary is built in.
 
+## MCP
+
+`internal/mcp` is MCP 2.1, the out-of-band protocol clients use to exchange
+structured data alongside text. Every descriptor has a frame; a client that
+never negotiates leaves it disabled and every line passes through untouched.
+
+The **authentication key** is the security surface. Every message after the
+opening one carries a key the server issued, which is what stops text a world
+prints from being obeyed as a message by somebody's client. Outgoing text that
+would look like a message is quoted on the way out for the same reason —
+`Descriptor.Send` does that, and `sendRaw` is the unquoted path messages
+themselves take.
+
+Unlike the rest of the server, **a frame is reached from two goroutines**: a
+connection is read on its transport's and written from the world's. It has a
+mutex, and the lock is released before a package handler is called — holding it
+across a callback turns a handler that replies into a deadlock, which is what
+the first version did.
+
+Package names are hierarchical, so a message name resolves to the *longest*
+registered package it starts with: `org-fuzzball-gui-ctrl-value` belongs to
+`org-fuzzball-gui`, not `org-fuzzball`. Packages are announced in reverse
+registration order, because upstream builds its list by prepending.
+
 ## Traps
 
 **A MUF program starts with one value on its stack**: the command's argument,
@@ -265,6 +289,15 @@ name is a runtime failure.
 `internal/ascii`, never `strings.EqualFold` or `strings.ToLower`. Upstream folds
 only A–Z, so `Ä` and `ä` are distinct property and player names.
 
+**An unrecognised command says what `huh_mesg` says**, not a fixed string. A
+world changes it with `@tune`, and the default is upstream's "Huh?  (Type
+"help" for help.)".
+
+**`look` does not list exits.** Upstream's `look_room` gives the name, the
+description and the contents and stops; a world that wants an "obvious exits"
+line supplies it from its own programs, as the starter world does. An earlier
+version of this printed one, which made every look diverge.
+
 **Command precedence is load-bearing.** `QUIT` and `WHO` are compared
 case-sensitively before anything else, and exits are matched before built-in
 commands including `@`-commands. The starter world depends on both: it ships a
@@ -277,6 +310,25 @@ goes in the connection string, because GORM pools connections and `SET
 search_path` reaches only one of them — every other query lands in `public`.
 This destroyed a locally imported world before it was fixed, so each test now
 asserts its isolation before doing anything.
+
+## Sanity checking
+
+`@sanity` reports inconsistency, `@sanfix` repairs it, `@sanchange` edits one
+reference by hand. All three are God-only, refused from inside a `@force`, and
+are the only `@`-commands that cannot be abbreviated — upstream compares them
+with `strcmp`, and "@san" should not be enough to run something that can
+rewrite ownership.
+
+These check the **in-memory** graph, not Postgres, though the plan said
+otherwise. The in-memory graph is what the game runs on and the store is a
+write-behind copy of it, so a check against the copy would pass while the
+running world was broken.
+
+The repair is also simpler than upstream's. Upstream must cut a damaged chain
+and then hunt for whatever fell out of it, because the chain is its only record
+of where things are; Emerald stores each object's location too, so `Fix`
+corrects every object's fields first and rebuilds the chains from the locations
+afterwards.
 
 ## Deliberate divergences from Fuzzball
 
@@ -300,14 +352,14 @@ Worth knowing before "fixing" something that looks wrong:
 
 ## Status
 
-M0–M6 are done, and M7 is under way.
+M0–M7 are done, apart from MCP-GUI.
 
 The server imports the starter world, accepts real MUCK clients over TLS and
 WebSocket, runs MUF and evaluates MPI, and supports look, movement, speech,
 building and admin commands. Programs can suspend themselves on `READ`, `SLEEP`
-and `EVENT_WAITFOR`, and the MUF editor works, so programs can be written on
-the server rather than only imported.
+and `EVENT_WAITFOR`, the MUF editor works, so programs can be written on the
+server rather than only imported, and MCP 2.1 is negotiated with clients that
+speak it.
 
 What is left: about 131 of the 417 primitives, about 89 of the 140 MPI
-functions, MCP 2.1 framing and MCP-GUI, `@force`/`@toad`/`@boot`/`@stats`,
-`@sanity` and `@sanfix` as Postgres-side checks, and all of M8.
+functions, the MCP-GUI package, and all of M8.

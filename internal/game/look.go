@@ -82,9 +82,12 @@ func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
 
 	w.Used(target)
 
+	// Exits are deliberately not listed. Upstream's look_room gives the
+	// name, the description and the contents and stops there; a world that
+	// wants an "obvious exits" line supplies it from its own programs, as
+	// the starter world does.
 	if o.Type() == ref.TypeRoom {
 		s.listContents(w, who, target)
-		s.listExits(w, who, target)
 		return
 	}
 	// A container's contents are listed too, so a player can see what is
@@ -118,26 +121,6 @@ func (s *Server) listContents(w *world.World, who, container ref.Ref) {
 	for _, n := range names {
 		s.send(w, who, n)
 	}
-}
-
-// listExits names the obvious ways out.
-func (s *Server) listExits(w *world.World, who, room ref.Ref) {
-	var names []string
-	for _, r := range w.Exits(room) {
-		o := w.Get(r)
-		if o == nil || o.Flags&ref.Dark != 0 {
-			continue
-		}
-		// Only the first alias is the exit's public name.
-		name, _, _ := strings.Cut(o.Name, string(match.ExitDelimiter))
-		if name = strings.TrimSpace(name); name != "" {
-			names = append(names, name)
-		}
-	}
-	if len(names) == 0 {
-		return
-	}
-	s.notify(w, who, "Obvious exits: %s", strings.Join(names, ", "))
 }
 
 // canSee reports whether a player may see an object in a listing.

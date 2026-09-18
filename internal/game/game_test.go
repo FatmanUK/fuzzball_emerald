@@ -215,8 +215,8 @@ func TestQuitIsCaseSensitive(t *testing.T) {
 		t.Fatal("lowercase quit disconnected; it must fall through to exits")
 	}
 	got := h.out()
-	if !strings.Contains(got, "I don't understand") {
-		t.Errorf("lowercase quit = %q, want it unhandled", got)
+	if !strings.Contains(got, "Huh?") {
+		t.Errorf("lowercase quit = %q, want the unknown-command message", got)
 	}
 
 	h.send("QUIT")
@@ -304,8 +304,8 @@ func TestAtCommandPrefixMatching(t *testing.T) {
 	// An ambiguous prefix matches nothing rather than picking arbitrarily.
 	// "@d" could be @dig, @describe or @dump.
 	h.send("@d")
-	if got := h.out(); !strings.Contains(got, "don't know that command") {
-		t.Errorf("@d = %q, want it refused as ambiguous", got)
+	if got := h.out(); !strings.Contains(got, "Huh?") {
+		t.Errorf("@d = %q, want the unknown-command message", got)
 	}
 }
 

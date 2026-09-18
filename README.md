@@ -35,8 +35,12 @@ try/catch. Programs can now wait: `READ` suspends one until the player types a l
 
 The MUF editor works, so programs can be written on the server instead of only
 imported: `@program` makes one and opens it, `@edit` reopens it, `@list` prints
-it. The editor's own session — how it parses commands, where inserted lines
-land, what each complaint says — is checked against the C server line for line.
+it. The wizard commands are in — `@force`, `@toad`, `@boot`, `@stats`,
+`@pcreate` — along with `@sanity`, `@sanfix` and `@sanchange` for a damaged
+database, and MCP 2.1 is negotiated with clients that speak it.
+
+Each of those is checked against a real Fuzzball 7 line for line, not just
+against a reading of its source.
 
 286 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
 real program may still stop at one it needs. What is left mostly needs MCP from
