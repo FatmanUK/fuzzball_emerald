@@ -1,0 +1,3 @@
+[submodule "fuzzball"]
+	path = fuzzball
+	url = https://github.com/fuzzball-muck/fuzzball
