@@ -4,7 +4,7 @@
 Each entry carries the arity and the flags that decide how its arguments are
 handled, which the parser needs before it can call anything.
 
-    python3 internal/mpi/internal/gen/gen_funcs.py [git-ref]
+    python3 internal/mpi/internal/gen/gen_funcs.py [path/to/fuzzball]
 """
 import json
 import re
@@ -12,18 +12,28 @@ import subprocess
 import sys
 import pathlib
 
-REF = sys.argv[1] if len(sys.argv) > 1 else "origin/mother"
 
 ROOT = pathlib.Path(subprocess.run(
     ["git", "rev-parse", "--show-toplevel"],
     capture_output=True, text=True, check=True).stdout.strip())
 OUT = ROOT / "internal/mpi/funcs_gen.go"
 
+# The upstream C is vendored as a submodule at fuzzball/. Pass a path to read
+# a different checkout instead.
+SRC = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "fuzzball"
+
+
+def show(path):
+    """Read one file out of the upstream checkout."""
+    p = SRC / path
+    if not p.exists():
+        raise SystemExit(
+            f"{p} not found; run 'git submodule update --init fuzzball'")
+    return p.read_text()
+
 
 def main():
-    header = subprocess.run(["git", "show", f"{REF}:include/mfun.h"],
-                            capture_output=True, text=True, check=True,
-                            cwd=ROOT).stdout
+    header = show("include/mfun.h")
     body = header[header.index("static struct mfun_dat mfun_list[] = {"):]
     body = body[:body.index("\n};")]
 

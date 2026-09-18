@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generate internal/tune/params_gen.go from Fuzzball 7's include/tunelist.h.
 
-The upstream table is read straight out of git rather than vendored, so the
-generated Go always reflects a specific upstream commit:
+The upstream table is read from the fuzzball submodule, so the generated Go
+always reflects the commit that submodule is pinned to:
 
-    python3 internal/tune/internal/gen/gen_params.py [git-ref]
+    python3 internal/tune/internal/gen/gen_params.py [path/to/fuzzball]
 
 Divergences from upstream (dropped, renamed and inert parameters) are declared
 in the tables below and are the only hand-maintained part of the output.
@@ -15,7 +15,6 @@ import subprocess
 import sys
 import pathlib
 
-REF = sys.argv[1] if len(sys.argv) > 1 else "origin/mother"
 
 # Anchored to the repo root so this works from anywhere, including the cwd
 # `go generate ./internal/tune` uses.
@@ -23,6 +22,19 @@ ROOT = pathlib.Path(subprocess.run(
     ["git", "rev-parse", "--show-toplevel"],
     capture_output=True, text=True, check=True).stdout.strip())
 OUT = ROOT / "internal/tune/params_gen.go"
+
+# The upstream C is vendored as a submodule at fuzzball/. Pass a path to read
+# a different checkout instead.
+SRC = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "fuzzball"
+
+
+def show(path):
+    """Read one file out of the upstream checkout."""
+    p = SRC / path
+    if not p.exists():
+        raise SystemExit(
+            f"{p} not found; run 'git submodule update --init fuzzball'")
+    return p.read_text()
 
 # --- upstream divergences -------------------------------------------------
 
@@ -167,9 +179,7 @@ def go_default(e):
 
 
 def main():
-    header = subprocess.run(["git", "show", f"{REF}:include/tunelist.h"],
-                            capture_output=True, text=True, check=True,
-                            cwd=ROOT).stdout
+    header = show("include/tunelist.h")
     body = header[header.index("struct tune_entry tune_list[] = {"):]
     entries = parse(body)
     assert len(entries) == UPSTREAM_COUNT, \

@@ -5,7 +5,7 @@ The order matters. Fuzzball's get_primitive returns a token's index in
 base_inst[] plus one, and the compiler emits that number, so the table is
 reproduced in the same order the C builds it.
 
-    python3 internal/muf/internal/gen/gen_prims.py [git-ref]
+    python3 internal/muf/internal/gen/gen_prims.py [path/to/fuzzball]
 """
 import json
 import re
@@ -13,7 +13,6 @@ import subprocess
 import sys
 import pathlib
 
-REF = sys.argv[1] if len(sys.argv) > 1 else "origin/mother"
 
 ROOT = pathlib.Path(subprocess.run(
     ["git", "rev-parse", "--show-toplevel"],
@@ -21,11 +20,19 @@ ROOT = pathlib.Path(subprocess.run(
 OUT = ROOT / "internal/muf/prims_gen.go"
 OUT_DEFS = ROOT / "internal/muf/defs_gen.go"
 
+# The upstream C is vendored as a submodule at fuzzball/. Pass a path to read
+# a different checkout instead.
+SRC = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "fuzzball"
+
 
 def show(path):
-    return subprocess.run(["git", "show", f"{REF}:{path}"],
-                          capture_output=True, text=True, check=True,
-                          cwd=ROOT).stdout
+    """Read one file out of the upstream checkout."""
+    p = SRC / path
+    if not p.exists():
+        raise SystemExit(
+            f"{p} not found; run 'git submodule update --init fuzzball'")
+    return p.read_text()
+
 
 
 def macro_names(header, macro):

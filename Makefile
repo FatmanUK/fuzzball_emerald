@@ -198,19 +198,24 @@ connect: ## Connect to a running server with openssl
 
 # --- the golden-output oracle -----------------------------------------------
 
-# Fuzzball 7 built from the C sources on the mother branch. The golden tests
-# run the same session against it and against this server, and diff the two.
+# Fuzzball 7 built from the C sources in the fuzzball submodule. The golden
+# tests run the same session against it and against this server, and diff the
+# two.
 ORACLE_IMAGE ?= localhost/fbmuck-oracle
-ORACLE_REF   ?= origin/mother
+ORACLE_SRC   ?= fuzzball
 
 .PHONY: golden-build
-golden-build: ## Build the C Fuzzball the golden tests compare against
-	@echo "extracting $(ORACLE_REF)..."
+golden-build: $(ORACLE_SRC)/src ## Build the C Fuzzball the golden tests compare against
+	@echo "staging $(ORACLE_SRC)..."
 	@rm -rf build/oracle && mkdir -p build/oracle
-	@git archive $(ORACLE_REF) | tar -x -C build/oracle
+	@git -C $(ORACLE_SRC) archive HEAD | tar -x -C build/oracle
 	@cp deploy/golden/Containerfile.fbmuck build/oracle/
 	podman build -t $(ORACLE_IMAGE) -f build/oracle/Containerfile.fbmuck build/oracle
 	@rm -rf build/oracle
+
+# The upstream C is a submodule; every generator and the oracle read it.
+$(ORACLE_SRC)/src:
+	git submodule update --init $(ORACLE_SRC)
 
 .PHONY: golden
 golden: ## Run the differential tests against the C server

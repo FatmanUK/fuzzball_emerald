@@ -11,11 +11,11 @@ four deliberate departures:
 | Flat-file dump; the world freezes for every save | **Postgres**, written continuously in the background |
 | autotools and a hand-rolled Dockerfile | A single static binary in a rootless **Podman** container |
 
-The Fuzzball C sources this is ported from live on the `mother` branch and are
-read-only reference:
+The Fuzzball C sources this is ported from are vendored as a submodule at
+`fuzzball/`, as read-only reference:
 
 ```bash
-git show origin/mother:src/interp.c
+git submodule update --init fuzzball
 ```
 
 ## Status

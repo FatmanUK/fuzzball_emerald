@@ -5,7 +5,7 @@ Fuzzball guards privileged primitives with "if (mlev < N) abort_interp(...)"
 inside each implementation. Those checks are a security surface, not just a
 compatibility one, so they are extracted rather than transcribed.
 
-    python3 internal/muf/internal/gen/gen_mlev.py [git-ref]
+    python3 internal/muf/internal/gen/gen_mlev.py [path/to/fuzzball]
 """
 import json
 import re
@@ -13,12 +13,24 @@ import subprocess
 import sys
 import pathlib
 
-REF = sys.argv[1] if len(sys.argv) > 1 else "origin/mother"
 
 ROOT = pathlib.Path(subprocess.run(
     ["git", "rev-parse", "--show-toplevel"],
     capture_output=True, text=True, check=True).stdout.strip())
 OUT = ROOT / "internal/muf/mlev_gen.go"
+
+# The upstream C is vendored as a submodule at fuzzball/. Pass a path to read
+# a different checkout instead.
+SRC = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "fuzzball"
+
+
+def show(path):
+    """Read one file out of the upstream checkout."""
+    p = SRC / path
+    if not p.exists():
+        raise SystemExit(
+            f"{p} not found; run 'git submodule update --init fuzzball'")
+    return p.read_text()
 
 MODULES = ["p_array", "p_connects", "p_db", "p_error", "p_float", "p_math",
            "p_mcp", "p_misc", "p_props", "p_regex", "p_stack", "p_strings"]
@@ -28,11 +40,6 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
           "MLEV_WIZARD": 4, "MLEV_GOD": 4,
           "1": 1, "2": 2, "3": 3, "4": 4}
 
-
-def show(path):
-    return subprocess.run(["git", "show", f"{REF}:{path}"],
-                          capture_output=True, text=True, check=True,
-                          cwd=ROOT).stdout
 
 
 def conditions(body):

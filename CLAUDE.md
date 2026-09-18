@@ -13,20 +13,25 @@ rootless Podman container instead of autotools.
 The implementation plan, including the milestone breakdown, is at
 `~/.claude/plans/i-want-to-create-hashed-moore.md`.
 
-## The C reference lives in git, not on disk
+## The C reference is a submodule
 
-This is the single most useful thing to know. The working branch `vmother`
-contains only Go. The ~110k lines of Fuzzball C that everything is ported from
-sit on the `mother` branch and are read with `git show`:
+This is the single most useful thing to know. The repository itself contains
+only Go; the ~110k lines of Fuzzball C that everything is ported from are the
+upstream project, vendored as a submodule at `fuzzball/` and pinned to a
+release tag:
 
 ```bash
-git show origin/mother:src/interp.c
-git show origin/mother:include/db.h
-git ls-tree -r --name-only origin/mother | grep -E '^(src|include)/'
+git submodule update --init fuzzball   # if fuzzball/ is empty
+sed -n '1,80p' fuzzball/src/interp.c
+grep -rn "PRIM_STRCMP" fuzzball/src/
+git -C fuzzball describe --tags        # which upstream this is
 ```
 
-`origin/upstream_master` and `origin/development` are other upstream snapshots.
-These branches are read-only reference and must never be merged into `vmother`.
+It is read-only reference. Nothing in `fuzzball/` is ever edited, and the
+submodule is moved to a new upstream release deliberately, not incidentally —
+bumping it can change what the generators emit and what the golden oracle
+compares against. The four code generators and `make golden-build` all read it
+from this path.
 
 **Check the C before implementing anything that claims to match upstream.**
 Several behaviours in this codebase look like bugs until you read the original,
@@ -116,7 +121,8 @@ sequences would rewrite every container on every boot.
 ## The golden-output harness
 
 `internal/golden` is the oracle. It builds a database holding a MUF snippet,
-drives the same script through Fuzzball 7 built from `origin/mother` and
+drives the same script through Fuzzball 7 built from the `fuzzball`
+submodule and
 through this server, and diffs the transcripts. The C runs in a container over
 TCP; this server runs in-process.
 
@@ -256,5 +262,5 @@ MUF and MPI are not implemented. Exits that run programs say so rather than
 working, and descriptions render as stored rather than evaluated. M4 is the MUF
 compiler and VM, M5 the remaining primitives, M6 MPI. The plan flags the
 golden-output harness — running a scripted session against both this server and
-a C Fuzzball built from `origin/mother`, and diffing — as the thing to build
+a C Fuzzball built from the submodule, and diffing — as the thing to build
 *before* the primitive grind, or M5 and M6 become unverifiable.
