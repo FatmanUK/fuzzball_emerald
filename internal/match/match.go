@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
@@ -168,6 +169,48 @@ func (m *Matcher) Absolute() *Matcher {
 		return m
 	}
 	m.addExact(r)
+	return m
+}
+
+// Registered matches a "$name" registration, looked up in the _reg propdir on
+// the searching object and then outwards through the environment. This is how
+// a world names its libraries: "$lib-strings" resolves wherever it is
+// registered, usually on #0.
+//
+// The value may be stored as a dbref, an integer, or a string with or without
+// a leading '#', because all three appear in real databases.
+func (m *Matcher) Registered() *Matcher {
+	if !strings.HasPrefix(m.name, "$") || len(m.name) == 1 {
+		return m
+	}
+	v, _, ok := m.w.EnvProp(m.from, "_reg/"+m.name[1:])
+	if !ok {
+		return m
+	}
+	var r ref.Ref
+	switch v.Type {
+	case props.Ref:
+		r = v.Ref
+		// HOME and NIL are meaningful registrations and are returned
+		// without a validity check, as upstream does.
+		if r == ref.Home || r == ref.Nil {
+			m.addExact(r)
+			return m
+		}
+	case props.Int:
+		r = ref.Ref(v.Num)
+	case props.String:
+		n, err := strconv.ParseInt(strings.TrimPrefix(v.Str, "#"), 10, 32)
+		if err != nil {
+			return m
+		}
+		r = ref.Ref(n)
+	default:
+		return m
+	}
+	if m.w.Valid(r) {
+		m.addExact(r)
+	}
 	return m
 }
 

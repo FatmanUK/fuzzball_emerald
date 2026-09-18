@@ -474,17 +474,22 @@ func (c *compiler) declarePublic(wizOnly bool) error {
 		return err
 	}
 	if !ok {
-		return c.errf("unexpected end of program after PUBLIC")
+		return c.errf("Subroutine unknown in PUBLIC or WIZCALL declaration.")
 	}
 	addr, known := c.procs[ascii.Fold(tok.text)]
 	if !known {
-		return c.errf("unknown procedure %s", tok.text)
+		return c.errf("Subroutine unknown in PUBLIC or WIZCALL declaration.")
 	}
 	mlev := 1
 	if wizOnly {
 		mlev = 4
 	}
-	c.publics[ascii.Fold(tok.text)] = &muf.Public{
+	name := ascii.Fold(tok.text)
+	if _, already := c.publics[name]; already {
+		return c.errf("Function already declared public.")
+	}
+	c.publicOrder = append(c.publicOrder, name)
+	c.publics[name] = &muf.Public{
 		Name:   tok.text,
 		Addr:   addr,
 		MLevel: mlev,

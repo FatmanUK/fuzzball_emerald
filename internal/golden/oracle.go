@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -38,13 +39,46 @@ func RunOracle(ctx context.Context, fx *Fixture, script Script) (string, error) 
 // failure names the case it belongs to.
 func RunOracleSteps(ctx context.Context, fx *Fixture, script Script,
 	pauses map[int]time.Duration) ([]string, error) {
-	if err := os.MkdirAll(fx.Dir+"/logs", 0o755); err != nil {
+	return withOracle(ctx, fx, func(conn net.Conn) ([]string, error) {
+		return drive(conn, script, pauses)
+	})
+}
+
+// RunOracleQuiet drives the C server without the marker poses, bounding each
+// command's output by a period of silence instead.
+//
+// A marker cannot be used for a session that holds the input line: the MUF
+// editor reads "!pose EMERALDDONE" as the editor command "x" — its last word
+// begins with the cancel letter — and a program waiting on a READ eats the
+// marker outright. Waiting for quiet is slower and is only worth it for those
+// cases, so the marker path stays the default.
+func RunOracleQuiet(ctx context.Context, fx *Fixture, script Script,
+	quiet time.Duration) ([]string, error) {
+	return withOracle(ctx, fx, func(conn net.Conn) ([]string, error) {
+		return driveQuiet(conn, script, quiet)
+	})
+}
+
+// withOracle starts a C server holding the fixture, runs fn against it, and
+// tears it down.
+func withOracle(ctx context.Context, fx *Fixture,
+	fn func(net.Conn) ([]string, error)) ([]string, error) {
+	// The C server writes back into its game directory — a dump, and the
+	// macro table — so it runs against a copy. Without this a case that
+	// defines a macro leaves it behind for this server to import, and the
+	// two transcripts stop being of the same world.
+	dir, err := copyFixture(fx.Dir)
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	if err := os.MkdirAll(dir+"/logs", 0o755); err != nil {
 		return nil, err
 	}
 
-	port, err := freePort()
-	if err != nil {
-		return nil, err
+	port, err2 := freePort()
+	if err2 != nil {
+		return nil, err2
 	}
 	name := fmt.Sprintf("fbgold-%d", port)
 
@@ -53,7 +87,7 @@ func RunOracleSteps(ctx context.Context, fx *Fixture, script Script,
 	run := exec.CommandContext(ctx, "podman", "run", "--rm", "-d",
 		"--name", name,
 		"-p", fmt.Sprintf("127.0.0.1:%d:%d", port, oraclePort),
-		"-v", fx.Dir+":/game:z",
+		"-v", dir+":/game:z",
 		OracleImage,
 		"-dbin", "/game/data/test.db",
 		"-dbout", "/game/data/out.db",
@@ -75,7 +109,7 @@ func RunOracleSteps(ctx context.Context, fx *Fixture, script Script,
 	}
 	defer conn.Close()
 
-	return drive(conn, script, pauses)
+	return fn(conn)
 }
 
 // dialWithRetry waits for the oracle to start listening.
@@ -179,4 +213,75 @@ func freePort() (int, error) {
 // OracleAvailable reports whether the oracle image has been built.
 func OracleAvailable() bool {
 	return exec.Command("podman", "image", "exists", OracleImage).Run() == nil
+}
+
+// driveQuiet runs a script with no markers, taking a pause in the output as
+// the end of a command's response.
+func driveQuiet(conn net.Conn, script Script, quiet time.Duration) ([]string, error) {
+	br := bufio.NewReader(conn)
+	out := make([]string, 0, len(script))
+
+	read := func(d time.Duration) string {
+		var b strings.Builder
+		for {
+			_ = conn.SetReadDeadline(time.Now().Add(d))
+			line, err := br.ReadString('\n')
+			b.WriteString(line)
+			if err != nil {
+				return b.String()
+			}
+		}
+	}
+	send := func(line string) error {
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		_, err := conn.Write([]byte(line + "\n"))
+		return err
+	}
+
+	read(3 * time.Second) // the welcome banner
+	if err := send("connect One " + godPassword); err != nil {
+		return nil, err
+	}
+	read(quiet) // login output is not part of what is compared
+
+	for _, cmd := range script {
+		if err := send(cmd); err != nil {
+			return out, err
+		}
+		out = append(out, read(quiet))
+	}
+	_ = send("@shutdown")
+	return out, nil
+}
+
+// copyFixture duplicates a fixture directory so the C server can write into it
+// without changing the original.
+func copyFixture(src string) (string, error) {
+	dst, err := os.MkdirTemp("", "fbgold-fixture-")
+	if err != nil {
+		return "", err
+	}
+	err = filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, b, 0o644)
+	})
+	if err != nil {
+		os.RemoveAll(dst)
+		return "", err
+	}
+	return dst, nil
 }

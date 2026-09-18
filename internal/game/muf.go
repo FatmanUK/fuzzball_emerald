@@ -383,6 +383,15 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 		return nil, err
 	}
 
+	prog, err := s.compileSource(w, r, src)
+	s.programs[r] = compiled{prog: prog, err: err}
+	return prog, err
+}
+
+// compileSource compiles text as if it were a program's source, without
+// consulting or updating the cache. The editor needs this to check a buffer
+// that has not been saved.
+func (s *Server) compileSource(w *world.World, r ref.Ref, src string) (*muf.Program, error) {
 	// A program runs at the lower of its own mucker level and its owner's,
 	// which is what find_mlev computes. A programmer cannot grant a program
 	// more authority than they hold by setting bits on it.
@@ -400,24 +409,25 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 		}
 	}
 
-	prog, err := compiler.Compile(src, compiler.Options{
+	return compiler.Compile(src, compiler.Options{
 		Ref:      r,
 		MLevel:   mlev,
 		Defines:  s.definesFor(w, r),
-		Macros:   s.macros,
+		Macros:   w.MacroTable(),
 		Include:  s.includerFor(w),
 		MuckName: w.Tune.String("muckname"),
 		Version:  Version,
 	})
-	s.programs[r] = compiled{prog: prog, err: err}
-	return prog, err
 }
 
 // InvalidateProgram drops a program's cached compile, which an edit needs.
 func (s *Server) InvalidateProgram(r ref.Ref) { delete(s.programs, r) }
 
-// SetMacros installs the MUF editor's macro table.
-func (s *Server) SetMacros(m map[string]string) { s.macros = m }
+// cacheProgram installs a compile result, so a program checked in the editor
+// runs without being compiled again.
+func (s *Server) cacheProgram(r ref.Ref, prog *muf.Program, err error) {
+	s.programs[r] = compiled{prog: prog, err: err}
+}
 
 // definesFor collects the compile-time definitions a program sees: the _defs/
 // propdir on #0 and on the program's owner.

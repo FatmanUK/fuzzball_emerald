@@ -509,10 +509,23 @@ func (s *Server) cmdRecycle(c *ctx) {
 		c.tell("You can't recycle yourself.")
 		return
 	}
+	s.evictEditors(c.w, target)
 	name := o.Name
 	if err := c.w.Recycle(target); err != nil {
 		c.send(err.Error())
 		return
 	}
 	c.tell("%s recycled.", name)
+}
+
+// evictEditors throws anyone editing a program out of the editor before it is
+// recycled, so nobody is left typing into a session whose program has gone.
+func (s *Server) evictEditors(w *world.World, program ref.Ref) {
+	for who, e := range s.editors {
+		if e.program != program {
+			continue
+		}
+		s.closeEditor(w, who, e)
+		s.send(who, "The program you were editing has been recycled.  Exiting Editor.")
+	}
 }

@@ -75,6 +75,13 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("loading macros: %w", err)
 	}
+	table := make([]world.Macro, 0, len(macros))
+	for _, m := range macros {
+		table = append(table, world.Macro{
+			Name: m.Name, Definition: m.Definition, Owner: ref.Ref(m.Owner),
+		})
+	}
+	w.SetMacros(table)
 
 	log.Info("world loaded",
 		"programs", progs,
@@ -103,11 +110,6 @@ func cmdServe(args []string) error {
 	game.Version = version
 	gs := game.New(engine, game.Options{Logger: base})
 
-	macroTable := make(map[string]string, len(macros))
-	for _, m := range macros {
-		macroTable[strings.ToLower(m.Name)] = m.Definition
-	}
-	gs.SetMacros(macroTable)
 	engine.OnTick(gs.OnTick())
 
 	// Run the world first: the listeners enqueue work onto it from their

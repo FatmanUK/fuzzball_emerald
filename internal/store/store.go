@@ -97,6 +97,12 @@ func (s *Store) Flush(ctx context.Context, snap world.Snapshot) error {
 		if err := writeTune(tx, snap.Tune); err != nil {
 			return err
 		}
+		if err := writePrograms(tx, snap.Programs); err != nil {
+			return err
+		}
+		if err := writeMacros(tx, snap.Macros); err != nil {
+			return err
+		}
 		return writeMeta(tx, metaTop, fmt.Sprint(int32(snap.Top)))
 	})
 }
@@ -187,6 +193,48 @@ func writeTune(tx *gorm.DB, params map[string]string) error {
 	if err := tx.Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(rows, 500).Error; err != nil {
 		return fmt.Errorf("writing tune parameters: %w", err)
+	}
+	return nil
+}
+
+// writePrograms saves the MUF source of programs changed since the last
+// flush. Only edited programs appear here, so a world with thousands of
+// programs writes nothing until someone saves one.
+func writePrograms(tx *gorm.DB, sources map[ref.Ref]string) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	rows := make([]Program, 0, len(sources))
+	for r, src := range sources {
+		rows = append(rows, Program{Ref: int32(r), Source: src})
+	}
+	if err := tx.Clauses(clause.OnConflict{UpdateAll: true}).
+		CreateInBatches(rows, 200).Error; err != nil {
+		return fmt.Errorf("writing program source: %w", err)
+	}
+	return nil
+}
+
+// writeMacros replaces the editor's macro table. It is written whole, because
+// it is small and a deletion has to be visible.
+func writeMacros(tx *gorm.DB, macros []world.Macro) error {
+	if macros == nil {
+		return nil
+	}
+	if err := tx.Where("1 = 1").Delete(&Macro{}).Error; err != nil {
+		return fmt.Errorf("clearing macros: %w", err)
+	}
+	if len(macros) == 0 {
+		return nil
+	}
+	rows := make([]Macro, 0, len(macros))
+	for _, m := range macros {
+		rows = append(rows, Macro{
+			Name: m.Name, Definition: m.Definition, Owner: int32(m.Owner),
+		})
+	}
+	if err := tx.CreateInBatches(rows, 200).Error; err != nil {
+		return fmt.Errorf("writing macros: %w", err)
 	}
 	return nil
 }

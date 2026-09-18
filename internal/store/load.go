@@ -145,10 +145,18 @@ func (s *Store) SaveProgram(ctx context.Context, r ref.Ref, source string) error
 }
 
 func fromRow(r *Object) *world.Object {
+	// The internal flags do not survive a load, exactly as db_read_object
+	// drops them: they describe a live session, not the object. Without
+	// this a crash mid-edit would leave a program permanently claiming
+	// someone else is editing it.
+	flags := ref.Flags(r.Flags) &^ ref.DumpMask
+	if flags.Type() == ref.TypeProgram {
+		flags &^= ref.Internal
+	}
 	return &world.Object{
 		Ref:          ref.Ref(r.Ref),
 		Name:         r.Name,
-		Flags:        ref.Flags(r.Flags),
+		Flags:        flags,
 		Owner:        ref.Ref(r.Owner),
 		Location:     ref.Ref(r.Location),
 		Contents:     ref.Ref(r.Contents),

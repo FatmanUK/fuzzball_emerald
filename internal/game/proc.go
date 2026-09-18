@@ -236,13 +236,6 @@ func (s *Server) readInput(w *world.World, descr int, line string) bool {
 	if p == nil {
 		return false
 	}
-	// A lone "@Q" breaks out of a READ, which is how a player escapes a
-	// program that is waiting on them.
-	if line == breakCommand {
-		s.procs.remove(p.pid)
-		s.send(p.player, "Program aborted.")
-		return true
-	}
 	v := muf.Str(line)
 	s.resume(w, p, &v)
 	return true

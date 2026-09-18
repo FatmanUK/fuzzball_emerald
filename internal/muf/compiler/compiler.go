@@ -108,8 +108,9 @@ type compiler struct {
 	lvars []string
 	svars []string
 
-	procs   map[string]int
-	publics map[string]*muf.Public
+	procs       map[string]int
+	publics     map[string]*muf.Public
+	publicOrder []string
 	// procOrder keeps declaration order, so a program with no PUBLIC entry
 	// starts at its last procedure as upstream does.
 	procOrder []string
@@ -390,7 +391,7 @@ func (c *compiler) word(tok token) error {
 	if strings.HasPrefix(word, "'") {
 		return c.quoted(word[1:])
 	}
-	return c.errf("unrecognized word %s", word)
+	return c.errf("Unrecognized word %s.", word)
 }
 
 // quoted compiles 'name, which pushes a procedure's address rather than

@@ -1,9 +1,11 @@
 package match
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
@@ -262,5 +264,50 @@ func TestMatchingSurvivesAnEnvironmentCycle(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("matching hung on a cyclic environment tree")
+	}
+}
+
+// TestRegisteredResolvesThroughTheEnvironment checks that "$name" finds a
+// registration on an ancestor, which is how a world names its libraries.
+func TestRegisteredResolvesThroughTheEnvironment(t *testing.T) {
+	w := world.New()
+	root := w.Create("Root", ref.TypeRoom, ref.God)
+	room := w.Create("Room", ref.TypeRoom, ref.God)
+	who := w.Create("Someone", ref.TypePlayer, ref.God)
+	lib := w.Create("lib-strings", ref.TypeProgram, ref.God)
+	if err := w.MoveTo(room.Ref, root.Ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.MoveTo(who.Ref, room.Ref); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name  string
+		value props.Value
+	}{
+		{"a dbref", props.Value{Type: props.Ref, Ref: lib.Ref}},
+		{"an integer", props.Value{Type: props.Int, Num: int64(lib.Ref)}},
+		{"a string", props.Value{Type: props.String, Str: lib.Ref.String()}},
+		{"a string with no #", props.Value{Type: props.String,
+			Str: strconv.Itoa(int(lib.Ref))}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w.SetProp(root.Ref, "_reg/lib-strings", tc.value)
+			got := New(w, who.Ref, "$lib-strings").Registered().Result()
+			if got != lib.Ref {
+				t.Errorf("$lib-strings resolved to %v, want %v", got, lib.Ref)
+			}
+		})
+	}
+
+	// A name that is not registered anywhere finds nothing.
+	if got := New(w, who.Ref, "$nosuch").Registered().Result(); got != ref.Nothing {
+		t.Errorf("an unregistered name resolved to %v", got)
+	}
+	// A plain name is not a registration.
+	if got := New(w, who.Ref, "lib-strings").Registered().Result(); got != ref.Nothing {
+		t.Errorf("a bare name was treated as a registration: %v", got)
 	}
 }

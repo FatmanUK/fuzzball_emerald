@@ -29,6 +29,16 @@ type World struct {
 	// programs holds MUF source by program ref. Source is loaded at boot and
 	// compiled on demand, so an edit only needs to invalidate a cache.
 	programs map[ref.Ref]string
+	// progDirty records sources changed since the last flush. Source is
+	// tracked apart from the object because leaving the editor rewrites a
+	// program's text without touching any of its fields.
+	progDirty map[ref.Ref]struct{}
+
+	// macros is the MUF editor's macro table, keyed by folded name.
+	macros map[string]Macro
+	// macrosDirty records that the table changed. It is small and changes
+	// rarely, so the whole table is written rather than each entry.
+	macrosDirty bool
 
 	Tune *tune.Set
 	// tuneDirty records that the parameter table changed.
@@ -45,8 +55,12 @@ func New() *World {
 		dirty:    make(map[ref.Ref]struct{}),
 		deleted:  make(map[ref.Ref]struct{}),
 		programs: make(map[ref.Ref]string),
-		Tune:     tune.NewSet(),
-		now:      time.Now,
+
+		progDirty: make(map[ref.Ref]struct{}),
+		macros:    make(map[string]Macro),
+
+		Tune: tune.NewSet(),
+		now:  time.Now,
 	}
 }
 
@@ -217,8 +231,18 @@ func (w *World) GetProp(r ref.Ref, path string) (props.Value, bool) {
 	return o.Props.Get(path)
 }
 
-// SetSource stores a program's MUF source.
+// SetSource stores a program's MUF source without queueing it for writing,
+// which is what loading a world wants.
 func (w *World) SetSource(r ref.Ref, src string) { w.programs[r] = src }
+
+// SaveSource replaces a program's source and queues it for writing. This is
+// the editor's path: leaving the editor rewrites the text, and the object
+// itself is touched too so its modification time moves.
+func (w *World) SaveSource(r ref.Ref, src string) {
+	w.programs[r] = src
+	w.progDirty[r] = struct{}{}
+	w.Modified(r)
+}
 
 // Source returns a program's MUF source.
 func (w *World) Source(r ref.Ref) (string, bool) {

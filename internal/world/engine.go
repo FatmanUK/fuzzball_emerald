@@ -284,7 +284,15 @@ func (w *World) requeue(s Snapshot) {
 	for _, r := range s.Deleted {
 		w.deleted[r] = struct{}{}
 	}
+	for r := range s.Programs {
+		if _, ok := w.programs[r]; ok {
+			w.progDirty[r] = struct{}{}
+		}
+	}
 	if s.Tune != nil {
 		w.tuneDirty = true
+	}
+	if s.Macros != nil {
+		w.macrosDirty = true
 	}
 }

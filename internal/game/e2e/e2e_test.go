@@ -78,6 +78,13 @@ func startServer(t *testing.T) *testServer {
 	for _, prog := range res.Programs {
 		w.SetSource(prog.Ref, prog.Source)
 	}
+	macros := make([]world.Macro, 0, len(res.Macros))
+	for _, m := range res.Macros {
+		macros = append(macros, world.Macro{
+			Name: m.Name, Definition: m.Definition, Owner: m.Owner,
+		})
+	}
+	w.SetMacros(macros)
 
 	engine := world.NewEngine(w, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,11 +92,6 @@ func startServer(t *testing.T) *testServer {
 	go func() { worldDone <- engine.Run(ctx) }()
 
 	gs := game.New(engine, game.Options{})
-	macros := map[string]string{}
-	for _, m := range res.Macros {
-		macros[strings.ToLower(m.Name)] = m.Definition
-	}
-	gs.SetMacros(macros)
 
 	cfg := selfSignedTLS(t)
 

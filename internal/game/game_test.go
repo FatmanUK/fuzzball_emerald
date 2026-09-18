@@ -488,7 +488,7 @@ func TestBreakEscapesARead(t *testing.T) {
 	h.out()
 
 	h.send("@Q")
-	if got := h.out(); !strings.Contains(got, "aborted") {
+	if got := h.out(); !strings.Contains(got, "Foreground program aborted.") {
 		t.Errorf("@Q should have escaped the read:\n%s", got)
 	}
 

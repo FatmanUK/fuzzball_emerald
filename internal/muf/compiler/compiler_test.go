@@ -346,7 +346,7 @@ func TestQuotedStringsAreNotNumbers(t *testing.T) {
 }
 
 func TestUnknownWordIsAnError(t *testing.T) {
-	mustFail(t, ": main nosuchword ;", "unrecognized word")
+	mustFail(t, ": main nosuchword ;", "Unrecognized word")
 }
 
 func TestProgramWithNoProceduresIsAnError(t *testing.T) {

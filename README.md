@@ -33,9 +33,14 @@ executes arithmetic, control flow, procedures, scoped variables, arrays and
 try/catch. Programs can now wait: `READ` suspends one until the player types a line,
 `SLEEP` until a time passes, and `@ps` and `@kill` manage what is waiting.
 
+The MUF editor works, so programs can be written on the server instead of only
+imported: `@program` makes one and opens it, `@edit` reopens it, `@list` prints
+it. The editor's own session — how it parses commands, where inserted lines
+land, what each complaint says — is checked against the C server line for line.
+
 286 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
-real program may still stop at one it needs. What is left mostly needs the
-process queue and MCP from M7 rather than just an implementation.
+real program may still stop at one it needs. What is left mostly needs MCP from
+M7 rather than just an implementation.
 
 ## Building
 

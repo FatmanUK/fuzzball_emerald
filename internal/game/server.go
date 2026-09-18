@@ -35,9 +35,16 @@ type Server struct {
 	// started is when the server came up, for uptime.
 	started time.Time
 
-	// programs caches compiled MUF, and macros is the editor's macro table.
+	// programs caches compiled MUF.
 	programs map[ref.Ref]compiled
-	macros   map[string]string
+
+	// editors holds one open MUF editor session per player. The program
+	// text being edited lives here rather than on the object, so an
+	// abandoned session cannot corrupt what is stored.
+	editors map[ref.Ref]*editSession
+	// editLine remembers each program's current line between sessions, as
+	// upstream keeps it on the program itself. It is not persisted.
+	editLine map[ref.Ref]int
 
 	// procs holds suspended programs: those sleeping, waiting for input, or
 	// waiting for an event.
@@ -71,7 +78,8 @@ func New(engine *world.Engine, opts Options) *Server {
 		started:  time.Now(),
 		programs: map[ref.Ref]compiled{},
 		procs:    newProcQueue(),
-		macros:   map[string]string{},
+		editors:  map[ref.Ref]*editSession{},
+		editLine: map[ref.Ref]int{},
 	}
 }
 
@@ -115,12 +123,22 @@ func (s *Server) Input(d *session.Descriptor, line string) {
 	_ = s.engine.Go(func(w *world.World) {
 		d.LastActive = w.Now()
 		if d.Connected {
-			// A program waiting on a READ takes the line instead of
-			// the command parser.
-			if s.readInput(w, d.ID, line) {
-				return
+			// The order here is do_command's. Interface commands are
+			// answered first, then a program waiting on a READ takes
+			// the line, then the editor, and only then does the
+			// command parser see it.
+			//
+			// The editor and a READ both take the line untrimmed:
+			// leading spaces are part of program text, and an empty
+			// line is a blank line to insert.
+			switch {
+			case s.interfaceCommand(w, d, line):
+			case s.readInput(w, d.ID, line):
+			case s.editing(d.Player) != nil:
+				s.editInput(w, d, line)
+			default:
+				s.command(w, d, line)
 			}
-			s.command(w, d, line)
 			return
 		}
 		s.login(w, d, line)

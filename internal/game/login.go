@@ -219,6 +219,24 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 
 	s.announceConnect(w, d, alreadyOn)
 	s.lookHere(w, player)
+	s.warnInteractive(d)
+}
+
+// warnInteractive tells a reconnecting player that their input is going
+// somewhere other than the command parser. An editor session outlives the
+// connection that opened it, so without this a player comes back to a prompt
+// that silently eats everything they type.
+func (s *Server) warnInteractive(d *session.Descriptor) {
+	e := s.editing(d.Player)
+	if e == nil {
+		return
+	}
+	if e.insert {
+		d.Send(sprintf("***  You are currently inserting MUF program text.  Use \"%s\" to return to the editor, then \"%c\" if you wish to return to your regularly scheduled MUCK universe.  ***",
+			exitInsert, quitEditCommand))
+		return
+	}
+	d.Send("***  You are currently using the MUF program editor.  ***")
 }
 
 // announceConnect tells the player's room that they have arrived.

@@ -73,6 +73,9 @@ var atCommands = map[string]handler{
 	"@dump":     (*Server).cmdDump,
 	"@shutdown": (*Server).cmdShutdown,
 	"@tune":     (*Server).cmdTune,
+	"@program":  (*Server).cmdProgram,
+	"@edit":     (*Server).cmdEdit,
+	"@list":     (*Server).cmdList,
 	"@version":  (*Server).cmdVersion,
 }
 
@@ -105,25 +108,6 @@ func (s *Server) command(w *world.World, d *session.Descriptor, line string) {
 	if w.Get(c.who) == nil {
 		c.tell("Your character no longer exists.")
 		d.Close()
-		return
-	}
-
-	// Interface commands come first and are case-sensitive, as upstream's
-	// is_interface_command has them. That is deliberate and load-bearing:
-	// the starter world ships a lowercase "quit" exit whose only job is to
-	// tell players the real command is in capitals, which only works
-	// because lowercase "quit" falls through to exit matching.
-	switch {
-	case line == quitCommand:
-		s.logCommand(w, d, line, "")
-		s.cmdQuit(c)
-		return
-	case strings.HasPrefix(line, whoCommand):
-		s.logCommand(w, d, whoCommand, c.arg)
-		c.arg = strings.TrimSpace(line[len(whoCommand):])
-		s.cmdWho(c)
-		return
-	case ascii.EqualFold(line, breakCommand), line == nullCommand:
 		return
 	}
 
@@ -183,6 +167,54 @@ func (s *Server) command(w *world.World, d *session.Descriptor, line string) {
 	}
 
 	c.tell("I don't understand that.")
+}
+
+// interfaceCommand handles the lines the descriptor layer answers itself,
+// before anything else looks at them. It reports whether the line was consumed.
+//
+// These are case-sensitive, which is deliberate and load-bearing: the starter
+// world ships a lowercase "quit" exit whose only job is to say that the real
+// command is in capitals, and that only works because lowercase "quit" falls
+// through to exit matching.
+//
+// They are answered ahead of a READ and ahead of the editor, as do_command has
+// them, so QUIT always disconnects and "@Q" always escapes — a program waiting
+// on input cannot swallow either.
+func (s *Server) interfaceCommand(w *world.World, d *session.Descriptor, line string) bool {
+	// WHO is the exception: while a program is reading or the editor is
+	// open, it belongs to whatever has the line.
+	busy := s.procs.readerFor(d.ID) != nil || s.editing(d.Player) != nil
+
+	switch {
+	case ascii.EqualFold(line, breakCommand):
+		if s.abortForeground(w, d) {
+			d.Send("Foreground program aborted.")
+		}
+		return true
+	case line == quitCommand:
+		s.logCommand(w, d, line, "")
+		s.cmdQuit(&ctx{w: w, d: d, who: d.Player})
+		return true
+	case line == nullCommand && w.Tune.Bool("recognize_null_command"):
+		return true
+	case !busy && strings.HasPrefix(line, whoCommand):
+		arg := strings.TrimSpace(line[len(whoCommand):])
+		s.logCommand(w, d, whoCommand, arg)
+		s.cmdWho(&ctx{w: w, d: d, who: d.Player, verb: whoCommand, arg: arg})
+		return true
+	}
+	return false
+}
+
+// abortForeground stops the program a descriptor is waiting on, reporting
+// whether there was one.
+func (s *Server) abortForeground(w *world.World, d *session.Descriptor) bool {
+	p := s.procs.readerFor(d.ID)
+	if p == nil {
+		return false
+	}
+	s.procs.remove(p.pid)
+	return true
 }
 
 // Interface commands and tokens, from include/game.h. QUIT and WHO are

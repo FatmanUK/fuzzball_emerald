@@ -24,13 +24,14 @@ func (c *compiler) finish() (*muf.Program, error) {
 	}
 
 	p := &muf.Program{
-		Ref:     c.opts.Ref,
-		Code:    c.code,
-		Vars:    c.vars,
-		LVars:   c.lvars,
-		Procs:   c.procs,
-		Publics: c.publics,
-		MLevel:  c.opts.MLevel,
+		Ref:         c.opts.Ref,
+		Code:        c.code,
+		Vars:        c.vars,
+		LVars:       c.lvars,
+		Procs:       c.procs,
+		Publics:     c.publics,
+		PublicOrder: c.publicOrder,
+		MLevel:      c.opts.MLevel,
 	}
 
 	// Execution starts at the last procedure defined. Upstream pushes each

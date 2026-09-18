@@ -99,6 +99,13 @@ Reads never touch Postgres after boot. Mutations mark objects dirty; every
 Saving therefore never touches a live object and never pauses the game, which is
 what replaces Fuzzball's dump cycle. `@dump` is a forced flush.
 
+A snapshot carries more than objects: program source changed by the editor,
+and the macro table. Both are held apart from the object graph — source because
+saving a program rewrites its text without touching any field on the object,
+macros because they belong to no object at all. `World.SetSource` is the
+loading path and marks nothing; `World.SaveSource` is the editor's and marks
+the source for writing.
+
 Containment chains are stored as upstream keeps them, because MUF can observe
 their order, with each object's `Location` as a redundant cross-check.
 `World.RepairChains` rebuilds any chain that disagrees, comparing *membership*
@@ -135,6 +142,20 @@ Adding a case is a `Case{Source: ...}` in `golden_test.go`. The snippet becomes
 `test.muf`, reachable through an exit named `test`, and the harness compares
 what each server prints.
 
+Each command is bounded by a marker pose, so the harness knows when a command
+has finished rather than guessing. **A session that holds the input line
+cannot use the marker**: the MUF editor reads `!pose EMERALDDONE` as the
+editor command `x`, and a program waiting on a `READ` eats it outright.
+`RunOracleQuiet` drives the C server without markers, waiting for silence
+instead; it is slower, so it is used only where the marker cannot be
+(`editor_test.go`). `READ` has no such workaround, because the *reply* is what
+the program consumes, and so is covered by unit tests in `internal/game`.
+
+The C server writes into its game directory — a dump, and the macro table — so
+it is given a copy of the fixture. Without that, a case defining a macro leaves
+it behind for this server to import, and the two servers stop running the same
+world.
+
 ## MPI
 
 `internal/mpi` evaluates the macro language inside property values. It is
@@ -164,6 +185,31 @@ test harness's own marker.
 A program runs at the **lower** of its own mucker level and its owner's, which
 is `find_mlev`. A wizard with no mucker bits has level 0, so programs it owns
 are capped there.
+
+## The MUF editor
+
+`internal/game/edit.go` is `src/edit.c`. A session holds the program's text in
+`Server.editors`, keyed by player, and the program is flagged `INTERNAL` for as
+long as one is open, which is what stops two people editing it at once. Nothing
+is written until `q`; `x` discards.
+
+The parse is the part worth knowing. **Arguments come first and the command
+last**, and only the *first character of the last word* is looked at: `3 5 d`
+deletes lines 3 to 5, `1 n` turns line numbers on, and `look` is the list
+command because it starts with `l`. Anything unrecognised is "Illegal editor
+command." — including `WHO`, which the descriptor layer hands to the editor
+rather than answering itself.
+
+Several behaviours look like bugs and are not. Entering the editor prints
+"Line not available for display.", because the current line starts at zero and
+the walk runs off the buffer. A bare `def` is the *delete* command, because
+upstream only recognises `def` while parsing a second word. `u` never compiles
+anything, so it says there is nothing to disassemble until `c` has run. The
+current line lives on the program rather than the session, so reopening an
+editor resumes where the last one left off (`Server.editLine`, not persisted).
+
+`h` is the one deliberate divergence: upstream reads `data/edit-help.txt` and
+this has no game directory, so the summary is built in.
 
 ## Traps
 
@@ -254,13 +300,14 @@ Worth knowing before "fixing" something that looks wrong:
 
 ## Status
 
-M0–M3 are done: the server imports the starter world, accepts real MUCK clients
-over TLS and WebSocket, and supports look, movement, speech, building and basic
-admin commands.
+M0–M6 are done, and M7 is under way.
 
-MUF and MPI are not implemented. Exits that run programs say so rather than
-working, and descriptions render as stored rather than evaluated. M4 is the MUF
-compiler and VM, M5 the remaining primitives, M6 MPI. The plan flags the
-golden-output harness — running a scripted session against both this server and
-a C Fuzzball built from the submodule, and diffing — as the thing to build
-*before* the primitive grind, or M5 and M6 become unverifiable.
+The server imports the starter world, accepts real MUCK clients over TLS and
+WebSocket, runs MUF and evaluates MPI, and supports look, movement, speech,
+building and admin commands. Programs can suspend themselves on `READ`, `SLEEP`
+and `EVENT_WAITFOR`, and the MUF editor works, so programs can be written on
+the server rather than only imported.
+
+What is left: about 131 of the 417 primitives, about 89 of the 140 MPI
+functions, MCP 2.1 framing and MCP-GUI, `@force`/`@toad`/`@boot`/`@stats`,
+`@sanity` and `@sanfix` as Postgres-side checks, and all of M8.

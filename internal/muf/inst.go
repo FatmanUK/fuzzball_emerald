@@ -117,6 +117,9 @@ type Program struct {
 	Procs map[string]int
 	// Publics maps a name, folded, to the address callers reach with CALL.
 	Publics map[string]*Public
+	// PublicOrder lists the folded public names in declaration order, which
+	// is the order the editor's "p" command lists them in.
+	PublicOrder []string
 
 	// MLevel is the mucker level the program was compiled at, which bounds
 	// what its primitives may do.

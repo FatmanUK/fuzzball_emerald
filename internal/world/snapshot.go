@@ -14,13 +14,21 @@ type Snapshot struct {
 	// otherwise. The table is small and changes rarely, so there is no
 	// point tracking individual parameters.
 	Tune map[string]string
+	// Programs carries the MUF source of every program saved since the last
+	// snapshot. Source is held apart from the object because the editor
+	// rewrites text without changing any field on the object itself.
+	Programs map[ref.Ref]string
+	// Macros carries the whole editor macro table when it changed, for the
+	// same reason Tune does.
+	Macros []Macro
 	// Top is the world's ref ceiling at the time of the snapshot.
 	Top ref.Ref
 }
 
 // Empty reports whether there is nothing to write.
 func (s Snapshot) Empty() bool {
-	return len(s.Objects) == 0 && len(s.Deleted) == 0 && s.Tune == nil
+	return len(s.Objects) == 0 && len(s.Deleted) == 0 && s.Tune == nil &&
+		len(s.Programs) == 0 && s.Macros == nil
 }
 
 // TakeSnapshot copies out everything changed since the last call and clears
@@ -46,6 +54,19 @@ func (w *World) TakeSnapshot() Snapshot {
 		clear(w.deleted)
 	}
 
+	if len(w.progDirty) > 0 {
+		s.Programs = make(map[ref.Ref]string, len(w.progDirty))
+		for r := range w.progDirty {
+			s.Programs[r] = w.programs[r]
+		}
+		clear(w.progDirty)
+	}
+
+	if w.macrosDirty {
+		s.Macros = w.Macros()
+		w.macrosDirty = false
+	}
+
 	if w.tuneDirty {
 		s.Tune = make(map[string]string)
 		for _, p := range w.Tune.Params() {
@@ -67,5 +88,9 @@ func (w *World) MarkAllDirty() {
 	for r := range w.objs {
 		w.dirty[r] = struct{}{}
 	}
+	for r := range w.programs {
+		w.progDirty[r] = struct{}{}
+	}
 	w.tuneDirty = true
+	w.macrosDirty = true
 }

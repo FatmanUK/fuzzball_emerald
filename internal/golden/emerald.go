@@ -36,6 +36,13 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 	for _, p := range res.Programs {
 		w.SetSource(p.Ref, p.Source)
 	}
+	macros := make([]world.Macro, 0, len(res.Macros))
+	for _, m := range res.Macros {
+		macros = append(macros, world.Macro{
+			Name: m.Name, Definition: m.Definition, Owner: m.Owner,
+		})
+	}
+	w.SetMacros(macros)
 
 	// A short interval, because the tick is what wakes a sleeping program.
 	engine := world.NewEngine(w, world.Options{Interval: 50 * time.Millisecond})
@@ -45,11 +52,6 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 	go func() { done <- engine.Run(runCtx) }()
 
 	gs := game.New(engine, game.Options{})
-	macros := map[string]string{}
-	for _, m := range res.Macros {
-		macros[strings.ToLower(m.Name)] = m.Definition
-	}
-	gs.SetMacros(macros)
 	engine.OnTick(gs.OnTick())
 
 	d, err := gs.Connect(session.TransportLine, "golden")

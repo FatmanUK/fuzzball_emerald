@@ -30,6 +30,13 @@ func startWSS(t *testing.T) (url string, client *tls.Config) {
 	for _, prog := range res.Programs {
 		res.World.SetSource(prog.Ref, prog.Source)
 	}
+	macros := make([]world.Macro, 0, len(res.Macros))
+	for _, m := range res.Macros {
+		macros = append(macros, world.Macro{
+			Name: m.Name, Definition: m.Definition, Owner: m.Owner,
+		})
+	}
+	res.World.SetMacros(macros)
 
 	engine := world.NewEngine(res.World, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -37,11 +44,6 @@ func startWSS(t *testing.T) (url string, client *tls.Config) {
 	go func() { done <- engine.Run(ctx) }()
 
 	gs := game.New(engine, game.Options{})
-	macros := map[string]string{}
-	for _, m := range res.Macros {
-		macros[strings.ToLower(m.Name)] = m.Definition
-	}
-	gs.SetMacros(macros)
 
 	serverTLS := selfSignedTLS(t)
 
