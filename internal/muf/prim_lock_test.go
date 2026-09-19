@@ -53,6 +53,9 @@ type lockTestHost struct {
 	controlsProcessResult bool
 	killPIDCalls          []int
 	killPIDResult         bool
+
+	forkCalls  []*Frame
+	forkResult int
 }
 
 type controlsProcessCall struct {
@@ -156,6 +159,11 @@ func (h *lockTestHost) ControlsProcess(callerUID ref.Ref, pid int) bool {
 func (h *lockTestHost) KillPID(pid int) bool {
 	h.killPIDCalls = append(h.killPIDCalls, pid)
 	return h.killPIDResult
+}
+
+func (h *lockTestHost) Fork(child *Frame) int {
+	h.forkCalls = append(h.forkCalls, child)
+	return h.forkResult
 }
 
 const testProgram ref.Ref = 99

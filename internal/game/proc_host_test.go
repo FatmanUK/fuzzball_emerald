@@ -7,8 +7,30 @@ import (
 	"testing"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
+
+// secondSessionFor connects a second descriptor bound to an already-existing
+// player, for a test that needs one player to be reachable on two
+// descriptors at once — e.g. one busy in a READ while the other sends
+// commands, which a single descriptor cannot do since a line typed mid-READ
+// goes to the reading program rather than the command parser.
+func secondSessionFor(t *testing.T, h *harness, who ref.Ref) *session.Descriptor {
+	t.Helper()
+	d, err := h.s.Connect(session.TransportLine, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		h.s.Hub().Bind(d, who, w.Now())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	drainDescriptor(d)
+	t.Cleanup(func() { d.Close() })
+	return d
+}
 
 // makeProgrammer creates a player with mucker level 3, so a program it owns
 // compiles with a real effective mlevel rather than being capped at 0 the
@@ -370,5 +392,213 @@ func TestKillPrimitiveStopsASuspendedProgram(t *testing.T) {
 	h.send("Igor")
 	if got := h.out(); strings.Contains(got, "Hello, Igor") {
 		t.Errorf("the killed program should not have resumed:\n%s", got)
+	}
+}
+
+// TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer pins the fix to
+// internal/muf/internal/gen/gen_mlev.py this session made: KILL's own
+// "mlev < 3 && !control_process(...)" is a conditional check, not a flat
+// floor, but the generator's exemption regex did not recognise
+// "control_process(" (only "controls(") and so had wrongly generated
+// "KILL": 3 as an unconditional floor — which would have silently blocked
+// this exact case, a mlev-2 player killing their own suspended program,
+// with the wrong ("Permission denied.", generic) message before KILL's own
+// ownership-aware check ever ran.
+func TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	who, d := connectAs(t, h, "SoloPlayer", false)
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		// Mucker level 2: enough to call NOTIFY, still below KILL's
+		// conditional floor of 3.
+		w.Get(who).Flags = w.Get(who).Flags.SetMLevel(2)
+		here := w.Get(who).Location
+
+		waiter := w.Create("waits2.muf", ref.TypeProgram, who)
+		waiter.Flags = waiter.Flags.SetMLevel(2)
+		w.SetSource(waiter.Ref, `: main
+  me @ "waiting" notify
+  read
+  pop
+;`)
+		e1 := w.Create("waits2", ref.TypeExit, who)
+		e1.Dest = []ref.Ref{waiter.Ref}
+		if err := w.MoveTo(e1.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sendAs(t, h, d, "waits2")
+
+	var pid int
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		procs := h.s.procs.all()
+		if len(procs) != 1 {
+			t.Fatalf("expected exactly one suspended process, got %d", len(procs))
+		}
+		pid = procs[0].pid
+
+		here := w.Get(who).Location
+		killer := w.Create("selfkill.muf", ref.TypeProgram, who)
+		killer.Flags = killer.Flags.SetMLevel(2)
+		w.SetSource(killer.Ref, fmt.Sprintf(`: main
+  %d kill if "killed" else "notkilled" then me @ swap notify
+;`, pid))
+		e2 := w.Create("selfkill", ref.TypeExit, who)
+		e2.Dest = []ref.Ref{killer.Ref}
+		if err := w.MoveTo(e2.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A second descriptor for the same player: d's first descriptor is still
+	// mid-READ in "waits2", and would swallow "selfkill" as that READ's
+	// input rather than letting it reach the command parser.
+	d2 := secondSessionFor(t, h, who)
+	got := sendAs(t, h, d2, "selfkill")
+	if !strings.Contains(got, "killed") {
+		t.Fatalf("a mlev-2 player should be able to KILL their own process:\n%s", got)
+	}
+	if strings.Contains(got, "Permission denied") {
+		t.Fatalf("KILL should not be blocked by a generic mlev floor here:\n%s", got)
+	}
+}
+
+// TestForkPrimitiveRunsParentAndChildIndependently exercises FORK end to
+// end: the parent finishes its command and reports its child's pid; the
+// child does not run until the process queue is drained (the test harness
+// deliberately does not wire Engine.OnEachOp — see BOOTSTRAP.md), and then
+// reports its own distinct output, proving the two frames are genuinely
+// independent rather than one clobbering the other's stack or variables.
+func TestForkPrimitiveRunsParentAndChildIndependently(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.installProgram(t, "splitter", `: main
+  "shared" var! label
+  fork if
+    "parent:" label @ strcat me @ swap notify
+  else
+    label @ "changed-by-child" label !
+    "child:" label @ strcat me @ swap notify
+  then
+;`)
+
+	h.send("splitter")
+	got := h.out()
+	if !strings.Contains(got, "parent:shared") {
+		t.Fatalf("the parent should report immediately:\n%s", got)
+	}
+	if strings.Contains(got, "child:") {
+		t.Fatalf("the child should not have run yet:\n%s", got)
+	}
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		h.s.Tick(w)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got = h.out()
+	if !strings.Contains(got, "child:changed-by-child") {
+		t.Errorf("the child did not run independently:\n%s", got)
+	}
+}
+
+// TestForkRejectsBelowMlevelThree checks the primitive's own gate end to
+// end, matching upstream's "MUCKER level 3" requirement noted in
+// prim_fork's doc comment. The message is the dispatcher's own generic
+// "Permission denied." (see internal/muf/prim.go's primitive()), not
+// upstream's differently-cased literal — FORK's floor is unconditional, so
+// it is gated by primMLevel rather than a hand-written check; see FORK's own
+// doc comment in internal/muf/prim_proc.go for why that is the convention
+// this codebase already uses for every other unconditional-floor primitive.
+func TestForkRejectsBelowMlevelThree(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		owner := w.Create("NoBits", ref.TypePlayer, ref.Nothing)
+		owner.Owner = owner.Ref
+		here := w.Get(h.wizRef()).Location
+
+		prog := w.Create("weak.muf", ref.TypeProgram, owner.Ref)
+		prog.Flags = prog.Flags.SetMLevel(3)
+		w.SetSource(prog.Ref, ": main fork if \"ok\" else \"ok\" then me @ swap notify ;")
+
+		e := w.Create("weak", ref.TypeExit, owner.Ref)
+		e.Dest = []ref.Ref{prog.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.send("weak")
+	got := h.out()
+	if !strings.Contains(got, "Permission denied.") {
+		t.Fatalf("a program whose owner has no mucker bits should be refused:\n%s", got)
+	}
+}
+
+// TestForkRejectedWhenPlayerProcessLimitExceeded checks processLimitOK's
+// max_plyr_processes gate, and its own documented off-by-one against
+// upstream: the parent's own currently-running process already counts
+// against the limit here, unlike upstream's tqhead-only count. Run as a
+// non-wizard: the harness's own default player is flagged Wizard, which
+// max_plyr_processes deliberately exempts.
+func TestForkRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		if err := w.Tune.SetString("max_plyr_processes", "0"); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, d := connectAs(t, h, "Forker", false)
+	var owner ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		r, ok := w.PlayerNamed("Forker")
+		if !ok {
+			t.Fatal("Forker not found")
+		}
+		owner = r
+		w.Get(owner).Flags = w.Get(owner).Flags.SetMLevel(3)
+		here := w.Get(owner).Location
+
+		prog := w.Create("overfork.muf", ref.TypeProgram, owner)
+		prog.Flags = prog.Flags.SetMLevel(3)
+		w.SetSource(prog.Ref, `: main
+  fork -1 = if
+    "rejected" me @ swap notify
+  else
+    "accepted" me @ swap notify
+  then
+;`)
+
+		e := w.Create("overfork", ref.TypeExit, owner)
+		e.Dest = []ref.Ref{prog.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := sendAs(t, h, d, "overfork")
+	if !strings.Contains(got, "Event killed.  Timequeue table full.") {
+		t.Errorf("missing the process-limit message:\n%s", got)
+	}
+	if !strings.Contains(got, "rejected") {
+		t.Errorf("FORK should have returned -1:\n%s", got)
 	}
 }

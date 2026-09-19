@@ -53,7 +53,6 @@ var primMLevel = map[string]int{
 	"IGNORE_ADD":           3,
 	"IGNORE_DEL":           3,
 	"IGNORING?":            3,
-	"KILL":                 3,
 	"LASTDESCR":            3,
 	"MOVEPENNIES":          4,
 	"MOVETO":               3,

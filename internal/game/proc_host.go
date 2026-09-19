@@ -2,7 +2,9 @@ package game
 
 import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
 // ForceLevel, IsPID and Instances implement muf.Host for FORCE_LEVEL,
@@ -67,4 +69,53 @@ func (h *mufHost) KillPID(pid int) bool {
 	}
 	h.s.procs.remove(pid)
 	return true
+}
+
+// Fork implements muf.Host for FORK, upstream's add_muf_delay_event(0, ...)
+// call: register child as a new background process, subject to the same
+// process-count limits every other way onto the queue respects.
+func (h *mufHost) Fork(child *muf.Frame) int {
+	if !h.s.processLimitOK(h.w, h.caller) {
+		// Two spaces after the period is upstream's own literal wording.
+		h.s.notify(h.w, h.caller, "Event killed.  Timequeue table full.")
+		return 0
+	}
+
+	proc := &process{
+		frame:   child,
+		player:  h.caller,
+		program: child.Prog.Ref,
+		trigger: child.Trig,
+		descr:   child.Descr,
+		command: "Forked Process.",
+		started: h.w.Now(),
+	}
+	pid := h.s.procs.add(proc)
+	child.PID = pid
+	return pid
+}
+
+// processLimitOK is upstream's add_event process-count gate: the system-wide
+// max_process_limit applies to everyone, wizards included, but
+// max_plyr_processes exempts a wizard. Both counts are taken before the new
+// process would be added, matching upstream's own pre-increment check.
+//
+// Unlike upstream's tqhead, procQueue also holds the process currently
+// running synchronously in the foreground — the one making this very check —
+// so both counts run one process higher here than the equivalent upstream
+// count would for the same state. Documented rather than corrected: matching
+// it exactly would mean threading "which process is this check being made
+// from" through Host, for a one-off difference at the very edge of a tune
+// parameter's default.
+func (s *Server) processLimitOK(w *world.World, player ref.Ref) bool {
+	if int64(len(s.procs.all())) > w.Tune.Int("max_process_limit") {
+		return false
+	}
+	if int64(len(s.procs.forPlayer(player))) <= w.Tune.Int("max_plyr_processes") {
+		return true
+	}
+	if o := w.Get(player); o != nil && o.Flags.IsWizard() {
+		return true
+	}
+	return false
 }

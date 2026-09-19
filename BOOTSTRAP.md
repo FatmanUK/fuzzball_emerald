@@ -64,13 +64,39 @@ the test harness (`internal/game/game_test.go`'s `newHarness`): existing
 sleep/process tests (`TestSleepingProgramResumes` and others) depend on
 nothing resuming a suspended program except an explicit `h.s.Tick(w)` call,
 and auto-draining there would make their assertions race their own setup.
-Still to come from the Phase 2 plan, in order: `FORK`, `QUEUE`, `FORCE`/
-`FORCEDBY`/`FORCEDBY_ARRAY` (share permission logic with
-`internal/game/wiz.go`'s `@force`), `GETPIDS`/`GETPIDINFO`, and last
-`WATCHPID` (needs a still-missing generic event-delivery mechanism built
-alongside it).
 
-1. **Port more MUF primitives.** 96 of 417 are still unimplemented (see
+`FORK` has landed too, the architecturally hard one. `Frame.fork()`
+(`internal/muf/fork.go`) is a pure, independently-tested deep-copy of a
+frame's whole state — stack, vars, lvars, scopes, calls, fors, trys — using
+the same `deepCopy` helper `DEEP_COPY` already relies on, since Go's arrays
+are ordinary shared `*Array` pointers between `Value`s until something
+decouples them, unlike a plain stack `DUP`. `Host.Fork`
+(`internal/game/proc_host.go`) registers the copy as an ordinary background
+`process`; no special-cased scheduling was needed beyond `OnEachOp`, since a
+freshly-added `procRunnable` process is already exactly what `Tick` drains.
+`processLimitOK` ports `add_event`'s `max_process_limit`/`max_plyr_processes`
+gate, with one documented, deliberate divergence: unlike upstream's
+`tqhead`, `procQueue` also holds the process currently running in the
+foreground — the one making the check — so both counts run one process
+higher here than upstream's equivalent count would for the same state.
+
+Porting `FORK` also surfaced a real bug in `internal/muf/internal/gen/gen_mlev.py`,
+fixed this session: its exemption regex recognised `controls(` but not
+`control_process(`, so `KILL`'s own `mlev < 3 && !control_process(...)` — a
+conditional check with an ownership escape hatch, not a flat floor — had
+been wrongly generated as an unconditional `"KILL": 3` in `mlev_gen.go`.
+That silently blocked a mlev-1 player from killing their own suspended
+program with the wrong, generic message, before `KILL`'s own ownership-aware
+check ever ran. Regenerating after the fix removed the false entry;
+`TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer`
+(`internal/game/proc_host_test.go`) pins the corrected behaviour.
+
+Still to come from the Phase 2 plan, in order: `QUEUE`, `FORCE`/`FORCEDBY`/
+`FORCEDBY_ARRAY` (share permission logic with `internal/game/wiz.go`'s
+`@force`), `GETPIDS`/`GETPIDINFO`, and last `WATCHPID` (needs a still-missing
+generic event-delivery mechanism built alongside it).
+
+1. **Port more MUF primitives.** 95 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -153,7 +179,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~316 primitives
+internal/muf/           — instruction set, VM/interpreter, ~317 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -385,8 +411,9 @@ enforcement — see `git log` for the exact commits):
   - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
     `@lock` actually gates it)
   - the `"proc"` case in `TestAgainstFuzzball` (`PID`, `ISPID?`,
-    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`)
-- Primitive coverage: **316 of 417** implemented
+    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`) and the
+    `"fork"` case (parent/child independence)
+- Primitive coverage: **317 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

@@ -196,6 +196,12 @@ type Host interface {
 	// KillPID is upstream's dequeue_process: removes pid if it names a live
 	// process, and reports whether it did.
 	KillPID(pid int) bool
+	// Fork registers child — already built by FORK's own fork() — as a new
+	// background process and returns its pid, upstream's add_muf_delay_event
+	// called with a zero delay. It returns 0, having already notified the
+	// process's own player why, when the process or player process-count
+	// limit is exceeded — upstream's "Event killed.  Timequeue table full."
+	Fork(child *Frame) int
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

@@ -551,6 +551,23 @@ public foo
   "after" ts
 ;`,
 	},
+	{
+		// FORK: the child runs independently of the parent, on its own copy
+		// of every variable — mutating "label" in the child must not be
+		// visible to the parent, which already reported its own value by
+		// the time the child gets to run.
+		Name: "fork",
+		Source: tellPrelude + `: main
+  "shared" var! label
+  fork if
+    "parent:" label @ strcat ts
+  else
+    label @ "changed" strcat label !
+    "child:" label @ strcat ts
+  then
+;`,
+		Pause: time.Second,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

@@ -83,6 +83,7 @@ def main():
                 if 'mlev' not in cond:
                     continue
                 if re.search(r'permissions\s*\(|controls\s*\(|'
+                             r'control_process\s*\(|'
                              r'prop_read_perms|prop_write_perms|'
                              r'Wizard\s*\(|test_lock|already_created|'
                              r'Typeof\s*\(|FLAGS\s*\(', cond):

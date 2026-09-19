@@ -145,6 +145,18 @@ func (q *procQueue) forProgram(prog ref.Ref) []*process {
 	return out
 }
 
+// forPlayer lists the processes running for one player, for the
+// max_plyr_processes check FORK and QUEUE both make before adding another.
+func (q *procQueue) forPlayer(player ref.Ref) []*process {
+	var out []*process
+	for _, p := range q.all() {
+		if p.player == player {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // Tick runs whatever is due. The engine calls it once per flush interval,
 // which is also how often a sleeping program can wake.
 func (s *Server) Tick(w *world.World) {

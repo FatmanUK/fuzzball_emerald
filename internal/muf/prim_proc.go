@@ -134,3 +134,36 @@ func init() {
 		return nil, f.Push(Bool(h.KillPID(pid)))
 	})
 }
+
+// FORK is a port of prim_fork (src/p_misc.c). The frame-duplicating half is
+// fork() in fork.go, a pure function tested on its own; this primitive is
+// just the PC adjustment fork() leaves to its caller, the child's own "0"
+// marker, and forwarding to the host to register it. Unlike KILL's mlev
+// check, FORK's own "if (mlev < 3) abort_interp(...)" is a genuine
+// unconditional floor with no ownership escape hatch, so it is left to
+// primMLevel (mlev_gen.go already records "FORK": 3) and the dispatcher's
+// own generic message, the same convention every other primitive with an
+// unconditional floor uses — see prim.go's primitive() — rather than
+// duplicated here with upstream's own differently-worded, differently-cased
+// literal, which the dispatcher's gate would pre-empt before this function
+// ever ran anyway.
+func init() {
+	register("FORK", func(f *Frame) (*Result, error) {
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		child := f.fork()
+		child.PC++
+		if err := child.Push(Int(0)); err != nil {
+			return nil, err
+		}
+
+		pid := h.Fork(child)
+		if pid == 0 {
+			return nil, f.Push(Int(-1))
+		}
+		return nil, f.Push(Int(int64(pid)))
+	})
+}

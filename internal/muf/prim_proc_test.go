@@ -340,3 +340,88 @@ func TestKillAtMlevelThreeSkipsControlCheck(t *testing.T) {
 		t.Fatalf("ControlsProcess should not be consulted at mlev 3")
 	}
 }
+
+// TestForkGatedByGeneratedMlevFloor checks FORK's mlev gate at the layer it
+// actually runs at: mlev_gen.go's "FORK": 3 (a genuine unconditional floor,
+// unlike KILL's own ownership-escaping check), enforced by the dispatcher in
+// primitive() before FORK's own primFunc ever runs — which is why FORK's
+// primFunc has no mlev check of its own to test directly, unlike KILL's.
+func TestForkGatedByGeneratedMlevFloor(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.Prog.MLevel = 2
+
+	_, err := f.primitive(PrimNumber("FORK"))
+	if err == nil || err.Error() != "Permission denied." {
+		t.Fatalf("err = %v, want the dispatcher's generic message", err)
+	}
+	if len(h.forkCalls) != 0 {
+		t.Fatal("Host.Fork should not be called below mlevel 3")
+	}
+}
+
+// TestForkBuildsAnIndependentChildStartingAfterItself checks the pieces
+// FORK's own primFunc is responsible for, on top of fork()'s own tested
+// deep-copy: the child's PC lands one past the FORK instruction, it starts
+// with a 0 already on its stack, and it is the exact frame handed to
+// Host.Fork — not some other copy.
+func TestForkBuildsAnIndependentChildStartingAfterItself(t *testing.T) {
+	h := newLockTestHost()
+	h.forkResult = 7
+	f := newTestFrame(h)
+	f.Prog.MLevel = 3
+	f.PC = 10
+	f.Stack = []Value{Int(123)}
+
+	if _, err := prims[PrimNumber("FORK")](f); err != nil {
+		t.Fatalf("FORK: %v", err)
+	}
+
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeInteger || v.Num != 7 {
+		t.Fatalf("parent result = %+v, want the child's pid, 7", v)
+	}
+	// The primitive dispatcher advances f.PC itself after a plain primFunc
+	// returns; FORK's own primFunc must not have touched it, so it is still
+	// sitting on the FORK instruction here.
+	if f.PC != 10 {
+		t.Fatalf("f.PC = %d, want 10 (unadvanced — the dispatcher moves it)", f.PC)
+	}
+
+	if len(h.forkCalls) != 1 {
+		t.Fatalf("Host.Fork called %d times, want 1", len(h.forkCalls))
+	}
+	child := h.forkCalls[0]
+	if child.PC != 11 {
+		t.Errorf("child.PC = %d, want 11 (one past FORK)", child.PC)
+	}
+	// The parent's own stack (still holding its 123) must be untouched; the
+	// child got its own copy plus the pushed 0.
+	if len(f.Stack) != 1 || f.Stack[0].Num != 123 {
+		t.Errorf("parent stack = %+v, should be unaffected by the fork", f.Stack)
+	}
+	if len(child.Stack) != 2 || child.Stack[0].Num != 123 || child.Stack[1].Num != 0 {
+		t.Errorf("child stack = %+v, want [123 0]", child.Stack)
+	}
+}
+
+func TestForkPushesMinusOneWhenTheHostRefuses(t *testing.T) {
+	h := newLockTestHost()
+	h.forkResult = 0
+	f := newTestFrame(h)
+	f.Prog.MLevel = 3
+
+	if _, err := prims[PrimNumber("FORK")](f); err != nil {
+		t.Fatalf("FORK: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeInteger || v.Num != -1 {
+		t.Fatalf("result = %+v, want -1", v)
+	}
+}
