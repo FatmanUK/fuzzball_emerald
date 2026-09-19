@@ -93,6 +93,28 @@ func (h *fakeHost) ParseProp(ref.Ref, string, string, bool) (string, error) {
 	return "", nil
 }
 
+// The MCP methods are stubs: this host has no connections, so a program that
+// reaches for one gets the same answer as a player with no MCP-capable client.
+func (h *fakeHost) MCPMinLevel() int                   { return 1 }
+func (h *fakeHost) MCPSupports(int, string) (int, int) { return 0, 0 }
+func (h *fakeHost) MCPSend(int, string, string, []muf.MCPArg) error {
+	return nil
+}
+func (h *fakeHost) MCPBind(ref.Ref, string, string, int) error   { return nil }
+func (h *fakeHost) MCPRegister(string, int, int, int, int) error { return nil }
+
+func (h *fakeHost) GUINew(int, *muf.Frame) (string, error) { return "", nil }
+func (h *fakeHost) GUIDialog(string) (int, bool)           { return 0, false }
+func (h *fakeHost) GUIClose(string) bool                   { return false }
+func (h *fakeHost) GUIValue(string, string, int) (string, bool) {
+	return "", false
+}
+func (h *fakeHost) GUIValueLines(string, string) ([]string, bool) { return nil, false }
+func (h *fakeHost) GUIValues(string) ([]string, [][]string, bool) {
+	return nil, nil, false
+}
+func (h *fakeHost) GUISetValue(string, string, []string) {}
+
 func (h *fakeHost) Now() time.Time        { return time.Unix(1_700_000_000, 0).UTC() }
 func (h *fakeHost) Uptime() time.Duration { return time.Hour }
 func (h *fakeHost) Version() string       { return "test" }
@@ -358,8 +380,7 @@ func TestDivisionByZeroYieldsZeroAndAFlag(t *testing.T) {
 func TestUnimplementedPrimitiveIsReported(t *testing.T) {
 	// A primitive the compiler knows but the interpreter does not must say
 	// so, rather than silently doing nothing.
-	// An MCP-GUI primitive, which needs the MCP machinery from M7.
-	runFails(t, ": main GUI_DLOG_CREATE ;", "not implemented yet")
+	runFails(t, ": main CHECKARGS ;", "not implemented yet")
 }
 
 // TestRunawayProgramIsStopped checks the instruction ceiling.

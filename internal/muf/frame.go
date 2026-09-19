@@ -93,12 +93,48 @@ type Host interface {
 	// server joins, not layers of one another.
 	ParseProp(obj ref.Ref, path, arg string, private bool) (string, error)
 
+	// MCPMinLevel is the mucker level the mcp_muf_mlev parameter names.
+	MCPMinLevel() int
+
+	// MCPSupports reports the version of an MCP package a connection
+	// agreed to, as major and minor; both zero means it did not.
+	MCPSupports(descr int, pkg string) (int, int)
+	// MCPSend sends an out-of-band message. Args pairs a name with its
+	// lines, in the order given.
+	MCPSend(descr int, pkg, name string, args []MCPArg) error
+	// MCPBind registers a program's procedure as the handler for one
+	// message, which is how a MUF program serves its own package.
+	MCPBind(prog ref.Ref, pkg, name string, addr int) error
+	// MCPRegister offers a package on a connection's behalf.
+	MCPRegister(pkg string, minMajor, minMinor, maxMajor, maxMinor int) error
+
+	// GUINew opens a dialog on a connection and returns its id.
+	GUINew(descr int, frame *Frame) (string, error)
+	// GUIDialog reports which connection a dialog is on.
+	GUIDialog(id string) (descr int, ok bool)
+	// GUIClose forgets a dialog.
+	GUIClose(id string) bool
+	// GUIValue reads one line of a control's value, and GUIValues every
+	// control's first line.
+	GUIValue(id, ctrl string, line int) (string, bool)
+	GUIValueLines(id, ctrl string) ([]string, bool)
+	GUIValues(id string) ([]string, [][]string, bool)
+	// GUISetValue records a value locally as well as sending it, so a
+	// program reads back what it just set.
+	GUISetValue(id, ctrl string, lines []string)
+
 	// Now is the server's clock, which tests replace.
 	Now() time.Time
 	// Uptime is how long the server has been running.
 	Uptime() time.Duration
 	// Version identifies the server.
 	Version() string
+}
+
+// MCPArg is one argument of an outgoing MCP message: a name and its lines.
+type MCPArg struct {
+	Name  string
+	Lines []string
 }
 
 // callSite records where a call came from, so EXIT can return to it.

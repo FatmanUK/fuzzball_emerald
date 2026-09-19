@@ -37,14 +37,14 @@ The MUF editor works, so programs can be written on the server instead of only
 imported: `@program` makes one and opens it, `@edit` reopens it, `@list` prints
 it. The wizard commands are in — `@force`, `@toad`, `@boot`, `@stats`,
 `@pcreate` — along with `@sanity`, `@sanfix` and `@sanchange` for a damaged
-database, and MCP 2.1 is negotiated with clients that speak it.
+database, and MCP 2.1 and MCP-GUI are negotiated with clients that speak them,
+so a program can put a dialog on a client that can show one.
 
 Each of those is checked against a real Fuzzball 7 line for line, not just
 against a reading of its source.
 
-286 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
-real program may still stop at one it needs. What is left mostly needs MCP from
-M7 rather than just an implementation.
+301 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
+real program may still stop at one it needs.
 
 ## Building
 

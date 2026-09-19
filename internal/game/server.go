@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
+	"github.com/FatmanUK/fuzzball_emerald/internal/mcp"
+	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
@@ -54,6 +56,16 @@ type Server struct {
 	// procs holds suspended programs: those sleeping, waiting for input, or
 	// waiting for an event.
 	procs *procQueue
+
+	// dialogs holds the MCP-GUI dialogs open on every connection, and
+	// dialogOwner the frame that opened each one.
+	dialogs     *mcp.Dialogs
+	dialogOwner map[string]*muf.Frame
+
+	// mcpPackages is what a new connection is offered, and mcpBindings
+	// maps a message to the program procedure that claimed it.
+	mcpPackages []mcp.Package
+	mcpBindings map[mcpBinding]mcpTarget
 }
 
 // OnShutdown sets what @shutdown calls.
@@ -75,7 +87,7 @@ func New(engine *world.Engine, opts Options) *Server {
 	if len(welcome) == 0 {
 		welcome = defaultWelcome()
 	}
-	return &Server{
+	s := &Server{
 		engine:   engine,
 		hub:      session.NewHub(),
 		log:      opts.Logger,
@@ -84,8 +96,14 @@ func New(engine *world.Engine, opts Options) *Server {
 		programs: map[ref.Ref]compiled{},
 		procs:    newProcQueue(),
 		editors:  map[ref.Ref]*editSession{},
-		editLine: map[ref.Ref]int{},
+
+		dialogs:     mcp.NewDialogs(),
+		dialogOwner: map[string]*muf.Frame{},
+		mcpBindings: map[mcpBinding]mcpTarget{},
+		editLine:    map[ref.Ref]int{},
 	}
+	s.installMCPHandlers()
+	return s
 }
 
 func defaultWelcome() []string {
@@ -168,6 +186,9 @@ func (s *Server) Input(d *session.Descriptor, line string) {
 // Disconnect tears a connection down.
 func (s *Server) Disconnect(d *session.Descriptor) {
 	_ = s.engine.Go(func(w *world.World) {
+		// A dialog cannot be closed from a connection that has gone,
+		// so anything still open on it is forgotten here.
+		s.closeDialogsFor(d.ID)
 		if d.Connected {
 			s.announceDisconnect(w, d)
 			s.log.Info("disconnected",

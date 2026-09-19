@@ -9,7 +9,7 @@ import (
 )
 
 func TestSendAndClose(t *testing.T) {
-	d := newDescriptor(1, TransportLine, "host", time.Now())
+	d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
 	d.Send("hello")
 	select {
 	case got := <-d.Output():
@@ -34,7 +34,7 @@ func TestSendAndClose(t *testing.T) {
 }
 
 func TestCloseIsIdempotent(t *testing.T) {
-	d := newDescriptor(1, TransportLine, "host", time.Now())
+	d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
 	d.Close()
 	d.Close()
 	d.Close()
@@ -46,7 +46,7 @@ func TestCloseIsIdempotent(t *testing.T) {
 // a sender is a data race, and sending on a closed channel panics outright.
 func TestSendAndCloseDoNotRace(t *testing.T) {
 	for i := 0; i < 50; i++ {
-		d := newDescriptor(1, TransportLine, "host", time.Now())
+		d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
 		var wg sync.WaitGroup
 		wg.Add(3)
 
@@ -75,7 +75,7 @@ func TestSendAndCloseDoNotRace(t *testing.T) {
 }
 
 func TestOverflowClosesRatherThanBlocking(t *testing.T) {
-	d := newDescriptor(1, TransportLine, "host", time.Now())
+	d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
 	// Nobody is draining, so the buffer fills and the descriptor is dropped
 	// rather than the sender stalling.
 	done := make(chan struct{})
@@ -99,7 +99,7 @@ func TestOverflowClosesRatherThanBlocking(t *testing.T) {
 }
 
 func TestDrainReturnsBufferedOutput(t *testing.T) {
-	d := newDescriptor(1, TransportLine, "host", time.Now())
+	d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
 	d.Send("one")
 	d.Send("two")
 	d.Close()

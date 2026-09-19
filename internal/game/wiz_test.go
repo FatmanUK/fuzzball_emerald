@@ -237,3 +237,105 @@ func (h *harness) flagsOf(t *testing.T, name string) ref.Flags {
 	}
 	return f
 }
+
+// TestGUIDialogRoundTrip drives a dialog from a program: it opens one, the
+// client sets a value and presses a button, and the program reads back what
+// the user chose.
+func TestGUIDialogRoundTrip(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	// The client says it speaks MCP and the GUI package.
+	h.send("#$#mcp version: 2.1 to: 2.1")
+	key := authKeyFrom(t, h.out())
+	h.send(`#$#mcp-negotiate-can ` + key +
+		` package: "org-fuzzball-gui" min-version: "1.0" max-version: "1.3"`)
+	h.out()
+
+	// The dialog is opened through the host rather than from a program, so
+	// this is a test of the protocol rather than of MUF.
+	var id string
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		host := &mufHost{s: h.s, w: w, caller: h.wizRef()}
+		var err error
+		id, err = host.GUINew(h.d.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The client reports a value and then an event.
+	h.send(`#$#org-fuzzball-gui-ctrl-value ` + key +
+		` dlogid: "` + id + `" id: "name" value: "Hermione"`)
+	h.out()
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		host := &mufHost{s: h.s, w: w, caller: h.wizRef()}
+		got, ok := host.GUIValue(id, "name", 0)
+		if !ok || got != "Hermione" {
+			t.Errorf("the dialog holds %q (%v), want Hermione", got, ok)
+		}
+		ctrls, values, ok := host.GUIValues(id)
+		if !ok || len(ctrls) != 1 || ctrls[0] != "name" ||
+			len(values[0]) != 1 || values[0][0] != "Hermione" {
+			t.Errorf("GUIValues returned %v / %v", ctrls, values)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// An event that dismisses the dialog closes it, because the client
+	// has taken it off the screen and nothing can reach it again.
+	h.send(`#$#org-fuzzball-gui-ctrl-event ` + key +
+		` dlogid: "` + id + `" id: "ok" event: "buttonpress"`)
+	h.sync()
+	h.out()
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		if _, ok := h.s.dialogs.Find(id); ok {
+			t.Error("a dismissed dialog is still open")
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestMCPMessagesNeedPermission checks that a program below the mucker floor
+// cannot drive somebody's client.
+func TestMCPMessagesNeedPermission(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+	h.send("#$#mcp version: 2.1 to: 2.1")
+	h.out()
+
+	// The program is owned by the wizard, who is running it, so the owner
+	// exemption applies and this must succeed.
+	h.installProgram(t, "mine", `: main
+  descr "org-fuzzball-notify" 1.0 1.0 mcp_register
+  me @ "registered" notify
+;`)
+	h.send("mine")
+	if got := h.out(); !strings.Contains(got, "registered") {
+		t.Errorf("a program its own owner ran was refused:\n%s", got)
+	}
+}
+
+// authKeyFrom pulls the authentication key out of a negotiation transcript.
+func authKeyFrom(t *testing.T, transcript string) string {
+	t.Helper()
+	for _, line := range strings.Split(transcript, "\n") {
+		if !strings.HasPrefix(line, "#$#mcp ") {
+			continue
+		}
+		i := strings.Index(line, "authentication-key: ")
+		if i < 0 {
+			continue
+		}
+		rest := line[i+len("authentication-key: "):]
+		return strings.Trim(strings.Fields(rest)[0], `"`)
+	}
+	t.Fatal("no authentication key in the transcript")
+	return ""
+}

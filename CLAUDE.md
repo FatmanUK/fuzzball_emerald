@@ -235,6 +235,20 @@ registered package it starts with: `org-fuzzball-gui-ctrl-value` belongs to
 `org-fuzzball-gui`, not `org-fuzzball`. Packages are announced in reverse
 registration order, because upstream builds its list by prepending.
 
+The package list lives on the `session.Hub`, not on a descriptor, because
+`MCP_REGISTER` adds to it at runtime and upstream offers such a package to
+everyone who connects afterwards. `Server.installMCPHandlers` fills in the
+handling, which cannot be declared with the packages: a descriptor needs the
+list the moment it is created, before the server exists.
+
+**MCP-GUI** draws dialogs. A dialog's control values live in
+`mcp.Dialogs`, not in the program that opened it, because the client may
+change them while that program is suspended. The MCP and GUI primitives are
+gated by the `mcp_muf_mlev` parameter — a floor the generated mucker table
+cannot express, so `checkMCPPerm` applies it — with upstream's exemption for a
+program run by its own owner. `GUI_CTRL_COMMAND`, `GUI_AVAILABLE` and
+`MCP_SUPPORTS` are not gated, which is also upstream's.
+
 ## Traps
 
 **A MUF program starts with one value on its stack**: the command's argument,
@@ -352,14 +366,14 @@ Worth knowing before "fixing" something that looks wrong:
 
 ## Status
 
-M0–M7 are done, apart from MCP-GUI.
+M0–M7 are done.
 
 The server imports the starter world, accepts real MUCK clients over TLS and
 WebSocket, runs MUF and evaluates MPI, and supports look, movement, speech,
 building and admin commands. Programs can suspend themselves on `READ`, `SLEEP`
 and `EVENT_WAITFOR`, the MUF editor works, so programs can be written on the
-server rather than only imported, and MCP 2.1 is negotiated with clients that
-speak it.
+server rather than only imported, and MCP 2.1 and MCP-GUI are negotiated with
+clients that speak them.
 
-What is left: about 131 of the 417 primitives, about 89 of the 140 MPI
-functions, the MCP-GUI package, and all of M8.
+What is left: 111 of the 417 primitives, about 89 of the 140 MPI functions,
+and all of M8.

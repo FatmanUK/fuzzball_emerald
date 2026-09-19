@@ -71,7 +71,7 @@ type Descriptor struct {
 }
 
 // newDescriptor builds a descriptor. Transports get one from a Hub.
-func newDescriptor(id int, tr Transport, host string, now time.Time) *Descriptor {
+func newDescriptor(id int, tr Transport, host string, now time.Time, packages []mcp.Package) *Descriptor {
 	d := &Descriptor{
 		ID:         id,
 		Transport:  tr,
@@ -83,7 +83,7 @@ func newDescriptor(id int, tr Transport, host string, now time.Time) *Descriptor
 		out:        make(chan string, outputDepth),
 		done:       make(chan struct{}),
 	}
-	d.MCP = mcp.NewFrame(d.sendRaw, MCPPackages())
+	d.MCP = mcp.NewFrame(d.sendRaw, packages)
 	return d
 }
 
@@ -170,17 +170,33 @@ type Hub struct {
 	next     int
 	byID     map[int]*Descriptor
 	byPlayer map[ref.Ref][]*Descriptor
+
+	// packages is what a new connection is offered over MCP. A program
+	// may add to it at runtime, and upstream keeps one such list for the
+	// whole server rather than one per connection.
+	packages []mcp.Package
 }
 
 // NewHub returns an empty hub.
 func NewHub() *Hub {
-	return &Hub{byID: map[int]*Descriptor{}, byPlayer: map[ref.Ref][]*Descriptor{}}
+	return &Hub{
+		byID:     map[int]*Descriptor{},
+		byPlayer: map[ref.Ref][]*Descriptor{},
+		packages: MCPPackages(),
+	}
 }
+
+// MCPPackageList returns what connections are currently offered.
+func (h *Hub) MCPPackageList() []mcp.Package { return h.packages }
+
+// SetMCPPackages replaces that list. Connections already open keep the
+// packages they negotiated.
+func (h *Hub) SetMCPPackages(p []mcp.Package) { h.packages = p }
 
 // Add registers a new connection and returns its descriptor.
 func (h *Hub) Add(tr Transport, host string, now time.Time) *Descriptor {
 	h.next++
-	d := newDescriptor(h.next, tr, host, now)
+	d := newDescriptor(h.next, tr, host, now, h.packages)
 	h.byID[d.ID] = d
 	return d
 }
