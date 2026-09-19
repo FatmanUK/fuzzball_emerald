@@ -33,7 +33,23 @@ instead of moving a player through any exit unconditionally, which it did
 not before. See `internal/game/boolexp.go`, `internal/game/lock_cmd.go`, and
 the plan at `~/.claude/plans/rippling-roaming-backus.md` for what's next.
 
-1. **Port more MUF primitives.** 103 of 417 are still unimplemented (see
+Phase 2 of that plan (process/multitasking primitives) is underway. A design
+pass mapped the whole cluster onto the existing `internal/game/proc.go`
+scheduler (see the plan file for the full breakdown — PID numbering,
+per-primitive design, and an implementation order). The first, lowest-risk
+slice has landed: `Frame.PID`/`Frame.Supplicant` fields, and the primitives
+`PID`, `ISPID?`, `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT` (`internal/muf/prim_proc.go`,
+`internal/game/proc_host.go`). Still to come from that plan, in order:
+`CANCALL?` (independent — needs the compiler's public-function table exposed
+via `Host`), `KILL` (factor `cmdKill`'s logic out of `internal/game/admin.go`
+first), an engine scheduling-granularity fix (`internal/world/engine.go`,
+needed before `FORK` so a freshly-forked process doesn't wait a full flush
+interval for its first slice), `FORK`, `QUEUE`, `FORCE`/`FORCEDBY`/
+`FORCEDBY_ARRAY` (share permission logic with `internal/game/wiz.go`'s
+`@force`), `GETPIDS`/`GETPIDINFO`, and last `WATCHPID` (needs a still-missing
+generic event-delivery mechanism built alongside it).
+
+1. **Port more MUF primitives.** 98 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -43,8 +59,9 @@ the plan at `~/.claude/plans/rippling-roaming-backus.md` for what's next.
    cannot represent directly — see `mufHost.ParseLock`), and a match
    failure's own message during `_set_lock` is never gated by its `silent`
    flag, only `_set_lock`'s own messages are (see `boolexp.ParseError.Notify`
-   and `Server.setLock`). `FORCE`/`KILL`/`PID`/`FORK`/`QUEUE` (process and
-   multitasking, `src/p_misc.c`) are now the largest remaining chunk.
+   and `Server.setLock`). `FORCE`/`KILL`/`FORK`/`QUEUE` (process and
+   multitasking, `src/p_misc.c`) are the largest remaining chunk, now underway
+   — see Phase 2 of the plan above.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
@@ -115,7 +132,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~309 primitives
+internal/muf/           — instruction set, VM/interpreter, ~314 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -346,7 +363,9 @@ enforcement — see `git log` for the exact commits):
   - `TestWizardCommandsMatchFuzzball`
   - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
     `@lock` actually gates it)
-- Primitive coverage: **309 of 417** implemented
+  - the `"proc"` case in `TestAgainstFuzzball` (`PID`, `ISPID?`,
+    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`)
+- Primitive coverage: **314 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

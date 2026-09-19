@@ -132,6 +132,10 @@ func (h *fakeHost) ParseLock(int, ref.Ref, string) *boolexp.Expr     { return ni
 func (h *fakeHost) UnparseLock(ref.Ref, *boolexp.Expr) string        { return "" }
 func (h *fakeHost) PrettyLock(ref.Ref, *boolexp.Expr) string         { return "*UNLOCKED*" }
 
+func (h *fakeHost) ForceLevel() int       { return 0 }
+func (h *fakeHost) IsPID(int) bool        { return false }
+func (h *fakeHost) Instances(ref.Ref) int { return 0 }
+
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
 	t.Helper()

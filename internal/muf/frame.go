@@ -170,6 +170,16 @@ type Host interface {
 	// the way matchPlayer (ProgUID) would see it rather than as a bare
 	// "#123".
 	PrettyLock(matchPlayer ref.Ref, lock *boolexp.Expr) string
+
+	// ForceLevel is upstream's global force_level: how deeply @force, the
+	// FORCE primitive and the {force} MPI function are currently nested,
+	// shared across all three call paths — FORCE_LEVEL.
+	ForceLevel() int
+	// IsPID reports whether pid names a live process other than the caller's
+	// own frame, which ISPID? checks in addition to the caller's own PID.
+	IsPID(pid int) bool
+	// Instances counts the processes currently running prog — INSTANCES.
+	Instances(prog ref.Ref) int
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.
@@ -260,18 +270,31 @@ type Frame struct {
 	// trigger another lock check cannot recurse forever.
 	Level int
 
+	// PID is this frame's process id, upstream's fr->pid, for the PID and
+	// ISPID? primitives. It is assigned by whoever registers the frame as a
+	// process (internal/game's procQueue) and stays zero for a frame that
+	// never becomes one, such as a lock-triggered program RunLock evaluates
+	// synchronously.
+	PID int
+
+	// Supplicant is upstream's fr->supplicant: the object being tested
+	// against a lock, for a frame a program-type lock constant is running.
+	// It is ref.Nothing outside that context.
+	Supplicant ref.Ref
+
 	host Host
 }
 
 // NewFrame prepares a program to run.
 func NewFrame(p *Program, host Host) *Frame {
 	f := &Frame{
-		Prog:  p,
-		PC:    p.Start,
-		Level: 1,
-		Vars:  make([]Value, len(p.Vars)),
-		LVars: make([]Value, len(p.LVars)),
-		host:  host,
+		Prog:       p,
+		PC:         p.Start,
+		Level:      1,
+		Vars:       make([]Value, len(p.Vars)),
+		LVars:      make([]Value, len(p.LVars)),
+		Supplicant: ref.Nothing,
+		host:       host,
 	}
 	// Every variable starts as integer zero, which is what interp() fills
 	// them with before overwriting the four reserved ones.

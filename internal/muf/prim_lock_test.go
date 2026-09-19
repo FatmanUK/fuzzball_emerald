@@ -41,6 +41,10 @@ type lockTestHost struct {
 	prettyLockArg     *boolexp.Expr
 	prettyLockPlayer  ref.Ref
 	prettyLockStr     string
+
+	forceLevel      int
+	isPIDResult     bool
+	instancesResult int
 }
 
 type setLockCall struct {
@@ -114,6 +118,10 @@ func (h *lockTestHost) Locked(descr, level int, player, thing ref.Ref) (bool, er
 }
 
 func (h *lockTestHost) MaxInterpRecursion() int { return h.maxRecursion }
+
+func (h *lockTestHost) ForceLevel() int       { return h.forceLevel }
+func (h *lockTestHost) IsPID(int) bool        { return h.isPIDResult }
+func (h *lockTestHost) Instances(ref.Ref) int { return h.instancesResult }
 
 const testProgram ref.Ref = 99
 

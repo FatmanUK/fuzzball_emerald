@@ -534,7 +534,7 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 		command: c.verb,
 		started: c.w.Now(),
 	}
-	s.procs.add(proc)
+	f.PID = s.procs.add(proc)
 	s.step(c.w, proc)
 }
 

@@ -530,6 +530,18 @@ var cases = []Case{
   "" parselock unparselock ts
 ;`,
 	},
+	{
+		Name: "proc",
+		Source: tellPrelude + `: main
+  pid t
+  pid ispid? t
+  0 ispid? t
+  -1 ispid? t
+  force_level t
+  0 try #1 instances catch ts endcatch
+  supplicant intostr ts
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

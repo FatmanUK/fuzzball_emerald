@@ -123,6 +123,7 @@ func (h *lockHost) RunLock(descr int, player, prog, thing ref.Ref) bool {
 	f := muf.NewFrame(p, host)
 	f.SetReserved(realPlayer, h.Location(player), thing, "")
 	f.Descr = descr
+	f.Supplicant = thing
 
 	callerLevel := h.level
 	if callerLevel == 0 {
