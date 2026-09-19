@@ -236,3 +236,107 @@ func TestCanCallForwardsToHostWithProgUID(t *testing.T) {
 		t.Fatalf("unexpected call: %+v", call)
 	}
 }
+
+func TestKillRejectsNonInteger(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	if err := f.Push(Str("nope")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("KILL")](f)
+	if err == nil || err.Error() != "Non-integer argument (1)." {
+		t.Fatalf("err = %v, want the non-integer message", err)
+	}
+}
+
+// TestKillOwnPIDAbortsSilently checks upstream's do_abort_silent special
+// case: killing your own pid ends the program via errSilentAbort rather than
+// an ordinary error, and never reaches Host.KillPID.
+func TestKillOwnPIDAbortsSilently(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.PID = 9
+	if err := f.Push(Int(9)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("KILL")](f)
+	if err != errSilentAbort {
+		t.Fatalf("err = %v, want errSilentAbort", err)
+	}
+	if len(h.killPIDCalls) != 0 {
+		t.Fatalf("KillPID should not be called for a self-kill")
+	}
+}
+
+func TestKillDeniedBelowMlevelThreeWithoutControl(t *testing.T) {
+	h := newLockTestHost()
+	h.controlsProcessResult = false
+	f := newTestFrame(h)
+	f.Prog.MLevel = 2
+	f.PID = 1
+	if err := f.Push(Int(5)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("KILL")](f)
+	if err == nil || err.Error() != "Permission Denied." {
+		t.Fatalf("err = %v, want the permission-denied message", err)
+	}
+	if len(h.killPIDCalls) != 0 {
+		t.Fatalf("KillPID should not be called once permission is denied")
+	}
+}
+
+func TestKillAllowedBelowMlevelThreeWithControl(t *testing.T) {
+	h := newLockTestHost()
+	h.controlsProcessResult = true
+	h.killPIDResult = true
+	f := newTestFrame(h)
+	f.Prog.MLevel = 2
+	f.PID = 1
+	if err := f.Push(Int(5)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("KILL")](f); err != nil {
+		t.Fatalf("KILL: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeInteger || v.Num != 1 {
+		t.Fatalf("result = %+v, want true", v)
+	}
+	if len(h.killPIDCalls) != 1 || h.killPIDCalls[0] != 5 {
+		t.Fatalf("KillPID calls = %v, want [5]", h.killPIDCalls)
+	}
+}
+
+func TestKillAtMlevelThreeSkipsControlCheck(t *testing.T) {
+	h := newLockTestHost()
+	h.controlsProcessResult = false
+	h.killPIDResult = false
+	f := newTestFrame(h)
+	f.Prog.MLevel = 3
+	f.PID = 1
+	if err := f.Push(Int(999)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("KILL")](f); err != nil {
+		t.Fatalf("KILL: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeInteger || v.Num != 0 {
+		t.Fatalf("result = %+v, want false (pid does not exist)", v)
+	}
+	if len(h.controlsProcessCalls) != 0 {
+		t.Fatalf("ControlsProcess should not be consulted at mlev 3")
+	}
+}

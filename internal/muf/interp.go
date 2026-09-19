@@ -67,6 +67,13 @@ func (f *Frame) Run(lim Limits) (Result, error) {
 		in := f.Prog.Code[f.PC]
 		res, err := f.step(in)
 		if err != nil {
+			// errSilentAbort is upstream's ERROR_DIE_NOW: KILLing the
+			// running program's own pid ends it immediately, skipping even
+			// an open TRY, and produces no error report at all — the one
+			// abort that is not decorated or unwound like every other.
+			if err == errSilentAbort {
+				return Done, nil
+			}
 			// A raised error unwinds to the innermost TRY; if none is
 			// open it ends the program.
 			if caught := f.unwind(err); !caught {

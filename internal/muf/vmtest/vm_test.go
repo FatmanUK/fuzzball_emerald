@@ -136,6 +136,8 @@ func (h *fakeHost) ForceLevel() int                            { return 0 }
 func (h *fakeHost) IsPID(int) bool                             { return false }
 func (h *fakeHost) Instances(ref.Ref) int                      { return 0 }
 func (h *fakeHost) CanCall(int, ref.Ref, ref.Ref, string) bool { return false }
+func (h *fakeHost) ControlsProcess(ref.Ref, int) bool          { return false }
+func (h *fakeHost) KillPID(int) bool                           { return false }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
@@ -325,6 +327,28 @@ func TestTryCatch(t *testing.T) {
 // left behind, rather than handing the handler a half-built stack.
 func TestTryRestoresTheStack(t *testing.T) {
 	wantStack(t, `: main 42 0 try 1 2 3 "x" 0 / catch pop endcatch ;`, "42")
+}
+
+// TestKillOwnPIDEndsProgramSilentlyAndUncatchably checks upstream's
+// ERROR_DIE_NOW special case end to end: a program that KILLs its own pid
+// stops immediately — reaching neither the notify after it nor an open TRY's
+// catch block — and Run reports it as a plain, unreported Done rather than
+// an error.
+func TestKillOwnPIDEndsProgramSilentlyAndUncatchably(t *testing.T) {
+	f, h := run(t, `: main
+  0 try
+    pid kill
+    me @ "unreached" notify
+  catch
+    me @ "caught" notify
+  endcatch
+;`)
+	if len(h.told) != 0 {
+		t.Errorf("told = %v, want nothing — self-kill should reach neither branch", h.told)
+	}
+	if got := stack(f); len(got) != 0 {
+		t.Errorf("stack = %v, want empty", got)
+	}
 }
 
 func TestNotify(t *testing.T) {

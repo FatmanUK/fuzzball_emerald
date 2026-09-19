@@ -546,6 +546,9 @@ public foo
   prog "FOO" cancall? t
   prog "bar" cancall? t
   0 try #1 "foo" cancall? t catch ts endcatch
+  999999 kill t
+  0 try pid kill catch "caught" ts endcatch
+  "after" ts
 ;`,
 	},
 }

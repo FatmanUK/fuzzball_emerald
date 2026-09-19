@@ -186,6 +186,16 @@ type Host interface {
 	// compile, or declares no public by that name, reports false rather than
 	// an error, matching upstream's own silent failure there.
 	CanCall(callerLevel int, callerUID ref.Ref, prog ref.Ref, name string) bool
+
+	// ControlsProcess is upstream's control_process: whether callerUID
+	// (progUID) may act on pid, because it controls the process's program or
+	// its trigger, or is the player the process is running for. A pid that
+	// names no live process reports false, the same as one that exists but
+	// is not controlled — KILL cannot tell the two apart before checking.
+	ControlsProcess(callerUID ref.Ref, pid int) bool
+	// KillPID is upstream's dequeue_process: removes pid if it names a live
+	// process, and reports whether it did.
+	KillPID(pid int) bool
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

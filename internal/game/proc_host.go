@@ -44,3 +44,27 @@ func linkable(f ref.Flags, t ref.ObjType) bool {
 	}
 	return f&ref.LinkOK != 0
 }
+
+// ControlsProcess implements muf.Host for KILL, upstream's control_process:
+// whether callerUID controls the process's program, controls its trigger, or
+// is the player it is running for. A pid procQueue does not know about
+// answers false the same way upstream's own "not in the timequeue, not in
+// the event queue either" fallthrough does.
+func (h *mufHost) ControlsProcess(callerUID ref.Ref, pid int) bool {
+	p := h.s.procs.get(pid)
+	if p == nil {
+		return false
+	}
+	return h.s.controls(h.w, callerUID, p.program) ||
+		h.s.controls(h.w, callerUID, p.trigger) ||
+		callerUID == p.player
+}
+
+// KillPID implements muf.Host for KILL, upstream's dequeue_process.
+func (h *mufHost) KillPID(pid int) bool {
+	if h.s.procs.get(pid) == nil {
+		return false
+	}
+	h.s.procs.remove(pid)
+	return true
+}

@@ -160,3 +160,9 @@ func (e *Error) Error() string {
 func errf(format string, args ...any) *Error {
 	return &Error{Msg: fmt.Sprintf(format, args...)}
 }
+
+// errSilentAbort is upstream's ERROR_DIE_NOW, a sentinel Run recognises and
+// handles differently from every other error: it is never caught by TRY and
+// never produces an error report. KILL uses it when a program kills its own
+// pid, matching prim_kill's do_abort_silent.
+var errSilentAbort = &Error{Msg: "killed"}

@@ -43,8 +43,17 @@ slice has landed: `Frame.PID`/`Frame.Supplicant` fields, and the primitives
 need no process-queue work at all, just the compiler's already-existing
 `Program.Publics` table exposed through a new `Host.CanCall` (see
 `internal/muf/prim_proc.go` and `internal/game/proc_host.go`'s `linkable`
-helper). Still to come from that plan, in order: `KILL` (factor `cmdKill`'s
-logic out of `internal/game/admin.go` first), an engine
+helper). `KILL` has landed too: `Host.ControlsProcess`/`Host.KillPID` port
+upstream's `control_process`/`dequeue_process`, and killing a program's own
+pid is a genuinely new interpreter case — `errSilentAbort` in
+`internal/muf/value.go`, upstream's `ERROR_DIE_NOW`, an abort that skips even
+an open `TRY` and produces no error report, unlike every other one. Its own
+`@kill` command (`internal/game/admin.go`'s `cmdKill`) was deliberately left
+alone rather than reworked to share `ControlsProcess`: upstream's `@kill` is
+`do_kill_process`, a materially richer command (kills by player name, by
+program dbref, or "all", not just by pid) that Emerald's `cmdKill` does not
+attempt yet — porting that is its own task, not a refactor incidental to the
+`KILL` primitive. Still to come from the Phase 2 plan, in order: an engine
 scheduling-granularity fix (`internal/world/engine.go`, needed before `FORK`
 so a freshly-forked process doesn't wait a full flush interval for its first
 slice), `FORK`, `QUEUE`, `FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY` (share
@@ -52,7 +61,7 @@ permission logic with `internal/game/wiz.go`'s `@force`), `GETPIDS`/
 `GETPIDINFO`, and last `WATCHPID` (needs a still-missing generic
 event-delivery mechanism built alongside it).
 
-1. **Port more MUF primitives.** 97 of 417 are still unimplemented (see
+1. **Port more MUF primitives.** 96 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -62,9 +71,9 @@ event-delivery mechanism built alongside it).
    cannot represent directly — see `mufHost.ParseLock`), and a match
    failure's own message during `_set_lock` is never gated by its `silent`
    flag, only `_set_lock`'s own messages are (see `boolexp.ParseError.Notify`
-   and `Server.setLock`). `FORCE`/`KILL`/`FORK`/`QUEUE` (process and
-   multitasking, `src/p_misc.c`) are the largest remaining chunk, now underway
-   — see Phase 2 of the plan above.
+   and `Server.setLock`). `FORCE`/`FORK`/`QUEUE` (process and multitasking,
+   `src/p_misc.c`) are the largest remaining chunk, now underway — see
+   Phase 2 of the plan above.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
@@ -135,7 +144,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~315 primitives
+internal/muf/           — instruction set, VM/interpreter, ~316 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -367,8 +376,8 @@ enforcement — see `git log` for the exact commits):
   - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
     `@lock` actually gates it)
   - the `"proc"` case in `TestAgainstFuzzball` (`PID`, `ISPID?`,
-    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`)
-- Primitive coverage: **315 of 417** implemented
+    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`)
+- Primitive coverage: **316 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

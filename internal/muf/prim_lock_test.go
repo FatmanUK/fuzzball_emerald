@@ -48,6 +48,16 @@ type lockTestHost struct {
 
 	canCallCalls  []canCallCall
 	canCallResult bool
+
+	controlsProcessCalls  []controlsProcessCall
+	controlsProcessResult bool
+	killPIDCalls          []int
+	killPIDResult         bool
+}
+
+type controlsProcessCall struct {
+	callerUID ref.Ref
+	pid       int
 }
 
 type canCallCall struct {
@@ -136,6 +146,16 @@ func (h *lockTestHost) Instances(ref.Ref) int { return h.instancesResult }
 func (h *lockTestHost) CanCall(callerLevel int, callerUID, prog ref.Ref, name string) bool {
 	h.canCallCalls = append(h.canCallCalls, canCallCall{callerLevel, callerUID, prog, name})
 	return h.canCallResult
+}
+
+func (h *lockTestHost) ControlsProcess(callerUID ref.Ref, pid int) bool {
+	h.controlsProcessCalls = append(h.controlsProcessCalls, controlsProcessCall{callerUID, pid})
+	return h.controlsProcessResult
+}
+
+func (h *lockTestHost) KillPID(pid int) bool {
+	h.killPIDCalls = append(h.killPIDCalls, pid)
+	return h.killPIDResult
 }
 
 const testProgram ref.Ref = 99

@@ -99,3 +99,38 @@ func init() {
 		return nil, f.Push(Bool(ok))
 	})
 }
+
+// KILL is a port of prim_kill (src/p_misc.c). Killing the running program's
+// own pid is a special case, upstream's do_abort_silent: it is not an error
+// at all, just an immediate, unreported end to the program, which is why it
+// is signalled with errSilentAbort rather than an ordinary *Error.
+func init() {
+	register("KILL", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if v.Type != TypeInteger {
+			return nil, errf("Non-integer argument (1).")
+		}
+		pid := int(v.Num)
+
+		if pid == f.PID {
+			return nil, errSilentAbort
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		// Capitalised "Denied" is upstream's own wording here, unlike every
+		// other "Permission denied." message this codebase reproduces —
+		// preserved verbatim rather than normalised.
+		if f.MLevel() < 3 && !h.ControlsProcess(f.progUID(h), pid) {
+			return nil, errf("Permission Denied.")
+		}
+
+		return nil, f.Push(Bool(h.KillPID(pid)))
+	})
+}
