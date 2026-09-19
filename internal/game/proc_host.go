@@ -218,3 +218,22 @@ func (s *Server) processLimitOK(w *world.World, player ref.Ref) bool {
 	}
 	return false
 }
+
+// GetPIDs implements muf.Host for GETPIDS, upstream's get_pids. procQueue
+// holds every process — foreground, background and blocked alike — unlike
+// upstream's own separate timequeue and mufevent-queue, which never contain
+// a still-running foreground process at all; selfPID is excluded here to
+// match that, leaving GETPIDS's own primFunc to add it back only for the
+// one case upstream itself does.
+func (h *mufHost) GetPIDs(obj ref.Ref, selfPID int) []int {
+	var out []int
+	for _, p := range h.s.procs.all() {
+		if p.pid == selfPID {
+			continue
+		}
+		if p.program == obj || p.player == obj || obj < 0 {
+			out = append(out, p.pid)
+		}
+	}
+	return out
+}

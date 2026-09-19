@@ -311,3 +311,49 @@ func init() {
 		return nil, f.Push(Arr(NewList(vals)))
 	})
 }
+
+// GETPIDS is a port of prim_getpids (src/p_db.c). Its own "if (mlev < 3)" is
+// an unconditional floor, but with the same kind of non-generic wording
+// FORCE's family turned out to have — "Permission denied.  Requires Mucker
+// Level 3.", not the dispatcher's bare "Permission denied." — so it too is
+// checked here rather than left to primMLevel; see gen_mlev.py's
+// CUSTOM_ABORT_MESSAGE.
+//
+// Upstream's own post-processing — appending fr->pid only when the argument
+// is exactly the calling program's own ref, not upstream's "ref < 0"
+// wildcard too — has a real equivalent here, and golden caught it: Host.
+// GetPIDs excludes the calling frame's own pid from every match (the same
+// way upstream's timequeue never holds a still-running foreground process
+// at all), and only this explicit step adds it back, exactly mirroring
+// prim_getpids' own "if (program == ref) push fr->pid".
+func init() {
+	register("GETPIDS", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+
+		if f.MLevel() < 3 {
+			return nil, errf("Permission denied.  Requires Mucker Level 3.")
+		}
+
+		if v.Type != TypeObject {
+			return nil, errf("Non-object argument (1)")
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		pids := h.GetPIDs(v.Ref, f.PID)
+		if v.Ref == f.Prog.Ref {
+			pids = append(pids, f.PID)
+		}
+		vals := make([]Value, len(pids))
+		for i, pid := range pids {
+			vals[i] = Int(int64(pid))
+		}
+		return nil, f.Push(Arr(NewList(vals)))
+	})
+}

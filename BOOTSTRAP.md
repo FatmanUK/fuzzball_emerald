@@ -123,11 +123,25 @@ before assuming the generic wording is right. `gen_mlev.py`'s new
 `CUSTOM_ABORT_MESSAGE` set excludes these three from the generated table so
 each can check its own mlev inline with the correct string instead.
 
-Still to come from the Phase 2 plan: `GETPIDS`/`GETPIDINFO`, and last
-`WATCHPID` (needs a still-missing generic event-delivery mechanism built
-alongside it).
+`GETPIDS` has landed too. Its own `mlev < 3` is unconditional but, like
+`FORCE`'s family, has non-generic wording ("Permission denied.  Requires
+Mucker Level 3.") — added to `CUSTOM_ABORT_MESSAGE`. Porting it surfaced a
+real behavioural gap this time, not just wording: `Host.GetPIDs`
+(`internal/game/proc_host.go`) has to exclude the calling frame's own pid
+from every match, because `procQueue` holds the currently-running foreground
+process (the same divergence `processLimitOK` already documents) while
+upstream's timequeue never does — a naive port made `GETPIDS`'s `#-1`
+"match everything" wildcard include the caller's own pid, which golden
+caught upstream does not do. `GETPIDS`'s own `prim_getpids` only ever adds
+the caller's pid back via one explicit final step — "if the argument is
+exactly the calling program's own ref" — never through the wildcard, which
+`internal/muf/prim_proc.go`'s `GETPIDS` now reproduces exactly rather than
+folding into `Host.GetPIDs` itself.
 
-1. **Port more MUF primitives.** 91 of 417 are still unimplemented (see
+Still to come from the Phase 2 plan: `GETPIDINFO`, and last `WATCHPID`
+(needs a still-missing generic event-delivery mechanism built alongside it).
+
+1. **Port more MUF primitives.** 90 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -209,7 +223,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~321 primitives
+internal/muf/           — instruction set, VM/interpreter, ~322 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -441,12 +455,12 @@ enforcement — see `git log` for the exact commits):
   - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
     `@lock` actually gates it)
   - the `"proc"` case in `TestAgainstFuzzball` (`PID`, `ISPID?`,
-    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`), the
-    `"fork"` case (parent/child independence) and the `"queue"` case
-    (COMMAND vs. stack argument)
+    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`,
+    `GETPIDS`), the `"fork"` case (parent/child independence) and the
+    `"queue"` case (COMMAND vs. stack argument)
   - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
     self-forcing program)
-- Primitive coverage: **321 of 417** implemented
+- Primitive coverage: **322 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

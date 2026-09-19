@@ -221,6 +221,18 @@ type Host interface {
 	// none has), and every forcer still on the stack, most recent first.
 	ForcedBy() ref.Ref
 	ForcedByArray() []ref.Ref
+	// GetPIDs is upstream's get_pids: every live pid whose program or
+	// player is obj, or every pid at all when obj is negative (upstream's
+	// "ref < 0" — not only ref.Nothing). selfPID is excluded from every
+	// match here — upstream's own timequeue never holds the calling
+	// program's own, still-synchronously-running process, so GETPIDS's own
+	// primFunc handles including it, only when obj is exactly the calling
+	// program's own ref, as its own explicit final step, matching
+	// prim_getpids' "if (program == ref) push fr->pid" exactly. No
+	// existence check is made on obj, matching upstream's own
+	// prim_getpids, which only checks the argument is a dbref-typed value
+	// at all.
+	GetPIDs(obj ref.Ref, selfPID int) []int
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

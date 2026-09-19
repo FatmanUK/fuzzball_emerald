@@ -52,7 +52,12 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
 # implement their own mlev check inline with the exact right wording — see
 # prim_proc.go's FORCE/FORCEDBY/FORCEDBY_ARRAY — rather than teaching this
 # generator to track messages for what is so far three known exceptions.
-CUSTOM_ABORT_MESSAGE = {"FORCE", "FORCEDBY", "FORCEDBY_ARRAY"}
+#
+# Below level 4, the equivalent generic message is a bare "Permission
+# denied." — also not universal: GETPIDS (src/p_db.c) aborts with
+# "Permission denied.  Requires Mucker Level 3.", found the same way, when
+# it was ported.
+CUSTOM_ABORT_MESSAGE = {"FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS"}
 
 
 
@@ -100,7 +105,15 @@ def main():
                              r'control_process\s*\(|'
                              r'prop_read_perms|prop_write_perms|'
                              r'Wizard\s*\(|test_lock|already_created|'
-                             r'Typeof\s*\(|FLAGS\s*\(', cond):
+                             r'Typeof\s*\(|FLAGS\s*\(|'
+                             # "unless it's my own pid" — GETPIDINFO's own
+                             # "mlev < 3 && oper1->data.number != fr->pid"
+                             # is this same shape as an ownership escape
+                             # hatch, just against a running process instead
+                             # of an owned object; found the same way KILL's
+                             # control_process gap was, by checking the C
+                             # once a primitive using this table read wrong.
+                             r'fr\s*->\s*pid', cond):
                     continue
                 for lv in re.findall(r'mlev\s*<\s*(\w+)', cond):
                     if lv in LEVELS:

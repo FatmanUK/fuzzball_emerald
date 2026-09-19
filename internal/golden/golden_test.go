@@ -547,6 +547,9 @@ public foo
   prog "bar" cancall? t
   0 try #1 "foo" cancall? t catch ts endcatch
   999999 kill t
+  prog getpids array_count t
+  #99999 getpids array_count t
+  #-1 getpids array_count 1 >= t
   0 try pid kill catch "caught" ts endcatch
   "after" ts
 ;`,

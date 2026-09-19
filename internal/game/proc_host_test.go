@@ -926,3 +926,71 @@ func TestAtForcePopulatesForcedByWithJustThePlayer(t *testing.T) {
 		t.Errorf("output = %q, want %q (forcedby, forcedby_array count)", got, want)
 	}
 }
+
+// TestGetPIDsMatchesByPlayerProgramOrNegativeArgument exercises GETPIDS end
+// to end: a program blocked on READ (so it stays in procQueue for the whole
+// test), matched by its player; a nonexistent dbref, matching nothing; and
+// -1, matching everything — which in this architecture includes the
+// currently-running querying process itself, unlike upstream's own
+// timequeue (see GETPIDS's own doc comment in prim_proc.go).
+func TestGetPIDsMatchesByPlayerProgramOrNegativeArgument(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	waiter, d := connectAs(t, h, "Waiter", false)
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		w.Get(waiter).Flags = w.Get(waiter).Flags.SetMLevel(2)
+		here := w.Get(waiter).Location
+		p := w.Create("waits3.muf", ref.TypeProgram, waiter)
+		p.Flags = p.Flags.SetMLevel(2)
+		w.SetSource(p.Ref, `: main
+  me @ "waiting" notify
+  read
+  pop
+;`)
+		e := w.Create("waits3", ref.TypeExit, waiter)
+		e.Dest = []ref.Ref{p.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sendAs(t, h, d, "waits3")
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		if len(h.s.procs.all()) != 1 {
+			t.Fatalf("expected exactly one suspended process, got %d", len(h.s.procs.all()))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var owner ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		here := w.Get(h.wizRef()).Location
+		var checker ref.Ref
+		owner, checker = makeWizardProgram(w, "getpids", fmt.Sprintf(`: main
+  #%d getpids array_count intostr me @ swap notify
+  #99999 getpids array_count intostr me @ swap notify
+  #-1 getpids array_count 1 >= intostr me @ swap notify
+;`, int(waiter)))
+		if err := w.MoveTo(owner, here); err != nil {
+			t.Fatal(err)
+		}
+		e := w.Create("getpids", ref.TypeExit, owner)
+		e.Dest = []ref.Ref{checker}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d2 := secondSessionFor(t, h, owner)
+	got := sendAs(t, h, d2, "getpids")
+	want := "1\n0\n1"
+	if strings.TrimRight(got, "\n") != want {
+		t.Errorf("output = %q, want %q (matches by player, no match, -1 matches at least one)", got, want)
+	}
+}

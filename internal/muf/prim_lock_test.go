@@ -63,6 +63,14 @@ type lockTestHost struct {
 	forceCalls          []forceCall
 	forcedByResult      ref.Ref
 	forcedByArrayResult []ref.Ref
+
+	getPIDsCalls  []getPIDsCall
+	getPIDsResult []int
+}
+
+type getPIDsCall struct {
+	obj     ref.Ref
+	selfPID int
 }
 
 type forceCall struct {
@@ -197,6 +205,11 @@ func (h *lockTestHost) Force(descr int, player, program, victim ref.Ref, command
 
 func (h *lockTestHost) ForcedBy() ref.Ref        { return h.forcedByResult }
 func (h *lockTestHost) ForcedByArray() []ref.Ref { return h.forcedByArrayResult }
+
+func (h *lockTestHost) GetPIDs(obj ref.Ref, selfPID int) []int {
+	h.getPIDsCalls = append(h.getPIDsCalls, getPIDsCall{obj, selfPID})
+	return h.getPIDsResult
+}
 
 const testProgram ref.Ref = 99
 

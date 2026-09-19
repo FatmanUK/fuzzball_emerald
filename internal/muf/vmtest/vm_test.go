@@ -143,6 +143,7 @@ func (h *fakeHost) Queue(int, ref.Ref, int64, string) int        { return 0 }
 func (h *fakeHost) Force(int, ref.Ref, ref.Ref, ref.Ref, string) {}
 func (h *fakeHost) ForcedBy() ref.Ref                            { return ref.Nothing }
 func (h *fakeHost) ForcedByArray() []ref.Ref                     { return nil }
+func (h *fakeHost) GetPIDs(ref.Ref, int) []int                   { return nil }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

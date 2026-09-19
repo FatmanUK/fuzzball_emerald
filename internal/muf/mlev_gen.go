@@ -45,8 +45,6 @@ var primMLevel = map[string]int{
 	"FINDNEXT":             2,
 	"FIRSTDESCR":           3,
 	"FORK":                 3,
-	"GETPIDINFO":           3,
-	"GETPIDS":              3,
 	"IGNORE_ADD":           3,
 	"IGNORE_DEL":           3,
 	"IGNORING?":            3,

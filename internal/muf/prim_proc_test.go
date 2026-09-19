@@ -778,3 +778,126 @@ func TestForceFamilyRejectsBelowMlevelFourWithWizbitWording(t *testing.T) {
 		})
 	}
 }
+
+func TestGetPIDsRejectsBelowMlevelThreeWithItsOwnWording(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.Prog.MLevel = 2
+	if err := f.Push(Obj(testPlayer)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("GETPIDS")](f)
+	if err == nil || err.Error() != "Permission denied.  Requires Mucker Level 3." {
+		t.Fatalf("err = %v, want the mucker-level-3 message", err)
+	}
+	if len(h.getPIDsCalls) != 0 {
+		t.Fatal("Host.GetPIDs should not run below mlevel 3")
+	}
+}
+
+func TestGetPIDsRejectsNonObjectArg(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	if err := f.Push(Int(5)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("GETPIDS")](f)
+	if err == nil || err.Error() != "Non-object argument (1)" {
+		t.Fatalf("err = %v, want the non-object message", err)
+	}
+}
+
+func TestGetPIDsForwardsArgAndPushesResult(t *testing.T) {
+	h := newLockTestHost()
+	h.getPIDsResult = []int{3, 7, 12}
+	f := newTestFrame(h)
+	if err := f.Push(Obj(testProgram2)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("GETPIDS")](f); err != nil {
+		t.Fatalf("GETPIDS: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeArray || v.Array == nil {
+		t.Fatalf("result = %+v, want an array", v)
+	}
+	vals := v.Array.Values()
+	if len(vals) != 3 || vals[0].Num != 3 || vals[1].Num != 7 || vals[2].Num != 12 {
+		t.Fatalf("array = %+v, want [3 7 12]", vals)
+	}
+
+	if len(h.getPIDsCalls) != 1 || h.getPIDsCalls[0].obj != testProgram2 {
+		t.Fatalf("GetPIDs calls = %+v, want obj = #%d", h.getPIDsCalls, testProgram2)
+	}
+}
+
+// TestGetPIDsAppendsOwnPIDOnlyForItsOwnProgram checks GETPIDS's own final
+// step, upstream's "if (program == ref) push fr->pid": the calling frame's
+// pid is appended only when the argument is exactly the calling program's
+// own ref, not for any other match — including upstream's "ref < 0"
+// wildcard, which golden caught this not applying to.
+func TestGetPIDsAppendsOwnPIDOnlyForItsOwnProgram(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.PID = 42
+
+	if err := f.Push(Obj(testProgram)); err != nil { // testProgram == f.Prog.Ref
+		t.Fatal(err)
+	}
+	if _, err := prims[PrimNumber("GETPIDS")](f); err != nil {
+		t.Fatalf("GETPIDS: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals := v.Array.Values()
+	if len(vals) != 1 || vals[0].Num != 42 {
+		t.Fatalf("array = %+v, want [42] (own pid appended)", vals)
+	}
+	if len(h.getPIDsCalls) != 1 || h.getPIDsCalls[0].selfPID != 42 {
+		t.Fatalf("GetPIDs should have been asked to exclude pid 42: %+v", h.getPIDsCalls)
+	}
+
+	// The wildcard match does not trigger the append — only an exact match
+	// on the calling program's own ref does.
+	h2 := newLockTestHost()
+	f2 := newTestFrame(h2)
+	f2.PID = 7
+	if err := f2.Push(Obj(ref.Nothing)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prims[PrimNumber("GETPIDS")](f2); err != nil {
+		t.Fatalf("GETPIDS: %v", err)
+	}
+	v2, err := f2.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v2.Array.Values()) != 0 {
+		t.Fatalf("array = %+v, want empty — #-1 should not append the caller's own pid", v2.Array.Values())
+	}
+}
+
+// TestGetPIDsAcceptsAnyDbrefIncludingNonexistent checks that, unlike most
+// other primitives taking an object argument, GETPIDS does not validate the
+// dbref exists — upstream's own prim_getpids checks only that the value is
+// dbref-typed at all, per its "no permission checking is done" doc comment
+// on get_pids.
+func TestGetPIDsAcceptsAnyDbrefIncludingNonexistent(t *testing.T) {
+	h := newLockTestHost() // testThing is deliberately never marked valid
+	f := newTestFrame(h)
+	if err := f.Push(Obj(testThing)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("GETPIDS")](f); err != nil {
+		t.Fatalf("GETPIDS should not require the dbref to exist: %v", err)
+	}
+}
