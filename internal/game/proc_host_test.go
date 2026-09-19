@@ -43,6 +43,26 @@ func makeProgrammer(w *world.World, name string) ref.Ref {
 	return p.Ref
 }
 
+// makeWizardProgram creates a player and a program it owns, both flagged
+// Wizard with mucker bits set. flags.MLevel() treats Wizard-plus-any-mucker-
+// bit as level 4 outright (see ref.Flags.MLevel), and compileSource takes
+// the lower of a program's own level and its owner's — so both need it for
+// the program to actually compile at mlevel 4, which FORCE and FORCEDBY's
+// generated floor require. Returns the player and the program.
+func makeWizardProgram(w *world.World, name, source string) (owner, prog ref.Ref) {
+	p := w.Create(name+"Owner", ref.TypePlayer, ref.Nothing)
+	p.Owner = p.Ref
+	p.Flags |= ref.Wizard
+	p.Flags = p.Flags.SetMLevel(3)
+
+	pr := w.Create(name+".muf", ref.TypeProgram, p.Ref)
+	pr.Flags |= ref.Wizard
+	pr.Flags = pr.Flags.SetMLevel(3)
+	w.SetSource(pr.Ref, source)
+
+	return p.Ref, pr.Ref
+}
+
 // TestCanCallOwnerAlwaysReaches checks that CanCall's permission gate — the
 // owner/wizard/Linkable check, separate from the public's own mlev floor —
 // lets the target's own owner through even without being a wizard or the
@@ -705,5 +725,204 @@ func TestQueueRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
 	}
 	if !strings.Contains(got, "rejected") {
 		t.Errorf("QUEUE should have returned 0:\n%s", got)
+	}
+}
+
+// TestForcePrimitiveRunsCommandAsVictim exercises FORCE end to end: a
+// mlev-4 program forces a THING with no descriptor of its own to "say"
+// something, and the broadcast reaches the forcing player because they are
+// in the same room — proving the command genuinely ran as the victim, not
+// as the forcer, since the speaker's own name in the line is the victim's.
+func TestForcePrimitiveRunsCommandAsVictim(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var owner ref.Ref
+	var victimName string
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		here := w.Get(h.wizRef()).Location
+
+		victim := w.Create("Gizmo", ref.TypeThing, h.wizRef())
+		if err := w.MoveTo(victim.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		victimName = victim.Name
+
+		var prog ref.Ref
+		owner, prog = makeWizardProgram(w, "forcer", fmt.Sprintf(`: main
+  #%d "say hello" force
+;`, int(victim.Ref)))
+		if err := w.MoveTo(owner, here); err != nil {
+			t.Fatal(err)
+		}
+
+		e := w.Create("dothings", ref.TypeExit, owner)
+		e.Dest = []ref.Ref{prog}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := secondSessionFor(t, h, owner)
+	got := sendAs(t, h, d, "dothings")
+	want := fmt.Sprintf(`%s says, "hello"`, victimName)
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected %q in:\n%s", want, got)
+	}
+}
+
+// TestForcedByReflectsTheForcingProgram exercises FORCEDBY/FORCEDBY_ARRAY
+// end to end: a victim forced to run a program sees the forcing program's
+// own dbref from FORCEDBY, and [program, player] from FORCEDBY_ARRAY —
+// prim_force's own "if (player != program)" second push, since a program
+// (not a player typing @force directly) did the forcing here.
+func TestForcedByReflectsTheForcingProgram(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var owner ref.Ref
+	var forcerProg ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz := h.wizRef()
+		// FORCEDBY/FORCEDBY_ARRAY need mlevel 4, which needs the owner —
+		// here, the harness's own default player — to carry mucker bits
+		// too: Wizard alone caps a program's effective mlevel at 0.
+		w.Get(wiz).Flags = w.Get(wiz).Flags.SetMLevel(3)
+		here := w.Get(wiz).Location
+
+		victim := w.Create("Gizmo", ref.TypeThing, wiz)
+		if err := w.MoveTo(victim.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+
+		var prog ref.Ref
+		owner, prog = makeWizardProgram(w, "forcer2", fmt.Sprintf(`: main
+  #%d "report" force
+;`, int(victim.Ref)))
+		forcerProg = prog
+		if err := w.MoveTo(owner, here); err != nil {
+			t.Fatal(err)
+		}
+
+		// Notifying "me" here would be notifying the victim, Gizmo, which
+		// has no descriptor of its own to receive anything on — so this
+		// reports straight to owner's own dbref instead, the one real
+		// connection in this test that can actually hear it.
+		reporter := w.Create("report.muf", ref.TypeProgram, wiz)
+		reporter.Flags |= ref.Wizard
+		reporter.Flags = reporter.Flags.SetMLevel(3)
+		w.SetSource(reporter.Ref, fmt.Sprintf(`: main
+  forcedby intostr #%d swap notify
+  forcedby_array array_count intostr #%d swap notify
+  forcedby_array 0 array_getitem intostr #%d swap notify
+  forcedby_array 1 array_getitem intostr #%d swap notify
+;`, int(owner), int(owner), int(owner), int(owner)))
+		e := w.Create("report", ref.TypeExit, h.wizRef())
+		e.Dest = []ref.Ref{reporter.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+
+		e2 := w.Create("dothings2", ref.TypeExit, owner)
+		e2.Dest = []ref.Ref{prog}
+		if err := w.MoveTo(e2.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := secondSessionFor(t, h, owner)
+	got := sendAs(t, h, d, "dothings2")
+
+	// intostr renders a dbref as a bare number, no '#' — matching upstream's
+	// own union-agnostic print, per INTOSTR's own doc comment.
+	want := fmt.Sprintf("%d\n2\n%d\n%d", forcerProg, forcerProg, owner)
+	if strings.TrimRight(got, "\n") != want {
+		t.Errorf("output = %q, want %q (forcedby, forcedby_array count, [0], [1])", got, want)
+	}
+}
+
+// TestForcedByEmptyOutsideAForce checks the not-forced baseline: FORCEDBY
+// is #-1 (NOTHING) and FORCEDBY_ARRAY is empty for a program nobody forced.
+func TestForcedByEmptyOutsideAForce(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var ownerRef ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		here := w.Get(h.wizRef()).Location
+		var p ref.Ref
+		ownerRef, p = makeWizardProgram(w, "solo", `: main
+  forcedby intostr me @ swap notify
+  forcedby_array array_count intostr me @ swap notify
+;`)
+		if err := w.MoveTo(ownerRef, here); err != nil {
+			t.Fatal(err)
+		}
+		e := w.Create("checkforced", ref.TypeExit, ownerRef)
+		e.Dest = []ref.Ref{p}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := secondSessionFor(t, h, ownerRef)
+	got := sendAs(t, h, d, "checkforced")
+	want := "-1\n0"
+	if strings.TrimRight(got, "\n") != want {
+		t.Errorf("output = %q, want %q (forcedby, forcedby_array count)", got, want)
+	}
+}
+
+// TestAtForcePopulatesForcedByWithJustThePlayer checks that @force (not
+// just the FORCE primitive) also pushes onto the shared forcelist, and that
+// it pushes only the player — upstream's do_force has no "program" to push,
+// unlike prim_force.
+func TestAtForcePopulatesForcedByWithJustThePlayer(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var wiz ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz = h.wizRef()
+		// FORCEDBY/FORCEDBY_ARRAY need mlevel 4; Wizard alone caps a
+		// program's effective mlevel at 0 without mucker bits too.
+		w.Get(wiz).Flags = w.Get(wiz).Flags.SetMLevel(3)
+		here := w.Get(wiz).Location
+
+		th := w.Create("Puppet", ref.TypeThing, wiz)
+		th.Flags |= ref.XForcible
+		if err := w.MoveTo(th.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+
+		// Notifying "me" would notify Puppet, which has no descriptor of
+		// its own — report straight to wiz's own dbref instead.
+		reporter := w.Create("report2.muf", ref.TypeProgram, wiz)
+		reporter.Flags |= ref.Wizard
+		reporter.Flags = reporter.Flags.SetMLevel(3)
+		w.SetSource(reporter.Ref, fmt.Sprintf(`: main
+  forcedby intostr #%d swap notify
+  forcedby_array array_count intostr #%d swap notify
+;`, int(wiz), int(wiz)))
+		e := w.Create("report2", ref.TypeExit, wiz)
+		e.Dest = []ref.Ref{reporter.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.send("@force Puppet=report2")
+	got := h.out()
+	want := fmt.Sprintf("%d\n1", wiz)
+	if strings.TrimRight(got, "\n") != want {
+		t.Errorf("output = %q, want %q (forcedby, forcedby_array count)", got, want)
 	}
 }

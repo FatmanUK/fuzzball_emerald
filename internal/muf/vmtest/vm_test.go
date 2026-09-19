@@ -132,14 +132,17 @@ func (h *fakeHost) ParseLock(int, ref.Ref, string) *boolexp.Expr     { return ni
 func (h *fakeHost) UnparseLock(ref.Ref, *boolexp.Expr) string        { return "" }
 func (h *fakeHost) PrettyLock(ref.Ref, *boolexp.Expr) string         { return "*UNLOCKED*" }
 
-func (h *fakeHost) ForceLevel() int                            { return 0 }
-func (h *fakeHost) IsPID(int) bool                             { return false }
-func (h *fakeHost) Instances(ref.Ref) int                      { return 0 }
-func (h *fakeHost) CanCall(int, ref.Ref, ref.Ref, string) bool { return false }
-func (h *fakeHost) ControlsProcess(ref.Ref, int) bool          { return false }
-func (h *fakeHost) KillPID(int) bool                           { return false }
-func (h *fakeHost) Fork(*muf.Frame) int                        { return 0 }
-func (h *fakeHost) Queue(int, ref.Ref, int64, string) int      { return 0 }
+func (h *fakeHost) ForceLevel() int                              { return 0 }
+func (h *fakeHost) IsPID(int) bool                               { return false }
+func (h *fakeHost) Instances(ref.Ref) int                        { return 0 }
+func (h *fakeHost) CanCall(int, ref.Ref, ref.Ref, string) bool   { return false }
+func (h *fakeHost) ControlsProcess(ref.Ref, int) bool            { return false }
+func (h *fakeHost) KillPID(int) bool                             { return false }
+func (h *fakeHost) Fork(*muf.Frame) int                          { return 0 }
+func (h *fakeHost) Queue(int, ref.Ref, int64, string) int        { return 0 }
+func (h *fakeHost) Force(int, ref.Ref, ref.Ref, ref.Ref, string) {}
+func (h *fakeHost) ForcedBy() ref.Ref                            { return ref.Nothing }
+func (h *fakeHost) ForcedByArray() []ref.Ref                     { return nil }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

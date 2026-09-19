@@ -534,3 +534,247 @@ func TestQueueTreatsANonStringArgAsEmpty(t *testing.T) {
 		t.Fatalf("queueCalls = %+v, want arg \"\"", h.queueCalls)
 	}
 }
+
+func TestForceRejectsRecursionGuard(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testPlayer] = ref.TypePlayer
+	h.valid[testPlayer] = true
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	f.Level = 9
+	if err := f.Push(Obj(testPlayer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("look")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("FORCE")](f)
+	if err == nil || err.Error() != "Interp call loops not allowed." {
+		t.Fatalf("err = %v, want the recursion-guard message", err)
+	}
+	if len(h.forceCalls) != 0 {
+		t.Fatal("Host.Force should not run once the guard trips")
+	}
+}
+
+func TestForceRejectsNonStringCommand(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	if err := f.Push(Obj(testPlayer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Int(0)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("FORCE")](f)
+	if err == nil || err.Error() != "Non-string argument (2)." {
+		t.Fatalf("err = %v, want the non-string message", err)
+	}
+}
+
+func TestForceRejectsInvalidVictim(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testExit] = ref.TypeExit
+	h.valid[testExit] = true
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	if err := f.Push(Obj(testExit)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("look")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("FORCE")](f)
+	if err == nil || err.Error() != "Invalid player or thing argument (1)." {
+		t.Fatalf("err = %v, want the invalid-victim message", err)
+	}
+}
+
+func TestForceRejectsEmptyCommand(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testPlayer] = ref.TypePlayer
+	h.valid[testPlayer] = true
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	if err := f.Push(Obj(testPlayer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("FORCE")](f)
+	if err == nil || err.Error() != "Empty command argument (2)." {
+		t.Fatalf("err = %v, want the empty-command message", err)
+	}
+}
+
+func TestForceRejectsCarriageReturn(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testPlayer] = ref.TypePlayer
+	h.valid[testPlayer] = true
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	if err := f.Push(Obj(testPlayer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("look\rme")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("FORCE")](f)
+	if err == nil || err.Error() != "Carriage returns not allowed in command string. (2)." {
+		t.Fatalf("err = %v, want the carriage-return message", err)
+	}
+}
+
+func TestForceRejectsGodUnlessOwnedByGod(t *testing.T) {
+	h := newLockTestHost()
+	h.types[ref.God] = ref.TypePlayer
+	h.valid[ref.God] = true
+	h.owner[testProgram] = testPlayer // program's owner is not God
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	if err := f.Push(Obj(ref.God)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("look")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("FORCE")](f)
+	if err == nil || err.Error() != "Cannot force god (1)." {
+		t.Fatalf("err = %v, want the cannot-force-god message", err)
+	}
+	if len(h.forceCalls) != 0 {
+		t.Fatal("Host.Force should not run when forcing god is refused")
+	}
+}
+
+func TestForceAllowsGodWhenProgramOwnedByGod(t *testing.T) {
+	h := newLockTestHost()
+	h.types[ref.God] = ref.TypePlayer
+	h.valid[ref.God] = true
+	h.owner[testProgram] = ref.God
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	if err := f.Push(Obj(ref.God)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("look")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("FORCE")](f); err != nil {
+		t.Fatalf("FORCE: %v", err)
+	}
+	if len(h.forceCalls) != 1 {
+		t.Fatal("Host.Force should run when the program is God's own")
+	}
+}
+
+func TestForceForwardsToHostWithNoStackEffect(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testThing] = ref.TypeThing
+	h.valid[testThing] = true
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+	f.Caller = 20
+	f.Descr = 5
+	if err := f.Push(Obj(testThing)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("look")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("FORCE")](f); err != nil {
+		t.Fatalf("FORCE: %v", err)
+	}
+	if f.Depth() != 0 {
+		t.Fatalf("stack depth = %d, want 0 — FORCE consumes both arguments and pushes nothing", f.Depth())
+	}
+	if len(h.forceCalls) != 1 {
+		t.Fatalf("Force called %d times, want 1", len(h.forceCalls))
+	}
+	call := h.forceCalls[0]
+	if call.descr != 5 || call.player != 20 || call.program != testProgram || call.victim != testThing || call.command != "look" {
+		t.Fatalf("unexpected call: %+v", call)
+	}
+}
+
+func TestForcedByPushesHostResult(t *testing.T) {
+	h := newLockTestHost()
+	h.forcedByResult = testPlayer
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+
+	if _, err := prims[PrimNumber("FORCEDBY")](f); err != nil {
+		t.Fatalf("FORCEDBY: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeObject || v.Ref != testPlayer {
+		t.Fatalf("result = %+v, want #%d", v, testPlayer)
+	}
+}
+
+func TestForcedByArrayPushesHostResult(t *testing.T) {
+	h := newLockTestHost()
+	h.forcedByArrayResult = []ref.Ref{testProgram, testPlayer}
+	f := newTestFrame(h)
+	f.Prog.MLevel = 4
+
+	if _, err := prims[PrimNumber("FORCEDBY_ARRAY")](f); err != nil {
+		t.Fatalf("FORCEDBY_ARRAY: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeArray || v.Array == nil {
+		t.Fatalf("result = %+v, want an array", v)
+	}
+	vals := v.Array.Values()
+	if len(vals) != 2 || vals[0].Ref != testProgram || vals[1].Ref != testPlayer {
+		t.Fatalf("array = %+v, want [%d %d]", vals, testProgram, testPlayer)
+	}
+}
+
+// TestForceFamilyRejectsBelowMlevelFourWithWizbitWording pins the wording
+// discovered via golden: FORCE, FORCEDBY and FORCEDBY_ARRAY all abort with
+// upstream's own "Wizbit only primitive.", not the generic dispatcher
+// message most other level-4 primitives get (see gen_mlev.py's
+// CUSTOM_ABORT_MESSAGE) — which is also why these three check their own
+// mlev inline instead of relying on primMLevel/mlev_gen.go.
+func TestForceFamilyRejectsBelowMlevelFourWithWizbitWording(t *testing.T) {
+	for _, name := range []string{"FORCE", "FORCEDBY", "FORCEDBY_ARRAY"} {
+		t.Run(name, func(t *testing.T) {
+			h := newLockTestHost()
+			f := newTestFrame(h)
+			f.Prog.MLevel = 3
+			if name == "FORCE" {
+				if err := f.Push(Obj(testPlayer)); err != nil {
+					t.Fatal(err)
+				}
+				if err := f.Push(Str("look")); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			_, err := prims[PrimNumber(name)](f)
+			if err == nil || err.Error() != "Wizbit only primitive." {
+				t.Fatalf("err = %v, want the wizbit-only message", err)
+			}
+			if len(h.forceCalls) != 0 {
+				t.Fatal("Host.Force should not run below mlevel 4")
+			}
+		})
+	}
+}

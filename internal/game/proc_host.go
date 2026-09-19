@@ -150,6 +150,50 @@ func (h *mufHost) Queue(descr int, prog ref.Ref, seconds int64, arg string) int 
 	return pid
 }
 
+// Force implements muf.Host for FORCE, upstream's process_command call
+// wrapped in the forcelist bookkeeping — see cmdForce's own identical
+// pattern in wiz.go, which this mirrors except for pushing program as well
+// as player, matching prim_force's own "if (player != program)" second
+// push. If descr no longer names a live connection — the calling frame's
+// player disconnected since a background process holding it was forked or
+// queued — this quietly does nothing, since there is no descriptor left to
+// force the command through; upstream has no equivalent failure mode, as
+// dbref_first_descr and process_command work from a plain int throughout.
+func (h *mufHost) Force(descr int, player, program, victim ref.Ref, command string) {
+	d := h.s.hub.Get(descr)
+	if d == nil {
+		return
+	}
+
+	h.s.forcelist = append(h.s.forcelist, player)
+	n := 1
+	if program != player {
+		h.s.forcelist = append(h.s.forcelist, program)
+		n = 2
+	}
+	defer func() { h.s.forcelist = h.s.forcelist[:len(h.s.forcelist)-n] }()
+
+	h.s.force(h.w, d, victim, command)
+}
+
+// ForcedBy and ForcedByArray implement muf.Host for FORCEDBY and
+// FORCEDBY_ARRAY, reading Server.forcelist — see its own doc comment.
+func (h *mufHost) ForcedBy() ref.Ref {
+	if n := len(h.s.forcelist); n > 0 {
+		return h.s.forcelist[n-1]
+	}
+	return ref.Nothing
+}
+
+func (h *mufHost) ForcedByArray() []ref.Ref {
+	n := len(h.s.forcelist)
+	out := make([]ref.Ref, n)
+	for i := range out {
+		out[i] = h.s.forcelist[n-1-i]
+	}
+	return out
+}
+
 // processLimitOK is upstream's add_event process-count gate: the system-wide
 // max_process_limit applies to everyone, wizards included, but
 // max_plyr_processes exempts a wizard. Both counts are taken before the new

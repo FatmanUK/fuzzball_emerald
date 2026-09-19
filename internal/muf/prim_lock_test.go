@@ -59,6 +59,16 @@ type lockTestHost struct {
 
 	queueCalls  []queueCall
 	queueResult int
+
+	forceCalls          []forceCall
+	forcedByResult      ref.Ref
+	forcedByArrayResult []ref.Ref
+}
+
+type forceCall struct {
+	descr                   int
+	player, program, victim ref.Ref
+	command                 string
 }
 
 type queueCall struct {
@@ -180,6 +190,13 @@ func (h *lockTestHost) Queue(descr int, prog ref.Ref, seconds int64, arg string)
 	h.queueCalls = append(h.queueCalls, queueCall{descr, prog, seconds, arg})
 	return h.queueResult
 }
+
+func (h *lockTestHost) Force(descr int, player, program, victim ref.Ref, command string) {
+	h.forceCalls = append(h.forceCalls, forceCall{descr, player, program, victim, command})
+}
+
+func (h *lockTestHost) ForcedBy() ref.Ref        { return h.forcedByResult }
+func (h *lockTestHost) ForcedByArray() []ref.Ref { return h.forcedByArrayResult }
 
 const testProgram ref.Ref = 99
 

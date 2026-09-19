@@ -1,6 +1,10 @@
 package muf
 
-import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
+import (
+	"strings"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+)
 
 // PID, ISPID?, FORCE_LEVEL, INSTANCES and SUPPLICANT are ports of
 // prim_pid, prim_ispidp, prim_force_level (src/p_misc.c), prim_instances
@@ -206,5 +210,104 @@ func init() {
 		// which is what upstream's own NULL-string idiom already means here.
 		pid := h.Queue(f.Descr, progV.Ref, secsV.Num, strV.Str)
 		return nil, f.Push(Int(int64(pid)))
+	})
+}
+
+// FORCE, FORCEDBY and FORCEDBY_ARRAY are ports of prim_force, prim_forcedby
+// and prim_forcedby_array (src/p_misc.c). All three abort mlev<4 with
+// upstream's own "Wizbit only primitive." — a different, non-generic literal
+// from most other level-4 primitives' "Permission denied.  Requires
+// Wizbit.", discovered via golden when FORCE was ported — so, unlike FORK's
+// and QUEUE's unconditional floors, this is checked here explicitly rather
+// than left to primMLevel and the dispatcher's own generic wording; see
+// gen_mlev.py's CUSTOM_ABORT_MESSAGE for the other two modules with their
+// own distinct variants.
+//
+// FORCE needs none of @force's own ownership-escaping checks that let a
+// non-wizard force an XForcible, F-locked object — mlev 4 already means the
+// calling program has full wizard authority. What remains beyond the mlev
+// gate is the interp recursion guard, the command string's own validity,
+// the God-forcing gate, and forwarding to the host for the forcelist
+// bookkeeping and the actual run.
+//
+// The trailing caller-stack sanity check prim_force itself does after
+// running the command — walking fr->caller for anything that is not a
+// TYPE_PROGRAM and silently aborting if so — is not reproduced. It guards
+// against upstream's own internal call-stack bookkeeping somehow surviving a
+// nested process_command, which has no analog in this interpreter's frame
+// model; there is nothing here that could leave it in that state.
+func init() {
+	register("FORCE", func(f *Frame) (*Result, error) {
+		cmdV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		victimV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+
+		if f.MLevel() < 4 {
+			return nil, errf("Wizbit only primitive.")
+		}
+
+		if f.Level > 8 {
+			return nil, errf("Interp call loops not allowed.")
+		}
+
+		if cmdV.Type != TypeString {
+			return nil, errf("Non-string argument (2).")
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		if victimV.Type != TypeObject || !h.Valid(victimV.Ref) ||
+			(h.ObjType(victimV.Ref) != ref.TypePlayer && h.ObjType(victimV.Ref) != ref.TypeThing) {
+			return nil, errf("Invalid player or thing argument (1).")
+		}
+
+		if cmdV.Str == "" {
+			return nil, errf("Empty command argument (2).")
+		}
+		if strings.ContainsRune(cmdV.Str, '\r') {
+			return nil, errf("Carriage returns not allowed in command string. (2).")
+		}
+
+		if victimV.Ref == ref.God && h.Owner(f.Prog.Ref) != ref.God {
+			return nil, errf("Cannot force god (1).")
+		}
+
+		h.Force(f.Descr, f.Caller, f.Prog.Ref, victimV.Ref, cmdV.Str)
+		return nil, nil
+	})
+
+	register("FORCEDBY", func(f *Frame) (*Result, error) {
+		if f.MLevel() < 4 {
+			return nil, errf("Wizbit only primitive.")
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Obj(h.ForcedBy()))
+	})
+
+	register("FORCEDBY_ARRAY", func(f *Frame) (*Result, error) {
+		if f.MLevel() < 4 {
+			return nil, errf("Wizbit only primitive.")
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		refs := h.ForcedByArray()
+		vals := make([]Value, len(refs))
+		for i, r := range refs {
+			vals[i] = Obj(r)
+		}
+		return nil, f.Push(Arr(NewList(vals)))
 	})
 }

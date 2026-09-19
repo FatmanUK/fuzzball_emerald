@@ -6,6 +6,7 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
@@ -347,7 +348,13 @@ func (s *Server) cmdForce(c *ctx) {
 		"by", c.who.String(), "byName", nameOf(c.w, c.who),
 		"command", command)
 
-	s.force(c, victim, command)
+	// forcelist records who is forcing what, for FORCEDBY/FORCEDBY_ARRAY —
+	// upstream's do_force pushes only the player, never a program, since
+	// @force is not called from inside one.
+	s.forcelist = append(s.forcelist, c.who)
+	defer func() { s.forcelist = s.forcelist[:len(s.forcelist)-1] }()
+
+	s.force(c.w, c.d, victim, command)
 }
 
 // force runs a command as another object.
@@ -355,8 +362,8 @@ func (s *Server) cmdForce(c *ctx) {
 // The forced object needs a descriptor, because a command may ask which
 // connection typed it. It borrows the forcer's when it has none of its own,
 // which is what dbref_first_descr comes to for a puppet.
-func (s *Server) force(c *ctx, victim ref.Ref, command string) {
-	d := c.d
+func (s *Server) force(w *world.World, callerD *session.Descriptor, victim ref.Ref, command string) {
+	d := callerD
 	if ds := s.hub.DescriptorsFor(victim); len(ds) > 0 {
 		d = ds[0]
 	}
@@ -367,7 +374,7 @@ func (s *Server) force(c *ctx, victim ref.Ref, command string) {
 	// The command goes to the parser, not through Input: a forced object
 	// must not be able to answer a READ or type into an editor session
 	// belonging to whoever holds the descriptor.
-	s.commandAs(c.w, d, victim, strings.TrimSpace(command))
+	s.commandAs(w, d, victim, strings.TrimSpace(command))
 }
 
 // ownerOf returns the object a player's possessions belong to, which for a

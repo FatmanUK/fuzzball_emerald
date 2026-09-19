@@ -52,6 +52,11 @@ type Server struct {
 	// forceDepth counts how deep @force is nested, so a command that
 	// forces something that forces back cannot recurse without end.
 	forceDepth int
+	// forcelist is upstream's own global objnode stack: who is forcing what,
+	// most recently pushed last, read by FORCEDBY/FORCEDBY_ARRAY. Both
+	// @force (cmdForce) and the FORCE primitive push onto and pop from it
+	// around their own call to force/commandAs.
+	forcelist []ref.Ref
 
 	// procs holds suspended programs: those sleeping, waiting for input, or
 	// waiting for an event.

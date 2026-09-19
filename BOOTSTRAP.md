@@ -104,24 +104,41 @@ same one — `Host.Queue` calls `SetReserved` for the `COMMAND` value and then
 overwrites the pushed stack value directly. It shares `processLimitOK` with
 `FORK`, returning `0` on the same limit failure rather than `FORK`'s `-1`.
 
-Still to come from the Phase 2 plan, in order: `FORCE`/`FORCEDBY`/
-`FORCEDBY_ARRAY` (share permission logic with `internal/game/wiz.go`'s
-`@force`), `GETPIDS`/`GETPIDINFO`, and last `WATCHPID` (needs a still-missing
-generic event-delivery mechanism built alongside it).
+`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY` have landed too, the last of Phase 2's
+process-cluster primitives before `GETPIDS`/`GETPIDINFO`/`WATCHPID`. `FORCE`
+needs none of `@force` (`cmdForce`)'s own ownership-escaping checks — mlev 4
+already means the calling program has full wizard authority — so it shares
+only the mechanical half, `Server.force` (`internal/game/wiz.go`, refactored
+to take a descriptor instead of a `*ctx` so `mufHost.Force` can call it too).
+`Server.forcelist` is upstream's own single global `objnode` stack — both
+`cmdForce` and `mufHost.Force` push onto and pop from the same one, which is
+what lets `FORCEDBY`/`FORCEDBY_ARRAY` see who forced a program regardless of
+whether `@force` or `FORCE` did it. Porting this surfaced another real
+wording divergence via golden, alongside `KILL`'s from last session: `FORCE`,
+`FORCEDBY` and `FORCEDBY_ARRAY` all abort mlev<4 with upstream's own "Wizbit
+only primitive.", not the generic "Permission denied.  Requires Wizbit."
+most other level-4 primitives get — verified only for `p_db.c`'s primitives
+so far, so a level-4 primitive from another module is worth checking by hand
+before assuming the generic wording is right. `gen_mlev.py`'s new
+`CUSTOM_ABORT_MESSAGE` set excludes these three from the generated table so
+each can check its own mlev inline with the correct string instead.
 
-1. **Port more MUF primitives.** 94 of 417 are still unimplemented (see
+Still to come from the Phase 2 plan: `GETPIDS`/`GETPIDINFO`, and last
+`WATCHPID` (needs a still-missing generic event-delivery mechanism built
+alongside it).
+
+1. **Port more MUF primitives.** 91 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
-   has repeatedly caught real divergences that unit tests missed, including
-   two in the lock work: `PARSELOCK` on `""` must produce no message at all
-   (a null vs. merely-empty `PROG_STRING` distinction the C makes and Go
-   cannot represent directly — see `mufHost.ParseLock`), and a match
-   failure's own message during `_set_lock` is never gated by its `silent`
-   flag, only `_set_lock`'s own messages are (see `boolexp.ParseError.Notify`
-   and `Server.setLock`). `FORCE`/`FORK`/`QUEUE` (process and multitasking,
-   `src/p_misc.c`) are the largest remaining chunk, now underway — see
-   Phase 2 of the plan above.
+   has repeatedly caught real divergences that unit tests missed: two in the
+   lock work (`PARSELOCK` on `""`, and `_set_lock`'s own match-failure
+   message bypassing its `silent` flag), a generator false-positive gating
+   `KILL` at an unconditional floor it does not have, and `FORCE`/`FORCEDBY`/
+   `FORCEDBY_ARRAY`'s own distinct abort wording — see Phase 2 of the plan
+   above for all four. `GETPIDS`/`GETPIDINFO`/`WATCHPID` (process
+   introspection, `src/p_misc.c`/`src/p_db.c`) are what remains of that
+   cluster.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
@@ -192,7 +209,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~318 primitives
+internal/muf/           — instruction set, VM/interpreter, ~321 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -427,7 +444,9 @@ enforcement — see `git log` for the exact commits):
     `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`), the
     `"fork"` case (parent/child independence) and the `"queue"` case
     (COMMAND vs. stack argument)
-- Primitive coverage: **318 of 417** implemented
+  - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
+    self-forcing program)
+- Primitive coverage: **321 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

@@ -209,6 +209,18 @@ type Host interface {
 	// same one. It returns the new process's pid, or 0 — never FORK's -1 —
 	// on the same process-count-limit failure Fork reports.
 	Queue(descr int, prog ref.Ref, seconds int64, arg string) int
+	// Force is upstream's process_command call inside prim_force: runs
+	// command as victim, on behalf of player (running as program). Unlike
+	// @force, FORCE needs none of its ownership-escaping checks — mlev 4
+	// already means the calling program has full wizard authority — so this
+	// only does the forcelist/force_level bookkeeping FORCEDBY and
+	// FORCEDBY_ARRAY read; every other check is FORCE's own primFunc's job.
+	Force(descr int, player, program, victim ref.Ref, command string)
+	// ForcedBy and ForcedByArray read upstream's forcelist: the object that
+	// most recently forced the currently-running program (ref.Nothing if
+	// none has), and every forcer still on the stack, most recent first.
+	ForcedBy() ref.Ref
+	ForcedByArray() []ref.Ref
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

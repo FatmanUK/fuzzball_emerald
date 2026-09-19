@@ -40,6 +40,20 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
           "MLEV_WIZARD": 4, "MLEV_GOD": 4,
           "1": 1, "2": 2, "3": 3, "4": 4}
 
+# This table only records a floor's *level*, not its abort message, so the
+# dispatcher (internal/muf/prim.go's primitive()) always prints one of two
+# generic messages by level — "Permission denied." or, for level 4,
+# "Permission denied.  Requires Wizbit." That second wording matches most of
+# p_db.c's own level-4 checks, verified via golden, but not every module:
+# p_misc.c's FORCE, FORCEDBY and FORCEDBY_ARRAY all abort with "Wizbit only
+# primitive." instead, discovered via golden when FORCE was ported, and
+# p_connects.c has a third variant, "Requires Wizbit.", not yet hit by a
+# ported primitive. Names here are excluded from the table entirely and
+# implement their own mlev check inline with the exact right wording — see
+# prim_proc.go's FORCE/FORCEDBY/FORCEDBY_ARRAY — rather than teaching this
+# generator to track messages for what is so far three known exceptions.
+CUSTOM_ABORT_MESSAGE = {"FORCE", "FORCEDBY", "FORCEDBY_ARRAY"}
+
 
 
 def conditions(body):
@@ -119,7 +133,7 @@ def main():
     table = {}
     for fn, lv in levels.items():
         nm = name_of.get(fn)
-        if nm:
+        if nm and nm not in CUSTOM_ABORT_MESSAGE:
             table[nm] = lv
 
     q = json.dumps
