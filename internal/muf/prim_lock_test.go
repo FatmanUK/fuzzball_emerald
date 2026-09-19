@@ -66,6 +66,13 @@ type lockTestHost struct {
 
 	getPIDsCalls  []getPIDsCall
 	getPIDsResult []int
+
+	pidInfoCalls  []int
+	pidInfoResult PIDInfo
+	pidInfoOK     bool
+
+	watchPIDCalls  []watchPIDCall
+	watchPIDResult bool
 }
 
 type getPIDsCall struct {
@@ -209,6 +216,20 @@ func (h *lockTestHost) ForcedByArray() []ref.Ref { return h.forcedByArrayResult 
 func (h *lockTestHost) GetPIDs(obj ref.Ref, selfPID int) []int {
 	h.getPIDsCalls = append(h.getPIDsCalls, getPIDsCall{obj, selfPID})
 	return h.getPIDsResult
+}
+
+func (h *lockTestHost) PIDInfo(pid int) (PIDInfo, bool) {
+	h.pidInfoCalls = append(h.pidInfoCalls, pid)
+	return h.pidInfoResult, h.pidInfoOK
+}
+
+type watchPIDCall struct {
+	callerPID, targetPID int
+}
+
+func (h *lockTestHost) WatchPID(callerPID, targetPID int) bool {
+	h.watchPIDCalls = append(h.watchPIDCalls, watchPIDCall{callerPID, targetPID})
+	return h.watchPIDResult
 }
 
 const testProgram ref.Ref = 99

@@ -216,7 +216,7 @@ func (s *Server) toadPlayer(c *ctx, victim, recipient ref.Ref) {
 				"object", r.String(), "err", err)
 		}
 	}
-	s.killProcessesFor(victim)
+	s.killProcessesFor(w, victim)
 
 	// Everything they owned changes hands. A program passed to a wizard
 	// loses the flags that would let it run with the new owner's powers.
@@ -224,7 +224,7 @@ func (s *Server) toadPlayer(c *ctx, victim, recipient ref.Ref) {
 		if o.Owner == victim {
 			switch o.Type() {
 			case ref.TypeProgram:
-				s.killProcessesOf(o.Ref)
+				s.killProcessesOf(w, o.Ref)
 				s.InvalidateProgram(o.Ref)
 				if r := w.Get(recipient); r != nil && r.Flags.IsTrueWizard() {
 					o.Flags &^= ref.Abode | ref.Wizard

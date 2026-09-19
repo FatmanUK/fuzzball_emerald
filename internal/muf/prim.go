@@ -94,6 +94,23 @@ func (f *Frame) primitive(n int) (*Result, error) {
 		for _, v := range a.Values() {
 			events = append(events, v.String())
 		}
+
+		// Emerald has no periodic scan equivalent to upstream's own
+		// muf_event_process — delivery happens synchronously wherever
+		// AddEvent is called — so a match already queued before this
+		// EVENT_WAITFOR runs (WATCHPID on an already-dead pid, most
+		// commonly) is served here instead of at the next tick.
+		if ev, ok := f.popEvent(events); ok {
+			if err := f.Push(ev.Data); err != nil {
+				return nil, err
+			}
+			if err := f.Push(Str(ev.Name)); err != nil {
+				return nil, err
+			}
+			f.PC++
+			return nil, nil
+		}
+
 		f.Block = BlockReason{Kind: BlockEvent, Events: events}
 		f.PC++
 		blocked := Blocked

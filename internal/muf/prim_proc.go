@@ -1,6 +1,7 @@
 package muf
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -355,5 +356,121 @@ func init() {
 			vals[i] = Int(int64(pid))
 		}
 		return nil, f.Push(Arr(NewList(vals)))
+	})
+}
+
+// GETPIDINFO is a port of prim_getpidinfo (src/p_db.c) and get_pidinfo
+// (src/timequeue.c). Its own mlev check is conditional — "mlev < 3 &&
+// oper1->data.number != fr->pid", a program may always inspect its own
+// pid — so it stays out of mlev_gen.go's generated table, via the fr->pid
+// exemption this session's generator fix added, and is hand-checked here,
+// the same shape as KILL's.
+//
+// Both branches build the same 14-key dictionary, but the self branch reads
+// straight off the live *Frame*, matching prim_getpidinfo's own inline
+// construction, while the other-pid branch reads Host.PIDInfo, this port's
+// equivalent of get_pidinfo. Deliberately reproduced quirks, not bugs:
+// self's CALLED_DATA is hardcoded to "" and its NEXTRUN to 0, exactly as
+// upstream's own prim_getpidinfo hardcodes them; other-pid's MLEVEL is
+// hardcoded to 0, exactly as upstream's own get_pidinfo hardcodes it (its own
+// documented TODO, not an Emerald gap). CPU is always 0.0 in both branches —
+// Emerald does not profile programs, the same divergence examine's
+// "Cumulative runtime" line already documents. TYPE is always "MUF": unlike
+// upstream's separate MUF/MPI timequeue and MUF-event queue, procQueue holds
+// only muf.Frame processes, an EVENT_WAITFOR-blocked one included, so there
+// is no second queue for an other-pid lookup to fall back to.
+func init() {
+	register("GETPIDINFO", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if v.Type != TypeInteger {
+			return nil, errf("Non-integer argument (1)")
+		}
+		pid := int(v.Num)
+
+		if f.MLevel() < 3 && pid != f.PID {
+			return nil, errf("Permission denied.  Requires Mucker Level 3.")
+		}
+
+		d := NewDict()
+		if pid == f.PID {
+			d.Set(Str("CALLED_DATA"), Str(""))
+			d.Set(Str("CALLED_PROG"), Obj(f.Prog.Ref))
+			d.Set(Str("DESCR"), Int(int64(f.Descr)))
+			d.Set(Str("INSTCNT"), Int(int64(f.Instructions)))
+			d.Set(Str("MLEVEL"), Int(int64(f.MLevel())))
+			d.Set(Str("NEXTRUN"), Int(0))
+			d.Set(Str("PLAYER"), Obj(f.Caller))
+			d.Set(Str("STARTED"), Int(f.Started.Unix()))
+			d.Set(Str("SUBTYPE"), Str(""))
+			d.Set(Str("TRIG"), Obj(f.Trig))
+		} else {
+			h, err := f.needHost()
+			if err != nil {
+				return nil, err
+			}
+			if info, ok := h.PIDInfo(pid); ok {
+				d.Set(Str("CALLED_DATA"), Str(info.CalledData))
+				d.Set(Str("CALLED_PROG"), Obj(info.CalledProg))
+				d.Set(Str("DESCR"), Int(int64(info.Descr)))
+				d.Set(Str("INSTCNT"), Int(int64(info.InstCnt)))
+				d.Set(Str("MLEVEL"), Int(0))
+				d.Set(Str("NEXTRUN"), Int(info.NextRun))
+				d.Set(Str("PLAYER"), Obj(info.Player))
+				d.Set(Str("STARTED"), Int(info.Started.Unix()))
+				d.Set(Str("SUBTYPE"), Str(info.Subtype))
+				d.Set(Str("TRIG"), Obj(info.Trig))
+			}
+		}
+		if d.Len() > 0 {
+			d.Set(Str("CPU"), Float(0))
+			d.Set(Str("FILTERS"), Arr(NewList(nil)))
+			d.Set(Str("PID"), Int(int64(pid)))
+			d.Set(Str("TYPE"), Str("MUF"))
+		}
+		return nil, f.Push(Arr(d))
+	})
+}
+
+// WATCHPID is a port of prim_watchpid (src/p_misc.c). Its mlev check is
+// unconditional but has non-generic wording, "Mucker level 3 required."
+// unlike every other level-3 floor in this file's "Permission denied.
+// Requires Mucker Level 3." — added to gen_mlev.py's CUSTOM_ABORT_MESSAGE
+// alongside FORCE's family.
+//
+// When pid names a live process, Host.WatchPID does the bookkeeping and
+// this returns having pushed nothing further, matching upstream's own
+// prim_watchpid, which leaves the stack empty either way. When it does not,
+// the PROC.EXIT.<pid> event is queued directly on this frame — needing no
+// Host call, since upstream's own else branch never touches another
+// process either — so that a later EVENT_WAITFOR filtering on it returns
+// immediately instead of blocking forever on a pid that can never finish.
+func init() {
+	register("WATCHPID", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+
+		if f.MLevel() < 3 {
+			return nil, errf("Mucker level 3 required.")
+		}
+
+		if v.Type != TypeInteger || int(v.Num) == f.PID {
+			return nil, errf("Integer expected. Must be different from current PID.")
+		}
+		pid := int(v.Num)
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		if !h.WatchPID(f.PID, pid) {
+			f.AddEvent(fmt.Sprintf("PROC.EXIT.%d", pid), Int(int64(pid)))
+		}
+		return nil, nil
 	})
 }

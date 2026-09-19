@@ -526,15 +526,17 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 	c.w.Used(prog)
 
 	proc := &process{
-		frame:   f,
-		player:  c.who,
-		program: prog,
-		trigger: trigger,
-		descr:   c.d.ID,
-		command: c.verb,
-		started: c.w.Now(),
+		frame:      f,
+		player:     c.who,
+		program:    prog,
+		trigger:    trigger,
+		descr:      c.d.ID,
+		command:    c.verb,
+		started:    c.w.Now(),
+		calledData: "FOREGROUND",
 	}
 	f.PID = s.procs.add(proc)
+	f.Started = proc.started
 	s.step(c.w, proc)
 }
 

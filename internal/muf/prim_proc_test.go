@@ -2,6 +2,7 @@ package muf
 
 import (
 	"testing"
+	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
@@ -899,5 +900,330 @@ func TestGetPIDsAcceptsAnyDbrefIncludingNonexistent(t *testing.T) {
 
 	if _, err := prims[PrimNumber("GETPIDS")](f); err != nil {
 		t.Fatalf("GETPIDS should not require the dbref to exist: %v", err)
+	}
+}
+
+// TestGetPIDInfoRejectsNonIntegerArg checks GETPIDINFO's own argument-type
+// check, upstream's "Non-integer argument (1)" — no trailing period, unlike
+// most of this file's other argument-type messages, matching the C exactly.
+func TestGetPIDInfoRejectsNonIntegerArg(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	if err := f.Push(Obj(testProgram)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("GETPIDINFO")](f)
+	if err == nil || err.Error() != "Non-integer argument (1)" {
+		t.Fatalf("err = %v, want Non-integer argument (1)", err)
+	}
+}
+
+// TestGetPIDInfoRejectsBelowMlevelThreeForOtherPid checks GETPIDINFO's own
+// conditional mlev check, upstream's "mlev < 3 && oper1->data.number !=
+// fr->pid" — a program below mucker level 3 may not inspect a pid other than
+// its own.
+func TestGetPIDInfoRejectsBelowMlevelThreeForOtherPid(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.Prog.MLevel = 2
+	f.PID = 42
+	if err := f.Push(Int(99)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("GETPIDINFO")](f)
+	if err == nil || err.Error() != "Permission denied.  Requires Mucker Level 3." {
+		t.Fatalf("err = %v, want the Mucker Level 3 wording", err)
+	}
+}
+
+// TestGetPIDInfoAllowsBelowMlevelThreeForOwnPid checks the escape hatch: a
+// program may always inspect its own pid regardless of mucker level, which
+// is exactly what kept GETPIDINFO out of mlev_gen.go's generated table.
+func TestGetPIDInfoAllowsBelowMlevelThreeForOwnPid(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.Prog.MLevel = 1
+	f.PID = 42
+	if err := f.Push(Int(42)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("GETPIDINFO")](f); err != nil {
+		t.Fatalf("GETPIDINFO should allow a program to inspect its own pid: %v", err)
+	}
+}
+
+// TestGetPIDInfoSelfBranchBuildsFromLiveFrame checks the self branch's
+// deliberately reproduced upstream quirks: CALLED_DATA is always "", NEXTRUN
+// is always 0, SUBTYPE is always "", and MLEVEL reports the real effective
+// level — exactly prim_getpidinfo's own hardcoding, not a gap.
+func TestGetPIDInfoSelfBranchBuildsFromLiveFrame(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.PID = 42
+	f.Descr = 7
+	f.Instructions = 123
+	f.Caller = 10
+	f.Trig = 11
+	f.Started = time.Unix(1000, 0)
+	if err := f.Push(Int(42)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("GETPIDINFO")](f); err != nil {
+		t.Fatalf("GETPIDINFO: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeArray || v.Array == nil || v.Array.IsList() {
+		t.Fatalf("result = %+v, want a dictionary", v)
+	}
+
+	want := map[string]Value{
+		"CALLED_DATA": Str(""),
+		"CALLED_PROG": Obj(testProgram),
+		"CPU":         Float(0),
+		"DESCR":       Int(7),
+		"INSTCNT":     Int(123),
+		"MLEVEL":      Int(3),
+		"NEXTRUN":     Int(0),
+		"PID":         Int(42),
+		"PLAYER":      Obj(10),
+		"STARTED":     Int(1000),
+		"SUBTYPE":     Str(""),
+		"TRIG":        Obj(11),
+		"TYPE":        Str("MUF"),
+	}
+	for key, wantV := range want {
+		got, ok := v.Array.Get(Str(key))
+		if !ok {
+			t.Fatalf("missing key %q", key)
+		}
+		if got != wantV {
+			t.Errorf("%s = %+v, want %+v", key, got, wantV)
+		}
+	}
+	if filters, ok := v.Array.Get(Str("FILTERS")); !ok || filters.Type != TypeArray || len(filters.Array.Values()) != 0 {
+		t.Errorf("FILTERS = %+v, want an empty array", filters)
+	}
+	if len(h.pidInfoCalls) != 0 {
+		t.Errorf("Host.PIDInfo should not be called for the caller's own pid: %+v", h.pidInfoCalls)
+	}
+}
+
+// TestGetPIDInfoOtherBranchForwardsToHostAndBuildsDict checks the other-pid
+// branch: it reads Host.PIDInfo and fills PID/CPU/FILTERS/TYPE/MLEVEL itself
+// — MLEVEL hardcoded to 0, matching upstream's own get_pidinfo, which is its
+// own documented TODO, not an Emerald gap.
+func TestGetPIDInfoOtherBranchForwardsToHostAndBuildsDict(t *testing.T) {
+	h := newLockTestHost()
+	h.pidInfoOK = true
+	h.pidInfoResult = PIDInfo{
+		CalledProg: 50,
+		CalledData: "SLEEPING",
+		Descr:      8,
+		InstCnt:    99,
+		NextRun:    2000,
+		Player:     20,
+		Started:    time.Unix(1500, 0),
+		Subtype:    "DELAY",
+		Trig:       21,
+	}
+	f := newTestFrame(h)
+	f.PID = 42
+	if err := f.Push(Int(99)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("GETPIDINFO")](f); err != nil {
+		t.Fatalf("GETPIDINFO: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]Value{
+		"CALLED_DATA": Str("SLEEPING"),
+		"CALLED_PROG": Obj(50),
+		"CPU":         Float(0),
+		"DESCR":       Int(8),
+		"INSTCNT":     Int(99),
+		"MLEVEL":      Int(0),
+		"NEXTRUN":     Int(2000),
+		"PID":         Int(99),
+		"PLAYER":      Obj(20),
+		"STARTED":     Int(1500),
+		"SUBTYPE":     Str("DELAY"),
+		"TRIG":        Obj(21),
+		"TYPE":        Str("MUF"),
+	}
+	for key, wantV := range want {
+		got, ok := v.Array.Get(Str(key))
+		if !ok {
+			t.Fatalf("missing key %q", key)
+		}
+		if got != wantV {
+			t.Errorf("%s = %+v, want %+v", key, got, wantV)
+		}
+	}
+	if len(h.pidInfoCalls) != 1 || h.pidInfoCalls[0] != 99 {
+		t.Fatalf("Host.PIDInfo calls = %+v, want [99]", h.pidInfoCalls)
+	}
+}
+
+// TestGetPIDInfoReturnsEmptyDictWhenPIDNotFound matches upstream leaving a
+// freshly allocated new_array_dictionary untouched when neither the
+// timequeue nor the MUF-event queue know the pid.
+func TestGetPIDInfoReturnsEmptyDictWhenPIDNotFound(t *testing.T) {
+	h := newLockTestHost() // pidInfoOK defaults to false
+	f := newTestFrame(h)
+	f.PID = 42
+	if err := f.Push(Int(999)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("GETPIDINFO")](f); err != nil {
+		t.Fatalf("GETPIDINFO: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeArray || v.Array == nil || v.Array.Len() != 0 {
+		t.Fatalf("result = %+v, want an empty dictionary", v)
+	}
+}
+
+func TestWatchPIDRejectsBelowMlevelThree(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.Prog.MLevel = 2
+	f.PID = 1
+	if err := f.Push(Int(2)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("WATCHPID")](f)
+	if err == nil || err.Error() != "Mucker level 3 required." {
+		t.Fatalf("err = %v, want the Mucker level 3 wording", err)
+	}
+}
+
+func TestWatchPIDRejectsOwnPID(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.PID = 42
+	if err := f.Push(Int(42)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("WATCHPID")](f)
+	want := "Integer expected. Must be different from current PID."
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+}
+
+func TestWatchPIDRejectsNonInteger(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	if err := f.Push(Str("nope")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("WATCHPID")](f)
+	want := "Integer expected. Must be different from current PID."
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+}
+
+// TestWatchPIDForwardsToHostWhenTargetExists checks that a live target is
+// handled entirely by Host.WatchPID, with no event queued on the calling
+// frame — that only happens in the "target does not exist" branch.
+func TestWatchPIDForwardsToHostWhenTargetExists(t *testing.T) {
+	h := newLockTestHost()
+	h.watchPIDResult = true
+	f := newTestFrame(h)
+	f.PID = 1
+	if err := f.Push(Int(2)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("WATCHPID")](f); err != nil {
+		t.Fatalf("WATCHPID: %v", err)
+	}
+	if f.Depth() != 0 {
+		t.Fatalf("WATCHPID should leave nothing on the stack, depth = %d", f.Depth())
+	}
+	if len(h.watchPIDCalls) != 1 || h.watchPIDCalls[0] != (watchPIDCall{1, 2}) {
+		t.Fatalf("WatchPID calls = %+v, want [{1 2}]", h.watchPIDCalls)
+	}
+	if len(f.PendingEvents) != 0 {
+		t.Fatalf("no event should be queued when the target exists: %+v", f.PendingEvents)
+	}
+}
+
+// TestWatchPIDQueuesProcExitEventWhenTargetDoesNotExist checks upstream's
+// else branch: watching a pid that names no live process queues a
+// PROC.EXIT.<pid> event directly on the caller's own frame, immediately,
+// rather than ever registering a wait.
+func TestWatchPIDQueuesProcExitEventWhenTargetDoesNotExist(t *testing.T) {
+	h := newLockTestHost()
+	h.watchPIDResult = false
+	f := newTestFrame(h)
+	f.PID = 1
+	if err := f.Push(Int(999)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("WATCHPID")](f); err != nil {
+		t.Fatalf("WATCHPID: %v", err)
+	}
+	if len(f.PendingEvents) != 1 {
+		t.Fatalf("PendingEvents = %+v, want one queued event", f.PendingEvents)
+	}
+	ev := f.PendingEvents[0]
+	if ev.Name != "PROC.EXIT.999" || ev.Data.Type != TypeInteger || ev.Data.Num != 999 {
+		t.Fatalf("event = %+v, want PROC.EXIT.999 carrying 999", ev)
+	}
+}
+
+// TestEventWaitForServesAnAlreadyQueuedEvent checks that EVENT_WAITFOR does
+// not unconditionally block: an event queued before it runs — exactly what
+// WATCHPID does when the target is already gone — is served immediately.
+func TestEventWaitForServesAnAlreadyQueuedEvent(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	f.AddEvent("PROC.EXIT.999", Int(999))
+	if err := f.Push(Arr(NewList([]Value{Str("PROC.EXIT.999")}))); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := f.primitive(InEventWaitFor)
+	if err != nil {
+		t.Fatalf("EVENT_WAITFOR: %v", err)
+	}
+	if res != nil {
+		t.Fatalf("result = %+v, want nil (not blocked)", res)
+	}
+	name, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name.Type != TypeString || name.Str != "PROC.EXIT.999" {
+		t.Fatalf("name = %+v, want PROC.EXIT.999", name)
+	}
+	if data.Type != TypeInteger || data.Num != 999 {
+		t.Fatalf("data = %+v, want 999", data)
 	}
 }

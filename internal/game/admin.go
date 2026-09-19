@@ -251,7 +251,7 @@ func (s *Server) cmdKill(c *ctx) {
 		c.tell("Permission denied.")
 		return
 	}
-	s.procs.remove(pid)
+	s.finishProcess(c.w, p)
 	if p.player != c.who {
 		s.send(c.w, p.player, "Your program was stopped.")
 	}

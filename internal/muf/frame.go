@@ -233,6 +233,36 @@ type Host interface {
 	// prim_getpids, which only checks the argument is a dbref-typed value
 	// at all.
 	GetPIDs(obj ref.Ref, selfPID int) []int
+	// PIDInfo is upstream's get_pidinfo, for GETPIDINFO's other-pid branch —
+	// the caller's own pid is answered straight from the live *Frame*
+	// instead, matching prim_getpidinfo's own self/other split. ok is false
+	// when pid names no live process, which GETPIDINFO turns into an empty
+	// dictionary, matching upstream leaving one built by new_array_dictionary
+	// untouched.
+	PIDInfo(pid int) (info PIDInfo, ok bool)
+	// WatchPID is the "target exists" branch of upstream's prim_watchpid:
+	// callerPID starts watching targetPID, and reports whether targetPID
+	// named a live process at all. When it reports false, WATCHPID's own
+	// primFunc queues the PROC.EXIT event itself, straight onto the calling
+	// Frame, matching prim_watchpid's own else branch — that half needs no
+	// Host call, since it never touches another process.
+	WatchPID(callerPID, targetPID int) bool
+}
+
+// PIDInfo is the subset of get_pidinfo's dictionary that depends on which
+// process pid names, rather than on the calling frame — GETPIDINFO fills in
+// the rest (PID, MLEVEL, CPU, FILTERS, TYPE) itself, the same fields upstream
+// hardcodes or computes identically in both branches of prim_getpidinfo.
+type PIDInfo struct {
+	CalledProg ref.Ref
+	CalledData string
+	Descr      int
+	InstCnt    int
+	NextRun    int64
+	Player     ref.Ref
+	Started    time.Time
+	Subtype    string
+	Trig       ref.Ref
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.
@@ -330,12 +360,60 @@ type Frame struct {
 	// synchronously.
 	PID int
 
+	// Started is when this frame's process began, upstream's fr->started,
+	// for GETPIDINFO's own STARTED key. Set alongside PID by whoever
+	// registers the frame as a process; zero for a frame that never becomes
+	// one.
+	Started time.Time
+
 	// Supplicant is upstream's fr->supplicant: the object being tested
 	// against a lock, for a frame a program-type lock constant is running.
 	// It is ref.Nothing outside that context.
 	Supplicant ref.Ref
 
+	// PendingEvents is upstream's fr->events: named data queued for this
+	// frame by something outside it — currently only WATCHPID's own
+	// PROC.EXIT.<pid>, delivered either immediately, when the watched pid
+	// already names no live process, or later by whoever runs that process
+	// to completion. EVENT_WAITFOR consumes from here.
+	PendingEvents []MufEvent
+
 	host Host
+}
+
+// MufEvent is upstream's struct mufevent: a named piece of data queued for a
+// frame, for EVENT_WAITFOR to consume.
+type MufEvent struct {
+	Name string
+	Data Value
+}
+
+// AddEvent queues a named event for this frame, upstream's muf_event_add.
+func (f *Frame) AddEvent(name string, data Value) {
+	f.PendingEvents = append(f.PendingEvents, MufEvent{Name: name, Data: data})
+}
+
+// popEvent is upstream's muf_event_pop_specific (a non-empty filters) and
+// muf_event_pop (no filter, pops the oldest event regardless of name) in
+// one: it removes and returns the oldest queued event matching one of
+// filters, or the oldest event of any name when filters is empty.
+func (f *Frame) popEvent(filters []string) (MufEvent, bool) {
+	for i, ev := range f.PendingEvents {
+		if len(filters) == 0 || matchesEvent(ev.Name, filters) {
+			f.PendingEvents = append(f.PendingEvents[:i], f.PendingEvents[i+1:]...)
+			return ev, true
+		}
+	}
+	return MufEvent{}, false
+}
+
+func matchesEvent(name string, filters []string) bool {
+	for _, f := range filters {
+		if f == name {
+			return true
+		}
+	}
+	return false
 }
 
 // NewFrame prepares a program to run.

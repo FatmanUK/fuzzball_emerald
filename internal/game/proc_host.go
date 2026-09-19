@@ -66,10 +66,11 @@ func (h *mufHost) ControlsProcess(callerUID ref.Ref, pid int) bool {
 
 // KillPID implements muf.Host for KILL, upstream's dequeue_process.
 func (h *mufHost) KillPID(pid int) bool {
-	if h.s.procs.get(pid) == nil {
+	p := h.s.procs.get(pid)
+	if p == nil {
 		return false
 	}
-	h.s.procs.remove(pid)
+	h.s.finishProcess(h.w, p)
 	return true
 }
 
@@ -84,16 +85,18 @@ func (h *mufHost) Fork(child *muf.Frame) int {
 	}
 
 	proc := &process{
-		frame:   child,
-		player:  h.caller,
-		program: child.Prog.Ref,
-		trigger: child.Trig,
-		descr:   child.Descr,
-		command: "Forked Process.",
-		started: h.w.Now(),
+		frame:      child,
+		player:     h.caller,
+		program:    child.Prog.Ref,
+		trigger:    child.Trig,
+		descr:      child.Descr,
+		command:    "Forked Process.",
+		started:    h.w.Now(),
+		calledData: "BACKGROUND",
 	}
 	pid := h.s.procs.add(proc)
 	child.PID = pid
+	child.Started = proc.started
 	return pid
 }
 
@@ -135,18 +138,20 @@ func (h *mufHost) Queue(descr int, prog ref.Ref, seconds int64, arg string) int 
 	f.Mode = muf.ModeBackground
 
 	proc := &process{
-		frame:   f,
-		player:  h.caller,
-		program: prog,
-		trigger: ref.Nothing,
-		descr:   descr,
-		command: "Queued Event.",
-		started: h.w.Now(),
-		state:   procSleeping,
-		wake:    h.w.Now().Add(time.Duration(seconds) * time.Second),
+		frame:      f,
+		player:     h.caller,
+		program:    prog,
+		trigger:    ref.Nothing,
+		descr:      descr,
+		command:    "Queued Event.",
+		started:    h.w.Now(),
+		state:      procSleeping,
+		wake:       h.w.Now().Add(time.Duration(seconds) * time.Second),
+		calledData: arg,
 	}
 	pid := h.s.procs.add(proc)
 	f.PID = pid
+	f.Started = proc.started
 	return pid
 }
 
@@ -236,4 +241,83 @@ func (h *mufHost) GetPIDs(obj ref.Ref, selfPID int) []int {
 		}
 	}
 	return out
+}
+
+// PIDInfo implements muf.Host for GETPIDINFO's other-pid branch, upstream's
+// get_pidinfo. Unlike get_pidinfo, there is no separate MUF-event queue to
+// fall back to when pid is not found in the main one — procQueue already
+// holds an EVENT_WAITFOR-blocked process the same way it holds every other
+// kind — so a missing pid simply reports ok=false.
+//
+// SUBTYPE mirrors upstream's own TQ_MUF_* mapping as closely as procState
+// allows: "READ" for a blocked READ, "QUEUE" for a QUEUE-created process
+// (recognised by its own reserved COMMAND, since both SLEEP and QUEUE share
+// procSleeping), and "DELAY" for everything add_muf_delay_event covers
+// upstream — SLEEP, and a runnable foreground or forked process — which
+// upstream itself gives the same subtype regardless of BACKGROUND/FOREGROUND
+// mode. An EVENT_WAITFOR-blocked process gets "", matching
+// get_mufevent_pidinfo's own hardcoded SUBTYPE.
+func (h *mufHost) PIDInfo(pid int) (muf.PIDInfo, bool) {
+	p := h.s.procs.get(pid)
+	if p == nil {
+		return muf.PIDInfo{}, false
+	}
+
+	subtype := "DELAY"
+	switch p.state {
+	case procReading:
+		subtype = "READ"
+	case procSleeping:
+		if p.command == "Queued Event." {
+			subtype = "QUEUE"
+		}
+	case procWaiting:
+		subtype = ""
+	}
+
+	return muf.PIDInfo{
+		CalledProg: p.program,
+		CalledData: p.calledData,
+		Descr:      p.descr,
+		InstCnt:    p.frame.Instructions,
+		NextRun:    h.nextRun(p),
+		Player:     p.player,
+		Started:    p.started,
+		Subtype:    subtype,
+		Trig:       p.trigger,
+	}, true
+}
+
+// WatchPID implements muf.Host for WATCHPID's "target exists" branch,
+// upstream's frame-found half of prim_watchpid. Unlike upstream's own dedup
+// check — which compares a stored caller pid against the target pid it is
+// searching for, so it can only ever match by coincidence — this dedups on
+// whether callerPID already appears in targetPID's waiters, the check
+// upstream's own comment describes wanting.
+func (h *mufHost) WatchPID(callerPID, targetPID int) bool {
+	target := h.s.procs.get(targetPID)
+	if target == nil {
+		return false
+	}
+	for _, pid := range target.waiters {
+		if pid == callerPID {
+			return true
+		}
+	}
+	target.waiters = append(target.waiters, callerPID)
+	if caller := h.s.procs.get(callerPID); caller != nil {
+		caller.waitees = append(caller.waitees, targetPID)
+	}
+	return true
+}
+
+// nextRun approximates upstream's own ptr->when: a real wake time for a
+// sleeping process (SLEEP or QUEUE alike), and "now" for everything else —
+// upstream's own dtime is 0 for a runnable process and -1 for a READ, both of
+// which land within a second of "now" too.
+func (h *mufHost) nextRun(p *process) int64 {
+	if p.state == procSleeping {
+		return p.wake.Unix()
+	}
+	return h.w.Now().Unix()
 }

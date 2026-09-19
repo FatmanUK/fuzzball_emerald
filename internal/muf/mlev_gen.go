@@ -86,5 +86,4 @@ var primMLevel = map[string]int{
 	"TOADPLAYER":           4,
 	"UNBLESSPROP":          4,
 	"UNCOMPILE":            4,
-	"WATCHPID":             3,
 }

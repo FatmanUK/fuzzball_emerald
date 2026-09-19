@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -45,6 +46,21 @@ type process struct {
 	wake time.Time
 	// events are what a waiting process is listening for.
 	events []string
+
+	// calledData is upstream's timequeue called_data: what the process is
+	// doing, for GETPIDINFO's CALLED_DATA key. "READ", "SLEEPING" and
+	// "EVENT_WAITFOR" for the three ways to block, "FOREGROUND" or
+	// "BACKGROUND" for a runnable command-driven or forked process, or the
+	// arg string a QUEUE was given.
+	calledData string
+
+	// waiters and waitees are upstream's fr->waiters/fr->waitees: WATCHPID
+	// bookkeeping. waiters lists the pids watching this process, notified
+	// with a PROC.EXIT.<pid> event when it ends; waitees lists the pids this
+	// process is watching, so that ending early drops it from their waiters
+	// too rather than leaving a stale entry.
+	waiters []int
+	waitees []int
 
 	frame *muf.Frame
 
@@ -194,7 +210,7 @@ func (s *Server) step(w *world.World, p *process) {
 		}
 		switch res {
 		case muf.Done:
-			s.procs.remove(p.pid)
+			s.finishProcess(w, p)
 			return
 
 		case muf.Yielded:
@@ -216,29 +232,92 @@ func (s *Server) blockProcess(w *world.World, p *process) {
 	switch b := p.frame.Block; b.Kind {
 	case muf.BlockRead:
 		p.state = procReading
+		p.calledData = "READ"
 		if p.descr != 0 {
 			s.procs.reading[p.descr] = p.pid
 		}
 
 	case muf.BlockSleep:
 		p.state = procSleeping
+		p.calledData = "SLEEPING"
 		p.wake = w.Now().Add(time.Duration(b.Seconds) * time.Second)
 
 	case muf.BlockEvent:
 		p.state = procWaiting
+		p.calledData = "EVENT_WAITFOR"
 		p.events = b.Events
 
 	default:
 		// No reason given, which should not happen; treat it as done
 		// rather than leaving a process that nothing will ever resume.
-		s.procs.remove(p.pid)
+		s.finishProcess(w, p)
 	}
 }
 
 // failProcess reports a runtime error and removes the process.
 func (s *Server) failProcess(w *world.World, p *process, err error) {
-	s.procs.remove(p.pid)
+	s.finishProcess(w, p)
 	s.reportMUFErrorTo(w, p.player, p.frame, p.program, err)
+}
+
+// finishProcess is upstream's watchpid_process, called from every path that
+// ends a process for good. It notifies whoever WATCHPID'd this pid with a
+// PROC.EXIT.<pid> event, drops this pid from the waiters list of whatever it
+// was itself watching so a dead process leaves no stale entries behind, and
+// only then removes it from the queue.
+func (s *Server) finishProcess(w *world.World, p *process) {
+	for _, pid := range p.waitees {
+		if target := s.procs.get(pid); target != nil {
+			target.waiters = removePID(target.waiters, p.pid)
+		}
+	}
+	for _, pid := range p.waiters {
+		if waiter := s.procs.get(pid); waiter != nil {
+			waiter.waitees = removePID(waiter.waitees, p.pid)
+			s.deliverEvent(w, waiter, fmt.Sprintf("PROC.EXIT.%d", p.pid), muf.Int(int64(p.pid)))
+		}
+	}
+	s.procs.remove(p.pid)
+}
+
+// deliverEvent is upstream's muf_event_add, plus the immediate-delivery half
+// of muf_event_process: Emerald has no periodic scan to defer to, so a
+// target already blocked in a matching EVENT_WAITFOR resumes right here
+// instead of waiting for one. Otherwise the event is queued on its frame for
+// whenever it next blocks on a matching EVENT_WAITFOR — see Frame.popEvent.
+func (s *Server) deliverEvent(w *world.World, target *process, name string, data muf.Value) {
+	if target.state == procWaiting && (len(target.events) == 0 || matchesEvent(name, target.events)) {
+		target.state = procRunnable
+		if err := target.frame.Push(data); err != nil {
+			s.failProcess(w, target, err)
+			return
+		}
+		if err := target.frame.Push(muf.Str(name)); err != nil {
+			s.failProcess(w, target, err)
+			return
+		}
+		s.step(w, target)
+		return
+	}
+	target.frame.AddEvent(name, data)
+}
+
+func matchesEvent(name string, filters []string) bool {
+	for _, f := range filters {
+		if f == name {
+			return true
+		}
+	}
+	return false
+}
+
+func removePID(pids []int, pid int) []int {
+	for i, x := range pids {
+		if x == pid {
+			return append(pids[:i], pids[i+1:]...)
+		}
+	}
+	return pids
 }
 
 // Input from a descriptor goes to a program waiting on a READ, when there is
@@ -256,17 +335,17 @@ func (s *Server) readInput(w *world.World, descr int, line string) bool {
 // killProcessesFor stops everything a player is running, which deleting or
 // disconnecting them has to do: a suspended program holds a frame naming an
 // object that may be about to change hands.
-func (s *Server) killProcessesFor(player ref.Ref) {
+func (s *Server) killProcessesFor(w *world.World, player ref.Ref) {
 	for _, p := range s.procs.all() {
 		if p.player == player {
-			s.procs.remove(p.pid)
+			s.finishProcess(w, p)
 		}
 	}
 }
 
 // killProcessesOf stops every instance of one program.
-func (s *Server) killProcessesOf(program ref.Ref) {
+func (s *Server) killProcessesOf(w *world.World, program ref.Ref) {
 	for _, p := range s.procs.forProgram(program) {
-		s.procs.remove(p.pid)
+		s.finishProcess(w, p)
 	}
 }

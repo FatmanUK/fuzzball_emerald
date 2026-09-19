@@ -144,6 +144,8 @@ func (h *fakeHost) Force(int, ref.Ref, ref.Ref, ref.Ref, string) {}
 func (h *fakeHost) ForcedBy() ref.Ref                            { return ref.Nothing }
 func (h *fakeHost) ForcedByArray() []ref.Ref                     { return nil }
 func (h *fakeHost) GetPIDs(ref.Ref, int) []int                   { return nil }
+func (h *fakeHost) PIDInfo(int) (muf.PIDInfo, bool)              { return muf.PIDInfo{}, false }
+func (h *fakeHost) WatchPID(int, int) bool                       { return false }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

@@ -274,15 +274,17 @@ func (s *Server) runBound(w *world.World, d *session.Descriptor,
 
 	w.Used(target.prog)
 	proc := &process{
-		frame:   f,
-		player:  d.Player,
-		program: target.prog,
-		trigger: target.prog,
-		descr:   d.ID,
-		command: msg.Package + "-" + msg.Name,
-		started: w.Now(),
+		frame:      f,
+		player:     d.Player,
+		program:    target.prog,
+		trigger:    target.prog,
+		descr:      d.ID,
+		command:    msg.Package + "-" + msg.Name,
+		started:    w.Now(),
+		calledData: "FOREGROUND",
 	}
 	s.procs.add(proc)
+	f.Started = proc.started
 	s.step(w, proc)
 }
 

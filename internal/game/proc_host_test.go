@@ -994,3 +994,166 @@ func TestGetPIDsMatchesByPlayerProgramOrNegativeArgument(t *testing.T) {
 		t.Errorf("output = %q, want %q (matches by player, no match, -1 matches at least one)", got, want)
 	}
 }
+
+// TestGetPIDInfoOtherPIDReportsReadState checks mufHost.PIDInfo end to end:
+// a program at mlevel 3 inspects a sibling process blocked on READ, and gets
+// back SUBTYPE "READ", CALLED_DATA "READ", and MLEVEL hardcoded to 0 — the
+// same documented quirk upstream's own get_pidinfo has.
+func TestGetPIDInfoOtherPIDReportsReadState(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	waiter, d := connectAs(t, h, "Waiter", false)
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		w.Get(waiter).Flags = w.Get(waiter).Flags.SetMLevel(2)
+		here := w.Get(waiter).Location
+		p := w.Create("waits4.muf", ref.TypeProgram, waiter)
+		p.Flags = p.Flags.SetMLevel(2)
+		w.SetSource(p.Ref, `: main
+  me @ "waiting" notify
+  read
+  pop
+;`)
+		e := w.Create("waits4", ref.TypeExit, waiter)
+		e.Dest = []ref.Ref{p.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sendAs(t, h, d, "waits4")
+
+	var waiterPID int
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		procs := h.s.procs.all()
+		if len(procs) != 1 {
+			t.Fatalf("expected exactly one suspended process, got %d", len(procs))
+		}
+		waiterPID = procs[0].pid
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var owner ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		here := w.Get(h.wizRef()).Location
+		var checker ref.Ref
+		owner, checker = makeWizardProgram(w, "getpidinfo", fmt.Sprintf(`: main
+  %d getpidinfo "SUBTYPE" [] me @ swap notify
+  %d getpidinfo "CALLED_DATA" [] me @ swap notify
+  %d getpidinfo "MLEVEL" [] intostr me @ swap notify
+  %d getpidinfo array_count intostr me @ swap notify
+;`, waiterPID, waiterPID, waiterPID, waiterPID))
+		if err := w.MoveTo(owner, here); err != nil {
+			t.Fatal(err)
+		}
+		e := w.Create("getpidinfo", ref.TypeExit, owner)
+		e.Dest = []ref.Ref{checker}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d2 := secondSessionFor(t, h, owner)
+	got := sendAs(t, h, d2, "getpidinfo")
+	want := "READ\nREAD\n0\n14"
+	if strings.TrimRight(got, "\n") != want {
+		t.Errorf("output = %q, want %q (SUBTYPE, CALLED_DATA, MLEVEL, key count)", got, want)
+	}
+}
+
+// TestWatchPIDDeliversProcExitOnCompletion is an end-to-end test of the
+// whole delivery path: a watcher blocked in EVENT_WAITFOR resumes
+// immediately — within the same engine.Do the killer's own command runs in,
+// not on the next tick — when the process it WATCHPID'd is killed, carrying
+// the PROC.EXIT.<pid> event name and the dead pid as data, exactly as
+// EVENT_WAITFOR leaves them on the stack.
+func TestWatchPIDDeliversProcExitOnCompletion(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	target, d := connectAs(t, h, "Target", false)
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		w.Get(target).Flags = w.Get(target).Flags.SetMLevel(2)
+		here := w.Get(target).Location
+		p := w.Create("waits6.muf", ref.TypeProgram, target)
+		p.Flags = p.Flags.SetMLevel(2)
+		w.SetSource(p.Ref, `: main
+  me @ "waiting" notify
+  read
+  pop
+;`)
+		e := w.Create("waits6", ref.TypeExit, target)
+		e.Dest = []ref.Ref{p.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sendAs(t, h, d, "waits6")
+
+	var targetPID int
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		procs := h.s.procs.all()
+		if len(procs) != 1 {
+			t.Fatalf("expected exactly one suspended process, got %d", len(procs))
+		}
+		targetPID = procs[0].pid
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	watcher, wd := connectAs(t, h, "Watcher", false)
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		w.Get(watcher).Flags = w.Get(watcher).Flags.SetMLevel(3)
+		here := w.Get(watcher).Location
+		p := w.Create("watches.muf", ref.TypeProgram, watcher)
+		p.Flags = p.Flags.SetMLevel(3)
+		w.SetSource(p.Ref, fmt.Sprintf(`: main
+  %d watchpid
+  { "PROC.EXIT.%d" }list event_waitfor
+  "name:" swap strcat me @ swap notify
+  intostr "data:" swap strcat me @ swap notify
+;`, targetPID, targetPID))
+		e := w.Create("watches", ref.TypeExit, watcher)
+		e.Dest = []ref.Ref{p.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sendAs(t, h, wd, "watches")
+
+	var owner ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		here := w.Get(h.wizRef()).Location
+		var checker ref.Ref
+		owner, checker = makeWizardProgram(w, "killtarget", fmt.Sprintf(`: main
+  %d kill pop
+;`, targetPID))
+		if err := w.MoveTo(owner, here); err != nil {
+			t.Fatal(err)
+		}
+		e := w.Create("killtarget", ref.TypeExit, owner)
+		e.Dest = []ref.Ref{checker}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d2 := secondSessionFor(t, h, owner)
+	sendAs(t, h, d2, "killtarget")
+
+	got := drainDescriptor(wd)
+	want := fmt.Sprintf("name:PROC.EXIT.%d\ndata:%d", targetPID, targetPID)
+	if strings.TrimRight(got, "\n") != want {
+		t.Errorf("watcher output = %q, want %q", got, want)
+	}
+}

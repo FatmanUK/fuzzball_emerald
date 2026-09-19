@@ -550,6 +550,16 @@ public foo
   prog getpids array_count t
   #99999 getpids array_count t
   #-1 getpids array_count 1 >= t
+  pid getpidinfo array_count t
+  pid getpidinfo "PID" [] t
+  pid getpidinfo "TYPE" [] ts
+  pid getpidinfo "SUBTYPE" [] ts
+  pid getpidinfo "CALLED_DATA" [] ts
+  pid getpidinfo "MLEVEL" [] t
+  pid getpidinfo "CALLED_PROG" [] intostr ts
+  pid getpidinfo "TRIG" [] intostr ts
+  pid getpidinfo "PLAYER" [] intostr ts
+  999999 getpidinfo array_count t
   0 try pid kill catch "caught" ts endcatch
   "after" ts
 ;`,
@@ -577,16 +587,37 @@ public foo
 		// and its initial stack argument is the string QUEUE was given, a
 		// different string upstream, both pushed from a plain interp() call
 		// with no relation to whatever the queuer's own COMMAND/args were.
+		//
+		// Also exercises GETPIDINFO's other-pid branch, before the queued
+		// process fires: SUBTYPE "QUEUE" and CALLED_DATA the arg QUEUE was
+		// given, both only knowable from the queuer's side since the fired
+		// copy's own frame reports neither about itself.
 		Name: "queue",
 		Source: tellPrelude + `: main
   command @ "Queued Event." strcmp not if
     "fired:" command @ strcat ts
     ts
   else
-    0 prog "queuearg" queue t
+    0 prog "queuearg" queue
+    dup t
+    dup getpidinfo "SUBTYPE" [] ts
+    getpidinfo "CALLED_DATA" [] ts
   then
 ;`,
 		Pause: time.Second,
+	},
+	{
+		// WATCHPID on a pid that names no live process queues the
+		// PROC.EXIT event immediately, on the caller's own frame — so the
+		// very next EVENT_WAITFOR call, filtering on that same event, is
+		// served without ever blocking.
+		Name: "watchpid",
+		Source: tellPrelude + `: main
+  999999 watchpid
+  { "PROC.EXIT.999999" }list event_waitfor
+  ts
+  intostr ts
+;`,
 	},
 }
 

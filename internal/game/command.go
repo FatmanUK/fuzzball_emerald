@@ -258,7 +258,7 @@ func (s *Server) abortForeground(w *world.World, d *session.Descriptor) bool {
 	if p == nil {
 		return false
 	}
-	s.procs.remove(p.pid)
+	s.finishProcess(w, p)
 	return true
 }
 

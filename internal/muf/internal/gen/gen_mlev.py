@@ -57,7 +57,7 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
 # denied." — also not universal: GETPIDS (src/p_db.c) aborts with
 # "Permission denied.  Requires Mucker Level 3.", found the same way, when
 # it was ported.
-CUSTOM_ABORT_MESSAGE = {"FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS"}
+CUSTOM_ABORT_MESSAGE = {"FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS", "WATCHPID"}
 
 
 

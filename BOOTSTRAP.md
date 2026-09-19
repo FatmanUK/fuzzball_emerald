@@ -138,21 +138,63 @@ exactly the calling program's own ref" — never through the wildcard, which
 `internal/muf/prim_proc.go`'s `GETPIDS` now reproduces exactly rather than
 folding into `Host.GetPIDs` itself.
 
-Still to come from the Phase 2 plan: `GETPIDINFO`, and last `WATCHPID`
-(needs a still-missing generic event-delivery mechanism built alongside it).
+`GETPIDINFO` has landed too. Its own `mlev < 3` is conditional — "unless the
+pid is the caller's own" — so, like `KILL`, it stays out of the generated
+table (`gen_mlev.py`'s exemption regex now also recognises `fr->pid`
+comparisons as an ownership-style escape hatch, the same class of gap
+`control_process` was) and is hand-checked in `internal/muf/prim_proc.go`.
+The self branch reads straight off the live `*Frame`; the other-pid branch
+reads a new `Host.PIDInfo` (`internal/game/proc_host.go`), this port's
+equivalent of `get_pidinfo`. Some fields are deliberately reproduced upstream
+quirks, not gaps: self's `CALLED_DATA` is always `""` and `NEXTRUN` always
+`0`, and other-pid's `MLEVEL` is always `0` — all three hardcoded in
+upstream's own C, the last its own documented `TODO`. `CPU` is always `0.0`
+in both branches, the same "Emerald does not profile programs" divergence
+`examine`'s "Cumulative runtime" line already documents. `TYPE` is always
+`"MUF"`: unlike upstream's separate MUF/MPI timequeue and MUF-event queue,
+`procQueue` holds only `muf.Frame` processes, an `EVENT_WAITFOR`-blocked one
+included, so there is no second queue an other-pid lookup ever falls back to.
+A new `process.calledData` field (`internal/game/proc.go`) — "READ",
+"SLEEPING", "EVENT_WAITFOR", "FOREGROUND", "BACKGROUND", or a `QUEUE`'s own
+arg string — backs `CALLED_DATA` for both primitives; a new `Frame.Started`
+backs `STARTED`.
 
-1. **Port more MUF primitives.** 90 of 417 are still unimplemented (see
+`WATCHPID` has landed last, closing out Phase 2. It needed the "still-missing
+generic event-delivery mechanism" the plan flagged as its own task: upstream's
+`fr->events` queue is now `Frame.PendingEvents`
+(`internal/muf/frame.go`), with `AddEvent`/`popEvent` mirroring
+`muf_event_add`/`muf_event_pop(_specific)`, and `EVENT_WAITFOR`
+(`internal/muf/prim.go`) now checks for an already-queued matching event
+before blocking — Emerald has no periodic scan loop equivalent to upstream's
+own `muf_event_process`, so a pre-queued event (WATCHPID's own "target
+already dead" case) is served synchronously instead of waiting for one.
+Delivery to an *already-blocked* process runs through a new
+`Server.deliverEvent` (`internal/game/proc.go`), which resumes it immediately
+if its filter matches, and a new `Server.finishProcess` — upstream's
+`watchpid_process`, folded into the one place every process-ending path now
+funnels through (`step`'s `Done` case, `failProcess`, `killProcessesFor/Of`,
+`abortForeground`, the `@kill` command, and `Host.KillPID`) — notifies every
+`process.waiters` entry with `PROC.EXIT.<pid>` and unwinds `waitees`
+bookkeeping on both sides. One upstream quirk not reproduced: its own
+WATCHPID dedup check compares the wrong field (a stored caller pid against
+the *target* pid being searched for, so it only matches by coincidence);
+`Host.WatchPID` (`internal/game/proc_host.go`) dedups correctly instead,
+matching what upstream's own comment says it meant to do.
+
+Phase 2 of the remaining-work plan is now complete.
+
+1. **Port more MUF primitives.** 88 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
    has repeatedly caught real divergences that unit tests missed: two in the
    lock work (`PARSELOCK` on `""`, and `_set_lock`'s own match-failure
    message bypassing its `silent` flag), a generator false-positive gating
-   `KILL` at an unconditional floor it does not have, and `FORCE`/`FORCEDBY`/
-   `FORCEDBY_ARRAY`'s own distinct abort wording — see Phase 2 of the plan
-   above for all four. `GETPIDS`/`GETPIDINFO`/`WATCHPID` (process
-   introspection, `src/p_misc.c`/`src/p_db.c`) are what remains of that
-   cluster.
+   `KILL` at an unconditional floor it does not have, `FORCE`/`FORCEDBY`/
+   `FORCEDBY_ARRAY`'s own distinct abort wording, and `GETPIDS`'s `#-1`
+   wildcard wrongly including the caller's own pid — see Phase 2 of the plan
+   above for all four, now finished. Phase 3 (`src/p_connects.c`'s
+   descriptor/connection introspection primitives) is next.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
@@ -223,7 +265,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~322 primitives
+internal/muf/           — instruction set, VM/interpreter, ~324 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -460,7 +502,7 @@ enforcement — see `git log` for the exact commits):
     `"queue"` case (COMMAND vs. stack argument)
   - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
     self-forcing program)
-- Primitive coverage: **322 of 417** implemented
+- Primitive coverage: **324 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)
