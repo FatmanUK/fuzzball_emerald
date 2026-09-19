@@ -144,6 +144,25 @@ type Host interface {
 	// MaxInterpRecursion is the max_interp_recursion @tune parameter, which
 	// bounds LOCKED?'s own recursion guard (TESTLOCK's is hardcoded).
 	MaxInterpRecursion() int
+
+	// LockString reads an object's @lock property in its stored, unparsed
+	// form, or "*UNLOCKED*" if it has none — GETLOCKSTR.
+	LockString(obj ref.Ref) string
+	// SetLockString parses raw with matchPlayer's own matching context and
+	// stores it as obj's @lock, or clears the lock when raw is empty —
+	// SETLOCKSTR (which is _set_lock with silent true). It reports whether
+	// the lock was set, which is false only when raw failed to parse.
+	SetLockString(descr int, matchPlayer, obj ref.Ref, raw string) bool
+	// ParseLock parses a lock expression with matchPlayer's own matching
+	// context, upstream's PARSELOCK. A raw that fails to parse notifies
+	// matchPlayer directly, the way parse_boolexp's own match failures do,
+	// and returns nil (TRUE_BOOLEXP) rather than an error.
+	ParseLock(descr int, matchPlayer ref.Ref, raw string) *boolexp.Expr
+	// UnparseLock renders a parsed lock back to its stored form, upstream's
+	// UNPARSELOCK. A nil lock (TRUE_BOOLEXP) renders as "", not
+	// "*UNLOCKED*" — that is UNPARSELOCK's own special case, not shared with
+	// LockString/GETLOCKSTR.
+	UnparseLock(lock *boolexp.Expr) string
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

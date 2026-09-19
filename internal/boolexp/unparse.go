@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-const unlockedVal = "*UNLOCKED*"
+// Unlocked is what Unparse renders a nil (TRUE_BOOLEXP) expression as, and
+// what GETLOCKSTR shows for an object with no lock set. PROP_UNLOCKED_VAL
+// upstream.
+const Unlocked = "*UNLOCKED*"
 
 // Unparse renders a lock expression back to text, the format Parse's dbload
 // path accepts. This is unparse_boolexp/unparse_boolexp1.
@@ -22,7 +25,7 @@ func Unparse(host Host, b *Expr, fullname bool) string {
 
 func unparse1(host Host, sb *strings.Builder, b *Expr, outer Kind, fullname bool) {
 	if b == nil {
-		sb.WriteString(unlockedVal)
+		sb.WriteString(Unlocked)
 		return
 	}
 

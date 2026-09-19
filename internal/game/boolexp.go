@@ -163,6 +163,54 @@ func (h *mufHost) MaxInterpRecursion() int {
 	return int(h.w.Tune.Int("max_interp_recursion"))
 }
 
+// LockString implements muf.Host for GETLOCKSTR.
+func (h *mufHost) LockString(obj ref.Ref) string {
+	v, ok := h.w.GetProp(obj, propLock)
+	if !ok || v.Type != props.Lock || v.Str == "" {
+		return boolexp.Unlocked
+	}
+	return v.Str
+}
+
+// SetLockString implements muf.Host for SETLOCKSTR, which is upstream's
+// _set_lock called with silent true: a parse failure reports nothing to
+// matchPlayer, just false.
+func (h *mufHost) SetLockString(descr int, matchPlayer, obj ref.Ref, raw string) bool {
+	if raw == "" {
+		h.w.SetProp(obj, propLock, props.Value{Type: props.Lock, Str: ""})
+		return true
+	}
+	lh := &lockHost{s: h.s, w: h.w}
+	key, err := boolexp.Parse(lh, descr, matchPlayer, raw, false)
+	if err != nil {
+		return false
+	}
+	h.w.SetProp(obj, propLock, props.Value{Type: props.Lock, Str: boolexp.Unparse(lh, key, false)})
+	return true
+}
+
+// ParseLock implements muf.Host for PARSELOCK. Unlike SetLockString, a parse
+// failure here does notify matchPlayer, matching parse_boolexp's own
+// embedded notify calls, which upstream's PARSELOCK never suppresses.
+func (h *mufHost) ParseLock(descr int, matchPlayer ref.Ref, raw string) *boolexp.Expr {
+	lh := &lockHost{s: h.s, w: h.w}
+	lock, err := boolexp.Parse(lh, descr, matchPlayer, raw, false)
+	if err != nil {
+		h.s.notify(h.w, matchPlayer, "%s", err.Error())
+		return nil
+	}
+	return lock
+}
+
+// UnparseLock implements muf.Host for UNPARSELOCK.
+func (h *mufHost) UnparseLock(lock *boolexp.Expr) string {
+	if lock == nil {
+		return ""
+	}
+	lh := &lockHost{s: h.s, w: h.w}
+	return boolexp.Unparse(lh, lock, false)
+}
+
 // couldDoit is upstream's could_doit: if thing is an exit, the destination it
 // would move player to must itself be reachable (JUMP_OK, GUEST rooms,
 // BUILDER-restricted sources, secure_teleport); then, exit or not, thing's

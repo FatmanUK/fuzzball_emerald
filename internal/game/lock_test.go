@@ -54,6 +54,49 @@ func TestLockedAgainstWizardAndStranger(t *testing.T) {
 	}
 }
 
+// TestLockStringPrimitives exercises SETLOCKSTR, GETLOCKSTR, PARSELOCK and
+// UNPARSELOCK together through a real MUF program: setting a lock string,
+// reading it back, then round-tripping it through PARSELOCK/UNPARSELOCK.
+func TestLockStringPrimitives(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var thing, wiz ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz = h.wizRef()
+		here := w.Get(wiz).Location
+		th := w.Create("gizmo", ref.TypeThing, wiz)
+		if err := w.MoveTo(th.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		thing = th.Ref
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.installProgram(t, "checklockstr", fmt.Sprintf(`: main
+  #%d "#%d" SETLOCKSTR if "set:ok" else "set:fail" then me @ swap notify
+  #%d GETLOCKSTR me @ swap notify
+  "#%d" PARSELOCK UNPARSELOCK me @ swap notify
+  #%d "" SETLOCKSTR if "clear:ok" else "clear:fail" then me @ swap notify
+  #%d GETLOCKSTR me @ swap notify
+;`, int(thing), int(wiz), int(thing), int(wiz), int(thing), int(thing)))
+
+	h.send("checklockstr")
+	got := h.out()
+
+	for _, want := range []string{
+		"set:ok",
+		fmt.Sprintf("#%d", int(wiz)),
+		"clear:ok",
+		"*UNLOCKED*",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 // TestCouldDoitUnlinkedExit checks the exit-specific branch of couldDoit
 // directly: an exit with no destinations at all can never be done.
 func TestCouldDoitUnlinkedExit(t *testing.T) {

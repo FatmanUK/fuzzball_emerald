@@ -389,8 +389,8 @@ func TestUnparseRoundTrip(t *testing.T) {
 
 func TestUnparseUnlocked(t *testing.T) {
 	h := newFakeHost()
-	if got := Unparse(h, nil, false); got != unlockedVal {
-		t.Fatalf("got %q, want %q", got, unlockedVal)
+	if got := Unparse(h, nil, false); got != Unlocked {
+		t.Fatalf("got %q, want %q", got, Unlocked)
 	}
 }
 

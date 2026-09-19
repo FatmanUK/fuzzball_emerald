@@ -126,6 +126,11 @@ func (h *fakeHost) TestLock(int, int, ref.Ref, *boolexp.Expr, ref.Ref, ref.Ref) 
 func (h *fakeHost) Locked(int, int, ref.Ref, ref.Ref) (bool, error) { return false, nil }
 func (h *fakeHost) MaxInterpRecursion() int                         { return 8 }
 
+func (h *fakeHost) LockString(ref.Ref) string                        { return "*UNLOCKED*" }
+func (h *fakeHost) SetLockString(int, ref.Ref, ref.Ref, string) bool { return true }
+func (h *fakeHost) ParseLock(int, ref.Ref, string) *boolexp.Expr     { return nil }
+func (h *fakeHost) UnparseLock(*boolexp.Expr) string                 { return "" }
+
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
 	t.Helper()
