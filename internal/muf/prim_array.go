@@ -524,7 +524,7 @@ func matchVals(pick func(*Array) []Value) primFunc {
 		keys, chosen := a.Keys(), pick(a)
 		out := NewDict()
 		for i := range chosen {
-			if chosen[i].Type == TypeString && smatch(chosen[i].Str, pattern) {
+			if chosen[i].Type == TypeString && ascii.SMatch(chosen[i].Str, pattern) {
 				v, _ := a.Get(keys[i])
 				out.Set(keys[i], v)
 			}

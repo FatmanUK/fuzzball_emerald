@@ -1,25 +1,36 @@
 package game
 
 import (
-	"strings"
-
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// Message properties, from include/db.h. MPI evaluation of these arrives with
-// M6; for now they are shown as stored.
+// Message and lock properties, from include/db.h.
 const (
-	propDesc  = "_/de"
-	propSucc  = "_/sc"
-	propOSucc = "_/osc"
-	propFail  = "_/fl"
-	propOFail = "_/ofl"
-	propDrop  = "_/dr"
-	propODrop = "_/odr"
+	propDesc     = "_/de"
+	propIDesc    = "_/ide"
+	propSucc     = "_/sc"
+	propOSucc    = "_/osc"
+	propFail     = "_/fl"
+	propOFail    = "_/ofl"
+	propDrop     = "_/dr"
+	propODrop    = "_/odr"
+	propDoing    = "_/do"
+	propRoomEcho = "_/oecho"
+
+	propLock      = "_/lok"
+	propConLock   = "_/clk"
+	propChownLock = "_/chlk"
+	propLinkLock  = "_/lklk"
+	propForceLock = "@/flk"
+	propReadLock  = "@/rlk"
+	propOwnLock   = "@/olk"
 )
+
+// unlockedValue is what an unset lock reads as, from include/props.h.
+const unlockedValue = "*UNLOCKED*"
 
 // getMesg reads a message property.
 func getMesg(w *world.World, r ref.Ref, path string) string {
@@ -165,61 +176,6 @@ func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
 		return true
 	}
 	return o.Owner == owner
-}
-
-// cmdExamine shows an object's details to someone who controls it.
-func (s *Server) cmdExamine(c *ctx) {
-	target := c.who
-	if c.arg != "" {
-		target = match.New(c.w, c.who, c.arg).Everything().Result()
-	}
-	switch target {
-	case ref.Nothing:
-		c.tell("I don't see that here.")
-		return
-	case ref.Ambiguous:
-		c.tell("I don't know which one you mean.")
-		return
-	}
-	if !s.controls(c.w, c.who, target) {
-		c.tell("Permission denied.")
-		return
-	}
-
-	o := c.w.Get(target)
-	c.tell("%s(%v%s)", o.Name, target, o.Flags.Unparse())
-	c.tell("Type: %v", o.Type())
-	c.tell("Owner: %s", unparse(c.w, c.who, o.Owner))
-	c.tell("Location: %s", unparse(c.w, c.who, o.Location))
-
-	switch o.Type() {
-	case ref.TypeRoom:
-		c.tell("Drop-to: %s", unparse(c.w, c.who, o.Dropto))
-	case ref.TypeThing, ref.TypePlayer:
-		c.tell("Home: %s", unparse(c.w, c.who, o.Home))
-	case ref.TypeExit:
-		var dests []string
-		for _, d := range o.Dest {
-			dests = append(dests, unparse(c.w, c.who, d))
-		}
-		if len(dests) == 0 {
-			c.tell("Destination: *UNLINKED*")
-		} else {
-			c.tell("Destination: %s", strings.Join(dests, ", "))
-		}
-	}
-
-	c.tell("Created: %s", o.Created.Format("Mon Jan 2 15:04:05 2006"))
-	c.tell("Modified: %s", o.Modified.Format("Mon Jan 2 15:04:05 2006"))
-	c.tell("Last used: %s (%d times)",
-		o.LastUsed.Format("Mon Jan 2 15:04:05 2006"), o.UseCount)
-
-	if entries := o.Props.All(); len(entries) > 0 {
-		c.tell("Properties:")
-		for _, e := range entries {
-			c.tell("  %s:%s", e.Path, e.Value.StringValue())
-		}
-	}
 }
 
 // cmdInventory lists what the player is carrying.

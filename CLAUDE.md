@@ -299,6 +299,10 @@ generated from `include/tunelist.h` — edit
 generated file. Reading an unknown parameter panics by design, so a typo in a
 name is a runtime failure.
 
+**`@action` is an alias for `@open`, and upstream's is not.** `do_action`
+attaches an exit to a named object rather than to the room, and says so in its
+own words. Until it is ported the alias differs in where the exit lands.
+
 **Case-insensitive comparison is `strcasecmp`, not Unicode.** Use
 `internal/ascii`, never `strings.EqualFold` or `strings.ToLower`. Upstream folds
 only A–Z, so `Ä` and `ä` are distinct property and player names.
@@ -324,6 +328,33 @@ goes in the connection string, because GORM pools connections and `SET
 search_path` reaches only one of them — every other query lands in `public`.
 This destroyed a locally imported world before it was fixed, so each test now
 asserts its isolation before doing anything.
+
+## examine
+
+`internal/game/examine.go` is `do_examine`. It prints a heading that differs by
+type, a flags line, every message and lock that is set, three timestamps, a use
+count, the contents and then a type-specific tail. `examine <obj>=<pattern>`
+lists properties instead — `/` for the root, `**` recursively — with paths
+shown from the root.
+
+Two of its lines cannot agree with upstream and are masked in the golden case
+rather than dropped: **Memory used** counts this server's own memory, which is
+laid out differently, and **Cumulative runtime** is zero because Emerald does
+not profile programs. Both keep their line and position.
+
+`examine` reports whether a program is compiled **from the cache**, never by
+compiling it — compiling to find out would make the answer always yes.
+
+**Building costs money.** `@create`, `@dig` and `@open` charge `object_cost`,
+`room_cost` and `exit_cost`, linking charges again, and a created thing is
+endowed with `(cost-5)/5`. That is where an object's value comes from, and why
+a fresh `@create` shows `Value: 1`. Wizards pay for nothing.
+
+**Locks are stored, not evaluated.** `internal/boolexp` is planned and not
+built, so `lockPasses` treats any lock that is actually set as failing —
+failing closed, because erring the other way would hand out access a lock was
+put there to refuse. Only the unset case, which is nearly every case, is
+answered properly.
 
 ## Sanity checking
 

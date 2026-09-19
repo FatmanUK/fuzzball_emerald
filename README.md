@@ -40,6 +40,9 @@ it. The wizard commands are in — `@force`, `@toad`, `@boot`, `@stats`,
 database, and MCP 2.1 and MCP-GUI are negotiated with clients that speak them,
 so a program can put a dialog on a client that can show one.
 
+`examine` reports what Fuzzball's does, in the same shape, including the
+property-listing form.
+
 Each of those is checked against a real Fuzzball 7 line for line, not just
 against a reading of its source.
 

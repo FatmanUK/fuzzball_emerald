@@ -83,9 +83,13 @@ var commands = map[string]handler{
 // init instead, because naming them here makes the table refer to itself and
 // Go rejects that as an initialisation cycle.
 var atCommands = map[string]handler{
-	"@create":   (*Server).cmdCreate,
-	"@dig":      (*Server).cmdDig,
-	"@open":     (*Server).cmdOpen,
+	"@create": (*Server).cmdCreate,
+	"@dig":    (*Server).cmdDig,
+	"@open":   (*Server).cmdOpen,
+	// @action is upstream's do_action, which attaches an exit to a named
+	// object rather than to the room, and says so in its own words. Until
+	// that is ported it is an alias for @open, which differs in where the
+	// exit lands.
 	"@action":   (*Server).cmdOpen,
 	"@link":     (*Server).cmdLink,
 	"@unlink":   (*Server).cmdUnlink,

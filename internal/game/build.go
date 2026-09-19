@@ -56,13 +56,32 @@ func (s *Server) cmdCreate(c *ctx) {
 	if !s.requireBuilder(c) {
 		return
 	}
-	name := strings.TrimSpace(c.arg)
+	name, costArg, _ := strings.Cut(c.arg, "=")
+	name = strings.TrimSpace(name)
 	if name == "" {
-		c.tell("Usage: @create <name>")
+		c.tell("Usage: @create <name> [=<cost>]")
 		return
 	}
+
+	// A thing costs money to make and is worth a fraction of what was
+	// paid, which is what gives objects a value at all. Paying more than
+	// the minimum endows the object with more.
+	cost := leadingInt(strings.TrimSpace(costArg))
+	if cost < 0 {
+		c.tell("You can't create an object for less than nothing!")
+		return
+	}
+	if min := int(c.w.Tune.Int("object_cost")); cost < min {
+		cost = min
+	}
+	if !s.payFor(c.w, c.who, cost) {
+		c.tell("Sorry, you don't have enough %s.", c.w.Tune.String("pennies"))
+		return
+	}
+
 	o := c.w.Create(name, ref.TypeThing, c.who)
 	o.Home = c.w.Get(c.who).Location
+	o.Props.Set(propValue, props.Value{Type: props.Int, Num: int64(endowment(c.w, cost))})
 	if err := c.w.MoveTo(o.Ref, c.who); err != nil {
 		c.tell("Created, but it could not be given to you.")
 		return
@@ -82,15 +101,13 @@ func (s *Server) cmdDig(c *ctx) {
 		return
 	}
 
-	parent := c.w.Tune.Ref("default_room_parent")
-	if p := strings.TrimSpace(parentName); p != "" {
-		r := match.New(c.w, c.who, p).Thing().Result()
-		if r == ref.Nothing || r == ref.Ambiguous {
-			c.tell("I don't see that parent room.")
-			return
-		}
-		parent = r
+	if !s.payFor(c.w, c.who, int(c.w.Tune.Int("room_cost"))) {
+		c.tell("Sorry, you don't have enough %s to dig a room.",
+			c.w.Tune.String("pennies"))
+		return
 	}
+
+	parent := c.w.Tune.Ref("default_room_parent")
 	if !c.w.Valid(parent) {
 		parent = ref.GlobalEnvironment
 	}
@@ -102,6 +119,28 @@ func (s *Server) cmdDig(c *ctx) {
 		return
 	}
 	c.tell("Room %s created.", unparse(c.w, c.who, o.Ref))
+
+	// A room that could not be parented where it was asked to go still
+	// exists, at the default parent, and is reported that way rather than
+	// failing the whole command.
+	if p := strings.TrimSpace(parentName); p != "" {
+		c.tell("Trying to set parent...")
+		r := match.New(c.w, c.who, p).Absolute().Registered().Here().Result()
+		switch {
+		case !noisyMatch(c, p, r):
+			// The matcher has already said what went wrong; this
+			// says what happened as a result.
+			c.tell("Parent set to default.")
+		case !s.canLinkTo(c.w, c.who, r) || r == o.Ref:
+			c.tell("Permission denied.  Parent set to default.")
+		default:
+			if err := c.w.MoveTo(o.Ref, r); err != nil {
+				c.tell("Parent set to default.")
+				break
+			}
+			c.tell("Parent set to %s.", unparse(c.w, c.who, r))
+		}
+	}
 }
 
 // cmdOpen makes an exit in the current room.
@@ -122,7 +161,12 @@ func (s *Server) cmdOpen(c *ctx) {
 		return
 	}
 	if !s.controls(c.w, c.who, here) {
-		c.tell("Permission denied.")
+		c.tell("Permission denied. (you don't control the location)")
+		return
+	}
+	if !s.payFor(c.w, c.who, int(c.w.Tune.Int("exit_cost"))) {
+		c.tell("Sorry, you don't have enough %s to open an exit.",
+			c.w.Tune.String("pennies"))
 		return
 	}
 
@@ -131,9 +175,17 @@ func (s *Server) cmdOpen(c *ctx) {
 		c.tell("The exit could not be attached.")
 		return
 	}
-	c.tell("Action %s created and attached.", unparse(c.w, c.who, o.Ref))
+	c.tell("Exit %s opened.", unparse(c.w, c.who, o.Ref))
 
+	// Linking costs again, and is reported separately: an exit that was
+	// opened but could not be linked still exists.
 	if hasDest {
+		c.tell("Trying to link...")
+		if !s.payFor(c.w, c.who, int(c.w.Tune.Int("link_cost"))) {
+			c.tell("You don't have enough %s to link.",
+				c.w.Tune.String("pennies"))
+			return
+		}
 		if dest, ok := s.resolveLinkTarget(c, strings.TrimSpace(destName)); ok {
 			o.Dest = []ref.Ref{dest}
 			c.w.Modified(o.Ref)
@@ -585,4 +637,51 @@ func (s *Server) evictEditors(w *world.World, program ref.Ref) {
 		s.closeEditor(w, who, e)
 		s.send(w, who, "The program you were editing has been recycled.  Exiting Editor.")
 	}
+}
+
+// payFor takes the cost of something out of a player's pocket, reporting
+// whether they could afford it. A wizard pays for nothing.
+func (s *Server) payFor(w *world.World, who ref.Ref, cost int) bool {
+	owner := ownerOf(w, who)
+	o := w.Get(owner)
+	if o == nil {
+		return false
+	}
+	if o.Flags.IsWizard() {
+		return true
+	}
+	have := valueOf(w, owner)
+	if have < int64(cost) {
+		return false
+	}
+	w.SetProp(owner, propValue, props.Value{Type: props.Int, Num: have - int64(cost)})
+	return true
+}
+
+// endowment is what an object made for a given price is worth, from
+// include/db.h. It is bounded so an admin can stop a rich player minting
+// value by creating expensive objects.
+func endowment(w *world.World, cost int) int {
+	n := (cost - 5) / 5
+	if max := int(w.Tune.Int("max_object_endowment")); n > max {
+		n = max
+	}
+	if n < 0 {
+		n = 0
+	}
+	return n
+}
+
+// canLinkTo reports whether someone may attach something to a destination:
+// they control it, or it is open to anyone through its LINK_OK or ABODE flag.
+func (s *Server) canLinkTo(w *world.World, who, where ref.Ref) bool {
+	if s.controls(w, who, where) {
+		return true
+	}
+	o := w.Get(where)
+	if o == nil {
+		return false
+	}
+	return o.Flags&ref.LinkOK != 0 ||
+		o.Type() != ref.TypeThing && o.Flags&ref.Abode != 0
 }
