@@ -1,6 +1,8 @@
 package game
 
 import (
+	"time"
+
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -92,6 +94,59 @@ func (h *mufHost) Fork(child *muf.Frame) int {
 	}
 	pid := h.s.procs.add(proc)
 	child.PID = pid
+	return pid
+}
+
+// Queue implements muf.Host for QUEUE, upstream's add_muf_delayq_event.
+//
+// Unlike upstream, which defers compiling and building a frame until the
+// event actually fires, this builds both eagerly, at QUEUE-call time — the
+// same simplification runProgram already makes for a command-driven program,
+// just with the process starting procSleeping instead of running
+// immediately. The one observable gap: an edit to prog between now and when
+// it fires is not picked up, since the frame already holds a compiled
+// *muf.Program rather than recompiling at fire time the way upstream's
+// lazy interp() call would.
+func (h *mufHost) Queue(descr int, prog ref.Ref, seconds int64, arg string) int {
+	if !h.s.processLimitOK(h.w, h.caller) {
+		h.s.notify(h.w, h.caller, "Event killed.  Timequeue table full.")
+		return 0
+	}
+
+	p, err := h.s.compileProgram(h.w, prog)
+	if err != nil {
+		return 0
+	}
+
+	host := &mufHost{s: h.s, w: h.w, caller: h.caller}
+	f := muf.NewFrame(p, host)
+	loc := ref.Nothing
+	if me := h.w.Get(h.caller); me != nil {
+		loc = me.Location
+	}
+	// COMMAND is "Queued Event." and the pushed stack argument is arg —
+	// upstream's match_cmdname and match_args, two different strings, unlike
+	// SetReserved's own command-driven convention where they are the same
+	// one. Overwriting the pushed value after the fact is simpler than a
+	// second SetReserved variant for what only QUEUE needs.
+	f.SetReserved(h.caller, loc, ref.Nothing, "Queued Event.")
+	f.Stack[len(f.Stack)-1] = muf.Str(arg)
+	f.Descr = descr
+	f.Mode = muf.ModeBackground
+
+	proc := &process{
+		frame:   f,
+		player:  h.caller,
+		program: prog,
+		trigger: ref.Nothing,
+		descr:   descr,
+		command: "Queued Event.",
+		started: h.w.Now(),
+		state:   procSleeping,
+		wake:    h.w.Now().Add(time.Duration(seconds) * time.Second),
+	}
+	pid := h.s.procs.add(proc)
+	f.PID = pid
 	return pid
 }
 

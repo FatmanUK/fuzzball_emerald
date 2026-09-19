@@ -602,3 +602,108 @@ func TestForkRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
 		t.Errorf("FORK should have returned -1:\n%s", got)
 	}
 }
+
+// TestQueuePrimitiveRunsLaterWithItsOwnArgAndCommand exercises QUEUE end to
+// end: the queued program does not run until the process queue is drained,
+// and when it does, its COMMAND variable is "Queued Event." while its
+// initial stack argument is the string QUEUE was given — two different
+// strings, unlike a command-driven program where SetReserved's own
+// convention makes them the same one.
+func TestQueuePrimitiveRunsLaterWithItsOwnArgAndCommand(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var target ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz := h.wizRef()
+		p := w.Create("fired.muf", ref.TypeProgram, wiz)
+		p.Flags = p.Flags.SetMLevel(3)
+		w.SetSource(p.Ref, `: main
+  me @ swap notify
+  me @ command @ notify
+;`)
+		target = p.Ref
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.installProgram(t, "queuer", fmt.Sprintf(`: main
+  0 #%d "myarg" queue if "queued" else "failed" then me @ swap notify
+;`, int(target)))
+
+	h.send("queuer")
+	got := h.out()
+	if !strings.Contains(got, "queued") {
+		t.Fatalf("QUEUE should have reported success:\n%s", got)
+	}
+	if strings.Contains(got, "myarg") {
+		t.Fatalf("the queued program should not have run yet:\n%s", got)
+	}
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		h.s.Tick(w)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got = h.out()
+	if !strings.Contains(got, "myarg") {
+		t.Errorf("the queued program's stack argument should be \"myarg\":\n%s", got)
+	}
+	if !strings.Contains(got, "Queued Event.") {
+		t.Errorf("the queued program's COMMAND should be \"Queued Event.\":\n%s", got)
+	}
+}
+
+// TestQueueRejectedWhenPlayerProcessLimitExceeded checks that QUEUE respects
+// processLimitOK the same way FORK does, and pushes 0 rather than FORK's -1.
+func TestQueueRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var target ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		if err := w.Tune.SetString("max_plyr_processes", "0"); err != nil {
+			t.Fatal(err)
+		}
+		p := w.Create("never.muf", ref.TypeProgram, h.wizRef())
+		p.Flags = p.Flags.SetMLevel(3)
+		w.SetSource(p.Ref, ": main ;")
+		target = p.Ref
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, d := connectAs(t, h, "Queuer", false)
+	var owner ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		r, ok := w.PlayerNamed("Queuer")
+		if !ok {
+			t.Fatal("Queuer not found")
+		}
+		owner = r
+		w.Get(owner).Flags = w.Get(owner).Flags.SetMLevel(3)
+		here := w.Get(owner).Location
+
+		prog := w.Create("overqueue.muf", ref.TypeProgram, owner)
+		prog.Flags = prog.Flags.SetMLevel(3)
+		w.SetSource(prog.Ref, fmt.Sprintf(`: main
+  0 #%d "" queue if "accepted" else "rejected" then me @ swap notify
+;`, int(target)))
+
+		e := w.Create("overqueue", ref.TypeExit, owner)
+		e.Dest = []ref.Ref{prog.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := sendAs(t, h, d, "overqueue")
+	if !strings.Contains(got, "Event killed.  Timequeue table full.") {
+		t.Errorf("missing the process-limit message:\n%s", got)
+	}
+	if !strings.Contains(got, "rejected") {
+		t.Errorf("QUEUE should have returned 0:\n%s", got)
+	}
+}

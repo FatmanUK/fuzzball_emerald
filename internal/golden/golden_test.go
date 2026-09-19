@@ -568,6 +568,23 @@ public foo
 ;`,
 		Pause: time.Second,
 	},
+	{
+		// QUEUE: the fired instance is a fresh frame, not a copy of the
+		// queuer's — its own COMMAND is "Queued Event.", never the queuer's,
+		// and its initial stack argument is the string QUEUE was given, a
+		// different string upstream, both pushed from a plain interp() call
+		// with no relation to whatever the queuer's own COMMAND/args were.
+		Name: "queue",
+		Source: tellPrelude + `: main
+  command @ "Queued Event." strcmp not if
+    "fired:" command @ strcat ts
+    ts
+  else
+    0 prog "queuearg" queue t
+  then
+;`,
+		Pause: time.Second,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

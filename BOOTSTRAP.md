@@ -91,12 +91,25 @@ check ever ran. Regenerating after the fix removed the false entry;
 `TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer`
 (`internal/game/proc_host_test.go`) pins the corrected behaviour.
 
-Still to come from the Phase 2 plan, in order: `QUEUE`, `FORCE`/`FORCEDBY`/
+`QUEUE` has landed too, unlike `FORK` building its frame eagerly rather than
+copying one: `Host.Queue` (`internal/game/proc_host.go`) compiles the target
+program and constructs a fresh `*muf.Frame` at `QUEUE`-call time — the one
+documented gap against upstream's own lazy `interp()`-at-fire-time is that an
+edit to the program between queuing and firing is not picked up, since the
+process already holds a compiled `*muf.Program`. The new frame's `COMMAND`
+reserved variable ("Queued Event.") and its initial stack argument (whatever
+string `QUEUE` was given) are genuinely different strings upstream, unlike a
+command-driven program where `SetReserved`'s own convention makes them the
+same one — `Host.Queue` calls `SetReserved` for the `COMMAND` value and then
+overwrites the pushed stack value directly. It shares `processLimitOK` with
+`FORK`, returning `0` on the same limit failure rather than `FORK`'s `-1`.
+
+Still to come from the Phase 2 plan, in order: `FORCE`/`FORCEDBY`/
 `FORCEDBY_ARRAY` (share permission logic with `internal/game/wiz.go`'s
 `@force`), `GETPIDS`/`GETPIDINFO`, and last `WATCHPID` (needs a still-missing
 generic event-delivery mechanism built alongside it).
 
-1. **Port more MUF primitives.** 95 of 417 are still unimplemented (see
+1. **Port more MUF primitives.** 94 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -179,7 +192,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~317 primitives
+internal/muf/           — instruction set, VM/interpreter, ~318 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -411,9 +424,10 @@ enforcement — see `git log` for the exact commits):
   - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
     `@lock` actually gates it)
   - the `"proc"` case in `TestAgainstFuzzball` (`PID`, `ISPID?`,
-    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`) and the
-    `"fork"` case (parent/child independence)
-- Primitive coverage: **317 of 417** implemented
+    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`, `KILL`), the
+    `"fork"` case (parent/child independence) and the `"queue"` case
+    (COMMAND vs. stack argument)
+- Primitive coverage: **318 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

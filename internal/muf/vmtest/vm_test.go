@@ -139,6 +139,7 @@ func (h *fakeHost) CanCall(int, ref.Ref, ref.Ref, string) bool { return false }
 func (h *fakeHost) ControlsProcess(ref.Ref, int) bool          { return false }
 func (h *fakeHost) KillPID(int) bool                           { return false }
 func (h *fakeHost) Fork(*muf.Frame) int                        { return 0 }
+func (h *fakeHost) Queue(int, ref.Ref, int64, string) int      { return 0 }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

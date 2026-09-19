@@ -167,3 +167,44 @@ func init() {
 		return nil, f.Push(Int(int64(pid)))
 	})
 }
+
+// QUEUE is a port of prim_queue (src/p_misc.c): schedule prog to run after
+// secs seconds, with str as its stack argument. Like FORK's, QUEUE's own
+// "if (mlev < 3)" is an unconditional floor left to primMLevel
+// ("QUEUE": 3) and the dispatcher's generic message, not duplicated here.
+func init() {
+	register("QUEUE", func(f *Frame) (*Result, error) {
+		strV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		progV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		secsV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+
+		if secsV.Type != TypeInteger {
+			return nil, errf("Non-integer argument (1).")
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+			return nil, errf("Invalid program dbref argument (2).")
+		}
+
+		// strV.Str is read regardless of strV.Type, the same way upstream
+		// reads oper1->data.string without checking oper1->type is even a
+		// string — any other type's Str field is Go's zero value "" anyway,
+		// which is what upstream's own NULL-string idiom already means here.
+		pid := h.Queue(f.Descr, progV.Ref, secsV.Num, strV.Str)
+		return nil, f.Push(Int(int64(pid)))
+	})
+}

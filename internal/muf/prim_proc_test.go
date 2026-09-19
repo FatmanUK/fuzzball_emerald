@@ -425,3 +425,112 @@ func TestForkPushesMinusOneWhenTheHostRefuses(t *testing.T) {
 		t.Fatalf("result = %+v, want -1", v)
 	}
 }
+
+func TestQueueRejectsNonIntegerSeconds(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	if err := f.Push(Str("not seconds")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Obj(testProgram2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("arg")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("QUEUE")](f)
+	if err == nil || err.Error() != "Non-integer argument (1)." {
+		t.Fatalf("err = %v, want the non-integer message", err)
+	}
+	if len(h.queueCalls) != 0 {
+		t.Fatal("Host.Queue should not be called with a bad seconds argument")
+	}
+}
+
+func TestQueueRejectsNonProgramArg(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testThing] = ref.TypeThing
+	h.valid[testThing] = true
+	f := newTestFrame(h)
+	if err := f.Push(Int(5)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Obj(testThing)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("arg")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("QUEUE")](f)
+	if err == nil || err.Error() != "Invalid program dbref argument (2)." {
+		t.Fatalf("err = %v, want the invalid-program message", err)
+	}
+	if len(h.queueCalls) != 0 {
+		t.Fatal("Host.Queue should not be called with a bad program argument")
+	}
+}
+
+func TestQueueForwardsToHostAndPushesResult(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testProgram2] = ref.TypeProgram
+	h.valid[testProgram2] = true
+	h.queueResult = 42
+	f := newTestFrame(h)
+	f.Descr = 9
+	if err := f.Push(Int(5)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Obj(testProgram2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("hello")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("QUEUE")](f); err != nil {
+		t.Fatalf("QUEUE: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeInteger || v.Num != 42 {
+		t.Fatalf("result = %+v, want 42", v)
+	}
+
+	if len(h.queueCalls) != 1 {
+		t.Fatalf("Queue called %d times, want 1", len(h.queueCalls))
+	}
+	call := h.queueCalls[0]
+	if call.descr != 9 || call.prog != testProgram2 || call.seconds != 5 || call.arg != "hello" {
+		t.Fatalf("unexpected call: %+v", call)
+	}
+}
+
+// TestQueueTreatsANonStringArgAsEmpty mirrors upstream's own type-blind read
+// of oper1->data.string: any non-string value's Str field is Go's zero value
+// "" anyway, so QUEUE need not (and does not) check the type explicitly.
+func TestQueueTreatsANonStringArgAsEmpty(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testProgram2] = ref.TypeProgram
+	h.valid[testProgram2] = true
+	f := newTestFrame(h)
+	if err := f.Push(Int(0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Obj(testProgram2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Int(123)); err != nil { // not a string
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("QUEUE")](f); err != nil {
+		t.Fatalf("QUEUE: %v", err)
+	}
+	if len(h.queueCalls) != 1 || h.queueCalls[0].arg != "" {
+		t.Fatalf("queueCalls = %+v, want arg \"\"", h.queueCalls)
+	}
+}

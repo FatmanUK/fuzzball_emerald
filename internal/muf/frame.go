@@ -202,6 +202,13 @@ type Host interface {
 	// process's own player why, when the process or player process-count
 	// limit is exceeded — upstream's "Event killed.  Timequeue table full."
 	Fork(child *Frame) int
+	// Queue is upstream's add_muf_delayq_event: compiles prog and schedules
+	// it to run after seconds, with arg as its initial stack argument and
+	// "Queued Event." as its COMMAND variable — the two are different
+	// strings upstream, unlike a command-driven program where they are the
+	// same one. It returns the new process's pid, or 0 — never FORK's -1 —
+	// on the same process-count-limit failure Fork reports.
+	Queue(descr int, prog ref.Ref, seconds int64, arg string) int
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

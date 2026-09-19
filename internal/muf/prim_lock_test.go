@@ -56,6 +56,16 @@ type lockTestHost struct {
 
 	forkCalls  []*Frame
 	forkResult int
+
+	queueCalls  []queueCall
+	queueResult int
+}
+
+type queueCall struct {
+	descr   int
+	prog    ref.Ref
+	seconds int64
+	arg     string
 }
 
 type controlsProcessCall struct {
@@ -164,6 +174,11 @@ func (h *lockTestHost) KillPID(pid int) bool {
 func (h *lockTestHost) Fork(child *Frame) int {
 	h.forkCalls = append(h.forkCalls, child)
 	return h.forkResult
+}
+
+func (h *lockTestHost) Queue(descr int, prog ref.Ref, seconds int64, arg string) int {
+	h.queueCalls = append(h.queueCalls, queueCall{descr, prog, seconds, arg})
+	return h.queueResult
 }
 
 const testProgram ref.Ref = 99
