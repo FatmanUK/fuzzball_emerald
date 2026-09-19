@@ -512,6 +512,24 @@ var cases = []Case{
 ;`,
 		Pause: 2 * time.Second,
 	},
+	{
+		// TESTLOCK, GETLOCKSTR/SETLOCKSTR, PARSELOCK/UNPARSELOCK/PRETTYLOCK
+		// and ARRAY_FILTER_LOCK, all against the wizard's own dbref (#1,
+		// always present in the fixture) so the case needs no dbref only
+		// known after a @create.
+		Name: "locks",
+		Source: tellPrelude + `: main
+  #1 "#1" setlockstr t
+  #1 getlockstr ts
+  #1 "#1" parselock testlock t
+  "#1" parselock unparselock ts
+  "#1" parselock prettylock ts
+  { #1 #0 }list "#1" parselock array_filter_lock array_count t
+  #1 "" setlockstr t
+  #1 getlockstr ts
+  "" parselock unparselock ts
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

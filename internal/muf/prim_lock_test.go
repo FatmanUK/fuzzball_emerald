@@ -21,6 +21,9 @@ type lockTestHost struct {
 	testLockCalls []testLockCall
 	testLockOK    bool
 	testLockErr   error
+	// testLockFunc, when set, decides TestLock's result per testPlayer
+	// instead of the single testLockOK value, for tests over several dbrefs.
+	testLockFunc func(testPlayer ref.Ref) bool
 
 	lockedOK  bool
 	lockedErr error
@@ -100,6 +103,9 @@ func (h *lockTestHost) PrettyLock(matchPlayer ref.Ref, lock *boolexp.Expr) strin
 
 func (h *lockTestHost) TestLock(descr, level int, testPlayer ref.Ref, lock *boolexp.Expr, trig, caller ref.Ref) (bool, error) {
 	h.testLockCalls = append(h.testLockCalls, testLockCall{descr, level, testPlayer, lock, trig, caller})
+	if h.testLockFunc != nil {
+		return h.testLockFunc(testPlayer), h.testLockErr
+	}
 	return h.testLockOK, h.testLockErr
 }
 
@@ -561,5 +567,81 @@ func TestPrettylockInvalidArg(t *testing.T) {
 	_, err := prims[PrimNumber("PRETTYLOCK")](f)
 	if err == nil || err.Error() != "Invalid argument." {
 		t.Fatalf("err = %v, want the invalid-argument message", err)
+	}
+}
+
+func TestArrayFilterLockKeepsPassingDbrefs(t *testing.T) {
+	h := newLockTestHost()
+	pass, fail, invalid := ref.Ref(21), ref.Ref(22), ref.Ref(23)
+	h.valid[pass] = true
+	h.valid[fail] = true
+	h.valid[invalid] = false
+	h.testLockFunc = func(testPlayer ref.Ref) bool { return testPlayer == pass }
+
+	lock := &boolexp.Expr{Kind: boolexp.Const, Thing: testThing}
+	f := newTestFrame(h)
+	if err := f.Push(Arr(NewList([]Value{Obj(pass), Obj(fail), Obj(invalid)}))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(LockVal(lock)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err != nil {
+		t.Fatalf("ARRAY_FILTER_LOCK: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeArray || v.Array == nil {
+		t.Fatalf("result = %+v, want an array", v)
+	}
+	got := v.Array.Values()
+	if len(got) != 1 || got[0].Ref != pass {
+		t.Fatalf("got %v, want only %v", got, pass)
+	}
+	// invalid should never even reach Host.TestLock.
+	for _, c := range h.testLockCalls {
+		if c.testPlayer == invalid {
+			t.Fatalf("TestLock called for an invalid dbref")
+		}
+	}
+}
+
+func TestArrayFilterLockInvalidArgs(t *testing.T) {
+	h := newLockTestHost()
+
+	f := newTestFrame(h)
+	if err := f.Push(Str("not an array")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(LockVal(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil || err.Error() != "Argument not an array. (1)" {
+		t.Fatalf("err = %v, want the not-an-array message", err)
+	}
+
+	f = newTestFrame(h)
+	if err := f.Push(Arr(NewList([]Value{Int(5)}))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(LockVal(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil || err.Error() != "Argument not an array of dbrefs. (1)" {
+		t.Fatalf("err = %v, want the not-dbrefs message", err)
+	}
+
+	f = newTestFrame(h)
+	if err := f.Push(Arr(NewList([]Value{Obj(testThing)}))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("not a lock")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil || err.Error() != "Argument not a lock. (2)" {
+		t.Fatalf("err = %v, want the not-a-lock message", err)
 	}
 }

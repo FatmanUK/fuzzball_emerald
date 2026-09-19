@@ -23,26 +23,37 @@ primitive/MPI surface and M8 (hardening + deploy). See §2.
 
 ## 2. Next Three Steps
 
-1. **Port more MUF primitives.** 111 of 417 are still unimplemented (see
+`internal/boolexp` (lock parsing and evaluation) is built, and lock work is
+now finished end to end: `TESTLOCK`, `LOCKED?`, `GETLOCKSTR`, `SETLOCKSTR`,
+`PARSELOCK`, `UNPARSELOCK`, `PRETTYLOCK`, `ARRAY_FILTER_LOCK`; the
+`@lock`/`@flock`/`@chlock`/`@conlock`/`@linklock`/`@ownlock`/`@readlock`
+commands (plus `@force_lock`/`@chown_lock` aliases); and exit traversal
+(`useExit` in `internal/game/move.go`) now actually calls `could_doit`
+instead of moving a player through any exit unconditionally, which it did
+not before. See `internal/game/boolexp.go`, `internal/game/lock_cmd.go`, and
+the plan at `~/.claude/plans/rippling-roaming-backus.md` for what's next.
+
+1. **Port more MUF primitives.** 103 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
-   has repeatedly caught real divergences that unit tests missed. FORCE/KILL/
-   PID/FORK/QUEUE and lock parsing/evaluation (`internal/boolexp`, not yet
-   built) are the largest remaining chunks.
+   has repeatedly caught real divergences that unit tests missed, including
+   two in the lock work: `PARSELOCK` on `""` must produce no message at all
+   (a null vs. merely-empty `PROG_STRING` distinction the C makes and Go
+   cannot represent directly — see `mufHost.ParseLock`), and a match
+   failure's own message during `_set_lock` is never gated by its `silent`
+   flag, only `_set_lock`'s own messages are (see `boolexp.ParseError.Notify`
+   and `Server.setLock`). `FORCE`/`KILL`/`PID`/`FORK`/`QUEUE` (process and
+   multitasking, `src/p_misc.c`) are now the largest remaining chunk.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
-3. **Start M8**: rate limiting/connection caps, structured audit logging,
-   `pprof` behind a localhost-only port, graceful drain, backup/restore docs
-   (`pg_dump`), and a README section on divergences. No work has begun on
-   this milestone.
-
-Known, deliberately deferred gap: `internal/boolexp` (lock parsing and
-evaluation) does not exist yet. Locks are stored as their unparsed boolean
-expression string but never evaluated — `examine`'s lock-checking predicates
-(`lockPasses` in `internal/game/examine.go`) fail closed on any lock that is
-actually set, rather than evaluating it. This blocks a chunk of the
-remaining primitives (`TESTLOCK`, permission-checking primitives, etc.).
+3. **Start M8**: rate limiting/connection caps and `pprof` behind a
+   localhost-only port are genuinely missing. Structured audit logging is
+   partial (`internal/logging` has no security-specific channel yet).
+   Graceful drain and a README divergences section are likely already
+   adequate — `cmd/fbemerald` already wires `SIGTERM` to a cancellable
+   context, and `README.md`'s "Compatibility notes" section already covers
+   divergences — verify before assuming either needs new work.
 
 ## 3. Project State
 
@@ -104,9 +115,11 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~301 primitives
+internal/muf/           — instruction set, VM/interpreter, ~309 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
+internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
+                            unparse_boolexp, boolexp.c ported directly
 internal/game/          — login, command dispatch, all @-commands, MUF/MPI
                             hosts, process queue, MUF editor, examine, sanity
                             commands, MCP host wiring
@@ -203,6 +216,26 @@ deliberately and recorded so they aren't "fixed" back by accident:
   message** (`#$#...`) so a player can't drive another player's client by
   typing the prefix in speech; `sendRaw` is the unquoted path MCP messages
   themselves use.
+- **A lock property holds its unparsed boolean expression string, not a
+  cached compiled tree**, unlike upstream, which parses once at set-time and
+  caches the result. `internal/boolexp.Parse` always takes the disk-loader
+  path (`dbload=true`, trusting `#123` dbrefs, no name matching) to re-parse
+  a stored lock at each use, which is valid because the stored form is
+  always already in that dbref form — `Unparse` with `fullname=false`
+  produces it, and that is the only thing that ever writes a lock property.
+  Name matching (`dbload=false`) happens once, when a lock is *set* from
+  player input (`@lock`, `SETLOCKSTR`, `PARSELOCK`).
+- **`ProgUID`/`find_uid` is only approximated** (`progUID` in
+  `internal/muf/prim_lock.go`): the dominant `REGUID` path (a program below
+  mucker level 2 runs as its own owner; at or above, as whoever is running
+  it) is covered, but `STICKY`/`HAVEN`/`SETUID`/`HARDUID` are not, since
+  those need a `fr->perms`/caller-stack concept nothing in this codebase has
+  built yet. Anything that reads `progUID` should be treated as
+  approximately right, not exactly.
+- **One upstream bug is reproduced in `LOCKED?`**: its player/thing argument
+  check is written `!= TYPE_PLAYER && == TYPE_THING` in Fuzzball 7.2.1,
+  which rejects a `THING` rather than allowing it as the primitive's own doc
+  comment claims. Kept deliberately, like the other reproduced bugs above.
 
 ### 3.4 Other
 
@@ -246,10 +279,11 @@ container (`deploy/Containerfile`) and the golden-harness oracle container
 **Internal package dependency shape** (high level, arrows = "depends on"):
 
 ```
-cmd/fbemerald → game → { world, store, session, mcp, muf, mpi, importer, tune }
-game → muf/compiler, muf, mpi, match, ascii, props, ref
-muf → ascii, ref, props   (muf/compiler → muf)
+cmd/fbemerald → game → { world, store, session, mcp, muf, mpi, boolexp, importer, tune }
+game → muf/compiler, muf, mpi, boolexp, match, ascii, props, ref
+muf → ascii, ref, props, boolexp   (muf/compiler → muf; boolexp for TypeLock's payload)
 mpi → ascii, ref
+boolexp → ref, props   (pure; no world/game dependency, like mpi)
 world → ref, props, tune, ascii
 store → world, ref, props   (GORM/Postgres)
 importer → world, ref, props, store
@@ -294,7 +328,9 @@ either; they're read-only reference).
 
 ## 6. Testing Status
 
-**All green as of the last commit** (`29b99ed`):
+**All green as of the lock work** (`internal/boolexp`, the `TESTLOCK`
+through `ARRAY_FILTER_LOCK` primitives, the `@lock` family, and exit-lock
+enforcement — see `git log` for the exact commits):
 - `go vet ./...` — clean
 - `gofmt -l .` (excluding `fuzzball/`) — clean
 - `make test` (`go test -race ./...` against a scratch Postgres schema) —
@@ -308,7 +344,9 @@ either; they're read-only reference).
   - `TestMCPNegotiationMatchesFuzzball`
   - `TestSanityMatchesFuzzball`
   - `TestWizardCommandsMatchFuzzball`
-- Primitive coverage: **301 of 417** implemented
+  - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
+    `@lock` actually gates it)
+- Primitive coverage: **309 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

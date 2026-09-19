@@ -183,6 +183,44 @@ func TestParseMatchAmbiguous(t *testing.T) {
 	}
 }
 
+// TestParseErrorNotifyFlag checks which parse failures upstream's own
+// parser would have shown to the player (Notify true — a match failure or
+// the hidden-property permission check) against which it fails on silently
+// (Notify false — a bare syntax error). Confirmed against the real server:
+// an unparseable "" PARSELOCK argument produces no message at all, which is
+// only correct if syntax errors stay unnotified.
+func TestParseErrorNotifyFlag(t *testing.T) {
+	h := newFakeHost()
+	h.matches["ok"] = thing1
+
+	cases := []struct {
+		name   string
+		input  string
+		notify bool
+	}{
+		{"match not found", "nosuchthing", true},
+		{"hidden prop denied", "@foo:bar", true},
+		{"unbalanced parens", "(ok", false},
+		{"empty prop name", ":bar", false},
+		{"empty prop value", "foo:", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse(h, 0, player1, c.input, false)
+			if err == nil {
+				t.Fatalf("Parse(%q): expected an error", c.input)
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("Parse(%q) error = %T, want *ParseError", c.input, err)
+			}
+			if pe.Notify != c.notify {
+				t.Errorf("Parse(%q).(*ParseError).Notify = %v, want %v", c.input, pe.Notify, c.notify)
+			}
+		})
+	}
+}
+
 func TestEvalNilAlwaysPasses(t *testing.T) {
 	h := newFakeHost()
 	if !Eval(h, 0, player1, nil, thing1) {

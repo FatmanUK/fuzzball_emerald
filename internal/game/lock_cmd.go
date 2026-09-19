@@ -1,0 +1,98 @@
+package game
+
+import (
+	"strings"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/boolexp"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
+	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+)
+
+// lockCommandSpec is one of the standard lock-setting commands, all driven
+// by upstream's set_standard_lock (src/property.c): @lock, @flock (aliased
+// as @force_lock), @chlock (aliased as @chown_lock), @conlock, @linklock,
+// @ownlock and @readlock. verb is upstream's own spelling of the command,
+// used in its NOGUEST/NOFORCE messages.
+type lockCommandSpec struct {
+	verb    string
+	path    string
+	label   string
+	noForce bool
+}
+
+var lockCommandSpecs = []lockCommandSpec{
+	{verb: "@lock", path: propLock, label: "Lock"},
+	{verb: "@flock", path: propForceLock, label: "Force Lock", noForce: true},
+	{verb: "@chlock", path: propChownLock, label: "Chown Lock"},
+	{verb: "@conlock", path: propConLock, label: "Container Lock"},
+	{verb: "@linklock", path: propLinkLock, label: "Link Lock"},
+	{verb: "@ownlock", path: propOwnLock, label: "Ownership Lock", noForce: true},
+	{verb: "@readlock", path: propReadLock, label: "Read Lock", noForce: true},
+}
+
+// The @lock family registers itself here rather than in atCommands's own
+// declaration, the way @force does: a closure over lockCommandSpecs in that
+// literal would refer back to the table being initialised.
+func init() {
+	for _, spec := range lockCommandSpecs {
+		spec := spec
+		atCommands[spec.verb] = func(s *Server, c *ctx) { s.cmdSetLock(c, spec) }
+	}
+	// @force_lock and @chown_lock are upstream's alternate full spellings of
+	// @flock and @chlock — not abbreviations, which lookupAtCommand already
+	// handles, but distinct registered names.
+	atCommands["@force_lock"] = atCommands["@flock"]
+	atCommands["@chown_lock"] = atCommands["@chlock"]
+}
+
+// cmdSetLock implements set_standard_lock: with no "=" it reports the named
+// object's current lock; with "=" but nothing after it, it clears the lock;
+// otherwise it parses and sets it. An empty object name targets the caller.
+//
+// NOFORCE's original guard — force_level, a global incremented for the
+// duration of a MUF {force} call — is not reproduced, since {force} is not
+// ported yet; only @force's own s.forceDepth is checked. Once {force} exists
+// it needs to increment the same counter for this to stay correct.
+func (s *Server) cmdSetLock(c *ctx, spec lockCommandSpec) {
+	if isGuest(c.w, c.who) {
+		c.tell("Guests are not allowed to %s.", spec.verb)
+		return
+	}
+	if spec.noForce && s.forceDepth > 0 {
+		c.tell("You can't use %s from a @force or {force}.", spec.verb)
+		return
+	}
+
+	objname, keyvalue, set := strings.Cut(c.arg, "=")
+	objname = strings.TrimSpace(objname)
+
+	target := c.who
+	if objname != "" {
+		t, ok := s.resolveControlled(c, objname)
+		if !ok {
+			return
+		}
+		target = t
+	}
+
+	if !set {
+		s.reportLock(c, target, spec)
+		return
+	}
+
+	s.setLock(c.w, c.d.ID, c.who, target, spec.path, spec.label, strings.TrimSpace(keyvalue), false)
+}
+
+// reportLock shows a lock's current human-readable value, the way typing
+// "@lock" (or any of its family) with no "=" does.
+func (s *Server) reportLock(c *ctx, target ref.Ref, spec lockCommandSpec) {
+	host := &lockHost{s: s, w: c.w}
+
+	var b *boolexp.Expr
+	if v, ok := c.w.GetProp(target, spec.path); ok && v.Type == props.Lock && v.Str != "" {
+		if parsed, err := boolexp.Parse(host, c.d.ID, c.who, v.Str, true); err == nil {
+			b = parsed
+		}
+	}
+	c.tell("%s: %s", spec.label, boolexp.Unparse(host, c.who, b, true))
+}

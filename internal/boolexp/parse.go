@@ -24,6 +24,22 @@ const (
 	propDirDelimiter = '/'
 )
 
+// ParseError is what Parse returns on failure.
+//
+// Notify is true when upstream's own parser would have shown Msg to the
+// player itself — a match failure or the hidden-property permission check,
+// both driven by notify() calls inside parse_boolexp_F — so a caller should
+// forward it regardless of whatever else it goes on to report. It is false
+// for a bare syntax error (unbalanced parentheses, an empty property name or
+// value), which upstream's parser fails on silently, producing TRUE_BOOLEXP
+// with no message to the player at all.
+type ParseError struct {
+	Msg    string
+	Notify bool
+}
+
+func (e *ParseError) Error() string { return e.Msg }
+
 // isSpace matches C's isspace() in the "C" locale, which is what upstream's
 // skip_whitespace and remove_ending_whitespace use.
 func isSpace(b byte) bool {
@@ -132,7 +148,7 @@ func (p *parser) parseF() (*Expr, error) {
 		}
 		p.skipWhitespace()
 		if b == nil || p.i >= len(p.s) || p.s[p.i] != ')' {
-			return nil, fmt.Errorf("unbalanced parentheses in lock")
+			return nil, &ParseError{Msg: "unbalanced parentheses in lock"}
 		}
 		p.i++
 		return b, nil
@@ -155,7 +171,10 @@ func (p *parser) parseF() (*Expr, error) {
 		if idx := strings.IndexByte(buf, propDelimiter); idx >= 0 {
 			if !p.dbload {
 				if isSystemProp(buf) || (!p.host.Wizard(p.player) && isHiddenProp(buf)) {
-					return nil, fmt.Errorf("Permission denied. (You cannot use a hidden property in a lock.)")
+					return nil, &ParseError{
+						Msg:    "Permission denied. (You cannot use a hidden property in a lock.)",
+						Notify: true,
+					}
 				}
 			}
 			return parseProp(buf)
@@ -165,20 +184,20 @@ func (p *parser) parseF() (*Expr, error) {
 			thing := p.host.Match(p.player, buf)
 			switch thing {
 			case ref.Nothing:
-				return nil, fmt.Errorf("I don't see %s here.", buf)
+				return nil, &ParseError{Msg: fmt.Sprintf("I don't see %s here.", buf), Notify: true}
 			case ref.Ambiguous:
-				return nil, fmt.Errorf("I don't know which %s you mean!", buf)
+				return nil, &ParseError{Msg: fmt.Sprintf("I don't know which %s you mean!", buf), Notify: true}
 			default:
 				return &Expr{Kind: Const, Thing: thing}, nil
 			}
 		}
 
 		if len(buf) < 2 || buf[0] != numberToken {
-			return nil, fmt.Errorf("invalid dbref %q in lock", buf)
+			return nil, &ParseError{Msg: fmt.Sprintf("invalid dbref %q in lock", buf)}
 		}
 		n, err := strconv.Atoi(buf[1:])
 		if err != nil {
-			return nil, fmt.Errorf("invalid dbref %q in lock", buf)
+			return nil, &ParseError{Msg: fmt.Sprintf("invalid dbref %q in lock", buf)}
 		}
 		return &Expr{Kind: Const, Thing: ref.Ref(n)}, nil
 	}
@@ -190,7 +209,7 @@ func parseProp(buf string) (*Expr, error) {
 	idx := strings.IndexByte(buf, propDelimiter)
 	name := strings.TrimRightFunc(buf[:idx], func(r rune) bool { return isSpace(byte(r)) })
 	if name == "" {
-		return nil, fmt.Errorf("empty property name in lock")
+		return nil, &ParseError{Msg: "empty property name in lock"}
 	}
 
 	rest := buf[idx+1:]
@@ -200,7 +219,7 @@ func parseProp(buf string) (*Expr, error) {
 		rest = rest[:sp]
 	}
 	if rest == "" {
-		return nil, fmt.Errorf("empty property value in lock")
+		return nil, &ParseError{Msg: "empty property value in lock"}
 	}
 
 	return &Expr{Kind: Prop, PropName: name, PropValue: rest}, nil

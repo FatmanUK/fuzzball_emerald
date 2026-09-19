@@ -23,6 +23,17 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 		return
 	}
 
+	// could_doit gates every other kind of exit traversal: its own @lock,
+	// and — when the exit does not sit directly in a room — the
+	// destination-reachability rules (JUMP_OK, GUEST rooms, BUILDER
+	// sources, secure_teleport). The already-handled "no destination at
+	// all" case above is could_doit's own first check, kept separate so its
+	// existing, differently-worded message is untouched.
+	if !couldDoit(s, c.w, c.d.ID, 1, c.who, exit) {
+		s.exitFailMessages(c, exit)
+		return
+	}
+
 	dest := e.Dest[0]
 	if dest == ref.Home {
 		dest = c.w.Get(c.who).Home
@@ -51,6 +62,23 @@ func (s *Server) exitMessages(c *ctx, exit ref.Ref) {
 		c.send(msg)
 	}
 	if msg := s.mesgProp(c.w, c.who, exit, propOSucc); msg != "" {
+		o := c.w.Get(c.who)
+		if o.Location != ref.Nothing {
+			s.notifyRoom(c.w, o.Location, []ref.Ref{c.who}, "%s %s", o.Name, msg)
+		}
+	}
+}
+
+// exitFailMessages shows an exit's failure messages to the player and the
+// room, upstream's can_doit failure branch: the exit's own @fail message, or
+// "You can't go that way." if it has none, plus @ofail to the room.
+func (s *Server) exitFailMessages(c *ctx, exit ref.Ref) {
+	if msg := s.mesgProp(c.w, c.who, exit, propFail); msg != "" {
+		c.send(msg)
+	} else {
+		c.tell("You can't go that way.")
+	}
+	if msg := s.mesgProp(c.w, c.who, exit, propOFail); msg != "" {
 		o := c.w.Get(c.who)
 		if o.Location != ref.Nothing {
 			s.notifyRoom(c.w, o.Location, []ref.Ref{c.who}, "%s %s", o.Name, msg)

@@ -11,6 +11,82 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
+// TestExitLockBlocksTraversal checks that useExit actually enforces an
+// exit's @lock now, rather than moving the player through unconditionally.
+func TestExitLockBlocksTraversal(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var exit ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz := h.wizRef()
+		here := w.Get(wiz).Location
+		cellar := w.Create("Cellar", ref.TypeRoom, wiz)
+		e := w.Create("down", ref.TypeExit, wiz)
+		e.Dest = []ref.Ref{cellar.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		exit = e.Ref
+		// Locked to NOTHING, which never passes for anyone.
+		w.SetProp(exit, propLock, props.Value{Type: props.Lock, Str: "#-1"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.send("down")
+	got := h.out()
+	if !strings.Contains(got, "You can't go that way.") {
+		t.Fatalf("locked exit should refuse passage:\n%s", got)
+	}
+	if strings.Contains(got, "Cellar") {
+		t.Fatalf("player should not have moved:\n%s", got)
+	}
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		w.SetProp(exit, propLock, props.Value{Type: props.Lock, Str: fmt.Sprintf("#%d", int(h.wizRef()))})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.send("down")
+	got = h.out()
+	if !strings.Contains(got, "Cellar") {
+		t.Fatalf("an exit locked to the player should let them through:\n%s", got)
+	}
+}
+
+// TestExitFailMessages checks that a locked exit's own @fail/@ofail
+// messages are shown instead of the default, when set.
+func TestExitFailMessages(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz := h.wizRef()
+		here := w.Get(wiz).Location
+		cellar := w.Create("Cellar", ref.TypeRoom, wiz)
+		e := w.Create("down", ref.TypeExit, wiz)
+		e.Dest = []ref.Ref{cellar.Ref}
+		if err := w.MoveTo(e.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		w.SetProp(e.Ref, propLock, props.Value{Type: props.Lock, Str: "#-1"})
+		w.SetProp(e.Ref, propFail, props.Value{Type: props.String, Str: "It won't budge."})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.send("down")
+	got := h.out()
+	if !strings.Contains(got, "It won't budge.") {
+		t.Fatalf("expected the exit's own @fail message:\n%s", got)
+	}
+	if strings.Contains(got, "You can't go that way.") {
+		t.Fatalf("the default fail message should not also show:\n%s", got)
+	}
+}
+
 // TestLockedAgainstWizardAndStranger exercises LOCKED? end to end: a MUF
 // program calling it against a thing locked to the wizard only. The wizard
 // should pass (a dbref lock's CONST checks player == the locked-to dbref);
@@ -97,6 +173,43 @@ func TestLockStringPrimitives(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+// TestSetLockStringForwardsMatchFailure checks that SETLOCKSTR's "silent"
+// call to _set_lock still shows a match failure's own message, even though
+// it suppresses _set_lock's own "Lock set."/"I don't understand that key."
+func TestSetLockStringForwardsMatchFailure(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var thing ref.Ref
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		wiz := h.wizRef()
+		here := w.Get(wiz).Location
+		th := w.Create("gizmo", ref.TypeThing, wiz)
+		if err := w.MoveTo(th.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		thing = th.Ref
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.installProgram(t, "badkey", fmt.Sprintf(`: main
+  #%d "nosuchthingatall" SETLOCKSTR if "ok" else "fail" then me @ swap notify
+;`, int(thing)))
+
+	h.send("badkey")
+	got := h.out()
+	if !strings.Contains(got, "I don't see nosuchthingatall here.") {
+		t.Fatalf("missing the match-failure message:\n%s", got)
+	}
+	if strings.Contains(got, "I don't understand that key.") {
+		t.Fatalf("SETLOCKSTR should stay silent about its own generic message:\n%s", got)
+	}
+	if !strings.Contains(got, "fail") {
+		t.Fatalf("SETLOCKSTR should report failure:\n%s", got)
 	}
 }
 

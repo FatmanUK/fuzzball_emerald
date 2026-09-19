@@ -176,30 +176,74 @@ func (h *mufHost) LockString(obj ref.Ref) string {
 }
 
 // SetLockString implements muf.Host for SETLOCKSTR, which is upstream's
-// _set_lock called with silent true: a parse failure reports nothing to
-// matchPlayer, just false.
+// _set_lock called with silent true: it still forwards a match failure's own
+// message — that comes from inside parse_boolexp itself, not from
+// _set_lock, so upstream's silent flag never suppresses it — but not "Lock
+// set."/"Lock cleared."/"I don't understand that key.", which are
+// _set_lock's own and do respect silent.
 func (h *mufHost) SetLockString(descr int, matchPlayer, obj ref.Ref, raw string) bool {
-	if raw == "" {
-		h.w.SetProp(obj, propLock, props.Value{Type: props.Lock, Str: ""})
+	return h.s.setLock(h.w, descr, matchPlayer, obj, propLock, "Lock", raw, true)
+}
+
+// setLock is upstream's _set_lock: parse keyvalue with player's own matching
+// context and store it as object's path property in its unparsed dbref
+// form, or clear the property when keyvalue is empty. A match failure's own
+// message (from inside boolexp.Parse, mirroring parse_boolexp's own embedded
+// notify calls) always reaches player, regardless of silent; only _set_lock's
+// own messages — "Lock set.", "Lock cleared." or "I don't understand that
+// key." — are what silent gates, which is what distinguishes the
+// @lock-family commands (silent false) from SETLOCKSTR (silent true). It
+// reports whether the lock was set, which is false only when keyvalue failed
+// to parse.
+func (s *Server) setLock(w *world.World, descr int, player, object ref.Ref, path, label, keyvalue string, silent bool) bool {
+	if keyvalue == "" {
+		w.SetProp(object, path, props.Value{Type: props.Lock, Str: ""})
+		if !silent {
+			s.notify(w, player, "%s cleared.", label)
+		}
 		return true
 	}
-	lh := &lockHost{s: h.s, w: h.w}
-	key, err := boolexp.Parse(lh, descr, matchPlayer, raw, false)
+
+	lh := &lockHost{s: s, w: w}
+	key, err := boolexp.Parse(lh, descr, player, keyvalue, false)
 	if err != nil {
+		if pe, ok := err.(*boolexp.ParseError); ok && pe.Notify {
+			s.notify(w, player, "%s", pe.Msg)
+		}
+		if !silent {
+			s.notify(w, player, "I don't understand that key.")
+		}
 		return false
 	}
-	h.w.SetProp(obj, propLock, props.Value{Type: props.Lock, Str: boolexp.Unparse(lh, matchPlayer, key, false)})
+
+	w.SetProp(object, path, props.Value{Type: props.Lock, Str: boolexp.Unparse(lh, player, key, false)})
+	if !silent {
+		s.notify(w, player, "%s set.", label)
+	}
 	return true
 }
 
-// ParseLock implements muf.Host for PARSELOCK. Unlike SetLockString, a parse
-// failure here does notify matchPlayer, matching parse_boolexp's own
-// embedded notify calls, which upstream's PARSELOCK never suppresses.
+// ParseLock implements muf.Host for PARSELOCK, which — unlike SETLOCKSTR —
+// has no message of its own to add on failure: only a match failure's own
+// message (boolexp.ParseError.Notify) ever reaches matchPlayer, matching
+// parse_boolexp's own embedded notify calls exactly.
 func (h *mufHost) ParseLock(descr int, matchPlayer ref.Ref, raw string) *boolexp.Expr {
+	// A NULL string (as opposed to one merely empty) skips parse_boolexp
+	// entirely upstream, going straight to TRUE_BOOLEXP with no match
+	// attempt and no message — confirmed against the real server, since an
+	// empty string here would otherwise try to match "" as an object name
+	// and fail noisily. Go cannot distinguish a null PROG_STRING from an
+	// empty one, so this treats every empty raw as upstream's null case,
+	// which is what a MUF "" literal actually produces.
+	if raw == "" {
+		return nil
+	}
 	lh := &lockHost{s: h.s, w: h.w}
 	lock, err := boolexp.Parse(lh, descr, matchPlayer, raw, false)
 	if err != nil {
-		h.s.notify(h.w, matchPlayer, "%s", err.Error())
+		if pe, ok := err.(*boolexp.ParseError); ok && pe.Notify {
+			h.s.notify(h.w, matchPlayer, "%s", pe.Msg)
+		}
 		return nil
 	}
 	return lock

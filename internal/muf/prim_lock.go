@@ -262,4 +262,53 @@ func init() {
 		}
 		return nil, f.Push(Str(h.PrettyLock(f.progUID(h), v.Lock)))
 	})
+
+	// ARRAY_FILTER_LOCK is a port of prim_array_filter_lock (src/p_array.c):
+	// keep only the dbrefs in an array that pass a lock. It reuses
+	// Host.TestLock per element rather than a bulk Host method, since that
+	// already resolves the consistent_lock_source thing/trig choice — unlike
+	// TESTLOCK, upstream has no recursion guard here, so none is added.
+	register("ARRAY_FILTER_LOCK", func(f *Frame) (*Result, error) {
+		lockV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		arrV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+
+		if arrV.Type != TypeArray || arrV.Array == nil {
+			return nil, errf("Argument not an array. (1)")
+		}
+		items := arrV.Array.Values()
+		for _, v := range items {
+			if v.Type != TypeObject {
+				return nil, errf("Argument not an array of dbrefs. (1)")
+			}
+		}
+		if lockV.Type != TypeLock {
+			return nil, errf("Argument not a lock. (2)")
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		out := NewList(nil)
+		for _, v := range items {
+			if !h.Valid(v.Ref) {
+				continue
+			}
+			ok, err := h.TestLock(f.Descr, f.Level, v.Ref, lockV.Lock, f.Trig, f.Caller)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out.Append(v)
+			}
+		}
+		return nil, f.Push(Arr(out))
+	})
 }
