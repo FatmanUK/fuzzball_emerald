@@ -180,6 +180,12 @@ type Host interface {
 	IsPID(pid int) bool
 	// Instances counts the processes currently running prog — INSTANCES.
 	Instances(prog ref.Ref) int
+	// CanCall reports whether a caller at callerLevel, acting as callerUID
+	// (progUID), may CALL prog's public function name — CANCALL?. prog is
+	// compiled on demand if it has not been already; a program that fails to
+	// compile, or declares no public by that name, reports false rather than
+	// an error, matching upstream's own silent failure there.
+	CanCall(callerLevel int, callerUID ref.Ref, prog ref.Ref, name string) bool
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

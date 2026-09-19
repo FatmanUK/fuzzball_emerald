@@ -39,17 +39,20 @@ scheduler (see the plan file for the full breakdown — PID numbering,
 per-primitive design, and an implementation order). The first, lowest-risk
 slice has landed: `Frame.PID`/`Frame.Supplicant` fields, and the primitives
 `PID`, `ISPID?`, `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT` (`internal/muf/prim_proc.go`,
-`internal/game/proc_host.go`). Still to come from that plan, in order:
-`CANCALL?` (independent — needs the compiler's public-function table exposed
-via `Host`), `KILL` (factor `cmdKill`'s logic out of `internal/game/admin.go`
-first), an engine scheduling-granularity fix (`internal/world/engine.go`,
-needed before `FORK` so a freshly-forked process doesn't wait a full flush
-interval for its first slice), `FORK`, `QUEUE`, `FORCE`/`FORCEDBY`/
-`FORCEDBY_ARRAY` (share permission logic with `internal/game/wiz.go`'s
-`@force`), `GETPIDS`/`GETPIDINFO`, and last `WATCHPID` (needs a still-missing
-generic event-delivery mechanism built alongside it).
+`internal/game/proc_host.go`). `CANCALL?` has landed too — it turned out to
+need no process-queue work at all, just the compiler's already-existing
+`Program.Publics` table exposed through a new `Host.CanCall` (see
+`internal/muf/prim_proc.go` and `internal/game/proc_host.go`'s `linkable`
+helper). Still to come from that plan, in order: `KILL` (factor `cmdKill`'s
+logic out of `internal/game/admin.go` first), an engine
+scheduling-granularity fix (`internal/world/engine.go`, needed before `FORK`
+so a freshly-forked process doesn't wait a full flush interval for its first
+slice), `FORK`, `QUEUE`, `FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY` (share
+permission logic with `internal/game/wiz.go`'s `@force`), `GETPIDS`/
+`GETPIDINFO`, and last `WATCHPID` (needs a still-missing generic
+event-delivery mechanism built alongside it).
 
-1. **Port more MUF primitives.** 98 of 417 are still unimplemented (see
+1. **Port more MUF primitives.** 97 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -132,7 +135,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~314 primitives
+internal/muf/           — instruction set, VM/interpreter, ~315 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -364,8 +367,8 @@ enforcement — see `git log` for the exact commits):
   - `TestLockCommandsMatchFuzzball` (the `@lock` family, an exit whose
     `@lock` actually gates it)
   - the `"proc"` case in `TestAgainstFuzzball` (`PID`, `ISPID?`,
-    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`)
-- Primitive coverage: **314 of 417** implemented
+    `FORCE_LEVEL`, `INSTANCES`, `SUPPLICANT`, `CANCALL?`)
+- Primitive coverage: **315 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

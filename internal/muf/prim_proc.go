@@ -64,3 +64,38 @@ func init() {
 		return nil, f.Push(Obj(f.Supplicant))
 	})
 }
+
+// CANCALL? is a port of prim_cancallp (src/p_misc.c). Everything but
+// argument validation — compiling prog on demand, the target's own mucker
+// level, ownership/Linkable, and the public's own mlev floor — lives in
+// Host.CanCall, since it needs the world and the compiler cache.
+func init() {
+	register("CANCALL?", func(f *Frame) (*Result, error) {
+		nameV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		progV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+			return nil, errf("Invalid program dbref argument. (1)")
+		}
+		// A MUF "" literal is upstream's NULL PROG_STRING, which this check
+		// rejects the same way ParseLock's own null-vs-empty case does — see
+		// mufHost.ParseLock's doc comment for the general shape of this gap.
+		if nameV.Type != TypeString || nameV.Str == "" {
+			return nil, errf("Invalid string argument. Must be non-null. (2)")
+		}
+
+		ok := h.CanCall(f.MLevel(), f.progUID(h), progV.Ref, nameV.Str)
+		return nil, f.Push(Bool(ok))
+	})
+}

@@ -532,7 +532,9 @@ var cases = []Case{
 	},
 	{
 		Name: "proc",
-		Source: tellPrelude + `: main
+		Source: tellPrelude + `: foo ;
+public foo
+: main
   pid t
   pid ispid? t
   0 ispid? t
@@ -540,6 +542,10 @@ var cases = []Case{
   force_level t
   0 try #1 instances catch ts endcatch
   supplicant intostr ts
+  prog "foo" cancall? t
+  prog "FOO" cancall? t
+  prog "bar" cancall? t
+  0 try #1 "foo" cancall? t catch ts endcatch
 ;`,
 	},
 }

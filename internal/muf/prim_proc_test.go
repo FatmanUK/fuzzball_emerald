@@ -162,3 +162,77 @@ func TestSupplicantReturnsWhatWasSet(t *testing.T) {
 		t.Fatalf("result = %+v, want #%d", v, testThing)
 	}
 }
+
+const testProgram2 ref.Ref = 100
+
+func TestCanCallRejectsNonProgramArg(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testThing] = ref.TypeThing
+	h.valid[testThing] = true
+	f := newTestFrame(h)
+	if err := f.Push(Obj(testThing)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("foo")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("CANCALL?")](f)
+	if err == nil || err.Error() != "Invalid program dbref argument. (1)" {
+		t.Fatalf("err = %v, want the invalid-program message", err)
+	}
+}
+
+func TestCanCallRejectsEmptyName(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testProgram2] = ref.TypeProgram
+	h.valid[testProgram2] = true
+	f := newTestFrame(h)
+	if err := f.Push(Obj(testProgram2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("CANCALL?")](f)
+	if err == nil || err.Error() != "Invalid string argument. Must be non-null. (2)" {
+		t.Fatalf("err = %v, want the invalid-string message", err)
+	}
+}
+
+func TestCanCallForwardsToHostWithProgUID(t *testing.T) {
+	h := newLockTestHost()
+	h.types[testProgram2] = ref.TypeProgram
+	h.valid[testProgram2] = true
+	h.canCallResult = true
+	h.owner[10] = 20 // f.Caller's owner, for progUID at mlev >= 2
+
+	f := newTestFrame(h)
+	f.Caller = 10
+	if err := f.Push(Obj(testProgram2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Push(Str("foo")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("CANCALL?")](f); err != nil {
+		t.Fatalf("CANCALL?: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeInteger || v.Num != 1 {
+		t.Fatalf("result = %+v, want true", v)
+	}
+
+	if len(h.canCallCalls) != 1 {
+		t.Fatalf("CanCall called %d times, want 1", len(h.canCallCalls))
+	}
+	call := h.canCallCalls[0]
+	if call.callerLevel != 3 || call.callerUID != 20 || call.prog != testProgram2 || call.name != "foo" {
+		t.Fatalf("unexpected call: %+v", call)
+	}
+}
