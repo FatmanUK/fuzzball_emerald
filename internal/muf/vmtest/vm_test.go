@@ -9,6 +9,7 @@ import (
 
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/boolexp"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf/compiler"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -118,6 +119,12 @@ func (h *fakeHost) GUISetValue(string, string, []string) {}
 func (h *fakeHost) Now() time.Time        { return time.Unix(1_700_000_000, 0).UTC() }
 func (h *fakeHost) Uptime() time.Duration { return time.Hour }
 func (h *fakeHost) Version() string       { return "test" }
+
+func (h *fakeHost) TestLock(int, int, ref.Ref, *boolexp.Expr, ref.Ref, ref.Ref) (bool, error) {
+	return false, nil
+}
+func (h *fakeHost) Locked(int, int, ref.Ref, ref.Ref) (bool, error) { return false, nil }
+func (h *fakeHost) MaxInterpRecursion() int                         { return 8 }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

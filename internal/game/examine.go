@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/boolexp"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -39,7 +40,7 @@ func (s *Server) cmdExamine(c *ctx) {
 
 	// Someone who could not link to it and cannot pass its read lock is
 	// told only who owns it. That is the whole privacy model for examine.
-	if !s.canLink(c.w, c.who, target) && !s.passesReadLock(c.w, c.who, target) {
+	if !s.canLink(c.w, c.who, target) && !s.passesReadLock(c, target) {
 		s.printOwner(c, target)
 		return
 	}
@@ -214,7 +215,7 @@ func (s *Server) tellLocation(c *ctx, o *world.Object) {
 	if o.Location == ref.Nothing {
 		return
 	}
-	if !s.controls(c.w, c.who, o.Location) && !s.canSeeFlags(c.w, c.who, o.Location) {
+	if !s.controls(c.w, c.who, o.Location) && !s.canSeeFlags(c, o.Location) {
 		return
 	}
 	c.tell("Location: %s", unparse(c.w, c.who, o.Location))
@@ -453,12 +454,12 @@ func (s *Server) canLink(w *world.World, who, what ref.Ref) bool {
 
 // canSeeFlags reports whether someone may be told where an object is, which
 // upstream ties to whether they could teleport there.
-func (s *Server) canSeeFlags(w *world.World, who, where ref.Ref) bool {
-	if s.controls(w, who, where) {
+func (s *Server) canSeeFlags(c *ctx, where ref.Ref) bool {
+	if s.controls(c.w, c.who, where) {
 		return true
 	}
-	o := w.Get(where)
-	if o == nil || !lockPasses(w, where, propLinkLock, true) {
+	o := c.w.Get(where)
+	if o == nil || !s.lockPasses(c.w, c.d.ID, 1, c.who, where, propLinkLock, true) {
 		return false
 	}
 	return o.Flags&ref.LinkOK != 0 ||
@@ -468,20 +469,30 @@ func (s *Server) canSeeFlags(w *world.World, who, where ref.Ref) bool {
 // passesReadLock reports whether someone may read an object's details. An
 // unset read lock means no, which is why examine normally shows only the
 // owner to anyone who does not control the object.
-func (s *Server) passesReadLock(w *world.World, who, what ref.Ref) bool {
-	return lockPasses(w, what, propReadLock, false)
+func (s *Server) passesReadLock(c *ctx, what ref.Ref) bool {
+	return s.lockPasses(c.w, c.d.ID, 1, c.who, what, propReadLock, false)
 }
 
-// lockPasses evaluates a lock property, or would.
+// lockPasses evaluates a lock property against who.
 //
-// Boolean expressions are stored as written and there is no evaluator yet —
-// internal/boolexp is planned, not built — so a lock that is actually set
-// fails here whichever way it would really go. That is the safe direction:
-// erring the other way would hand out access a lock was put there to refuse.
-// Only the unset case, which is almost every case, is answered properly.
-func lockPasses(w *world.World, what ref.Ref, path string, defaultWhenUnset bool) bool {
-	if v, ok := w.GetProp(what, path); ok && v.Type == props.Lock && v.Str != "" {
-		return false
+// A lock property holds its unparsed boolean expression in dbref form (see
+// internal/boolexp's package doc), so it is re-parsed on every check via
+// Parse's dbload path rather than cached. A lock that fails to parse — which
+// should not happen to a lock Unparse produced itself — is treated as
+// TRUE_BOOLEXP, upstream's own parse failure result, which always passes.
+//
+// level is this check's own interpreter nesting depth (muf.Frame.Level for a
+// check TESTLOCK or LOCKED? made; 1 for a fresh check with no calling MUF
+// frame), which a program-type lock constant's RunLock propagates onward.
+func (s *Server) lockPasses(w *world.World, descr, level int, who, what ref.Ref, path string, defaultWhenUnset bool) bool {
+	v, ok := w.GetProp(what, path)
+	if !ok || v.Type != props.Lock || v.Str == "" {
+		return defaultWhenUnset
 	}
-	return defaultWhenUnset
+	host := &lockHost{s: s, w: w, level: level}
+	b, err := boolexp.Parse(host, descr, who, v.Str, true)
+	if err != nil {
+		return true
+	}
+	return boolexp.Eval(host, descr, who, b, what)
 }

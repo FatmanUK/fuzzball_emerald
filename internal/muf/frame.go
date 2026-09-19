@@ -3,6 +3,7 @@ package muf
 import (
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/boolexp"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
@@ -129,6 +130,20 @@ type Host interface {
 	Uptime() time.Duration
 	// Version identifies the server.
 	Version() string
+
+	// TestLock evaluates an already-parsed lock (from PARSELOCK) against
+	// testPlayer, the way TESTLOCK does. thingSource is what the lock is
+	// evaluated as being "on" — upstream picks trig or caller depending on
+	// the consistent_lock_source @tune parameter, which only the host can
+	// read. level is the calling frame's own Level; ok is false, with a
+	// non-nil error, once it exceeds TESTLOCK's hardcoded recursion limit.
+	TestLock(descr, level int, testPlayer ref.Ref, lock *boolexp.Expr, trig, caller ref.Ref) (bool, error)
+	// Locked reports whether player is locked out of thing, the way LOCKED?
+	// does: could_doit's exit-destination rules, then thing's own lock.
+	Locked(descr, level int, player, thing ref.Ref) (bool, error)
+	// MaxInterpRecursion is the max_interp_recursion @tune parameter, which
+	// bounds LOCKED?'s own recursion guard (TESTLOCK's is hardcoded).
+	MaxInterpRecursion() int
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.
@@ -212,6 +227,13 @@ type Frame struct {
 	// Descr is the connection the program was started from.
 	Descr int
 
+	// Level is upstream's fr->level: how deeply nested this frame's own
+	// interp_loop call is. A program started from a command runs at level 1;
+	// TESTLOCK and LOCKED? propagate level+1 to a frame they start to
+	// evaluate a program-type lock constant, so a chain of locks that each
+	// trigger another lock check cannot recurse forever.
+	Level int
+
 	host Host
 }
 
@@ -220,6 +242,7 @@ func NewFrame(p *Program, host Host) *Frame {
 	f := &Frame{
 		Prog:  p,
 		PC:    p.Start,
+		Level: 1,
 		Vars:  make([]Value, len(p.Vars)),
 		LVars: make([]Value, len(p.LVars)),
 		host:  host,

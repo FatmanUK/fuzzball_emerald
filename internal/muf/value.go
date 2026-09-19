@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/boolexp"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
@@ -21,6 +22,10 @@ type Value struct {
 	Array *Array
 	// Addr is a code address, for TypeAddress.
 	Addr int
+	// Lock holds a TypeLock value's parsed expression. A nil Lock is
+	// TRUE_BOOLEXP — an unlocked lock — not the absence of a value; PARSELOCK
+	// is the only primitive that produces one.
+	Lock *boolexp.Expr
 }
 
 // Constructors, which keep call sites readable.
@@ -32,11 +37,12 @@ func Bool(b bool) Value {
 	}
 	return Int(n)
 }
-func Float(f float64) Value { return Value{Type: TypeFloat, Float: f} }
-func Str(s string) Value    { return Value{Type: TypeString, Str: s} }
-func Obj(r ref.Ref) Value   { return Value{Type: TypeObject, Ref: r} }
-func Arr(a *Array) Value    { return Value{Type: TypeArray, Array: a} }
-func Mark() Value           { return Value{Type: TypeMark} }
+func Float(f float64) Value         { return Value{Type: TypeFloat, Float: f} }
+func Str(s string) Value            { return Value{Type: TypeString, Str: s} }
+func Obj(r ref.Ref) Value           { return Value{Type: TypeObject, Ref: r} }
+func Arr(a *Array) Value            { return Value{Type: TypeArray, Array: a} }
+func Mark() Value                   { return Value{Type: TypeMark} }
+func LockVal(b *boolexp.Expr) Value { return Value{Type: TypeLock, Lock: b} }
 
 // Truthy reports whether a value counts as true, which MUF decides per type:
 // a non-zero number, a non-empty string, a valid dbref, a non-empty array.
