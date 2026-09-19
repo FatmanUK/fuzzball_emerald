@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -391,6 +392,17 @@ func parseProps(s *scanner, o *world.Object, rep *Report, r ref.Ref) (int, error
 		}
 		if name == "" {
 			continue
+		}
+		// Upstream's C never validated a property's bytes as any
+		// encoding, so a live world can carry a value that is not valid
+		// UTF-8 — seen in the wild as debug code that stored a raw
+		// struct in a string property. Postgres's TEXT columns require
+		// valid UTF-8, so this is sanitized here rather than failing the
+		// whole import (or, worse, failing a flush after import, on a
+		// property nothing touched again).
+		if (value.Type == props.String || value.Type == props.Lock) && !utf8.ValidString(value.Str) {
+			rep.warnf("%v: property %q was not valid UTF-8; invalid bytes replaced", r, name)
+			value.Str = strings.ToValidUTF8(value.Str, "�")
 		}
 		o.Props.Set(name, value)
 	}

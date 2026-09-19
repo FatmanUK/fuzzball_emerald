@@ -64,7 +64,9 @@ make pod-import pod-run
 ```
 
 That builds the image, starts Postgres, imports the starter world, and runs the
-server in a container with the uid mapping described below. Then:
+server in a container with the uid mapping described below. Import a different
+world with `make pod-import DUMP=path/to/world.db` — the `muf/` directory
+beside it is picked up the same way. Then:
 
 ```bash
 make connect

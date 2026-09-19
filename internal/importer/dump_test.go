@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/password"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -353,6 +354,47 @@ func TestObjectWithNoProperties(t *testing.T) {
 	}
 	if o.UseCount != 3 || o.Created.Unix() != 100 || o.LastUsed.Unix() != 200 {
 		t.Errorf("timestamps or use count wrong: %+v", o)
+	}
+}
+
+// TestInvalidUTF8PropertyIsSanitized checks that a property whose bytes are
+// not valid UTF-8 — seen in a real Dreamtrack dump, where a debug library had
+// stored a raw struct in a string property — is sanitized rather than
+// aborting the whole import or being written to Postgres as-is, which a TEXT
+// column refuses.
+func TestInvalidUTF8PropertyIsSanitized(t *testing.T) {
+	bad := "\xe0\x8f\x1e\x0c\xff\x7f"
+	dump := VersionString + "\n1\n0\n0\n" +
+		"#0\nRoom Zero\n-1\n-1\n-1\n0\n100\n200\n3\n400\n" +
+		"*Props*\n" +
+		".debug/lasterr:2:" + bad + "\n" +
+		"*End*\n" +
+		"-1\n-1\n1\n" + endOfDump + "\n"
+
+	w := world.New()
+	rep, err := Parse(strings.NewReader(dump), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Properties != 1 {
+		t.Fatalf("read %d properties, want 1", rep.Properties)
+	}
+	found := false
+	for _, warn := range rep.Warnings {
+		if strings.Contains(warn, "not valid UTF-8") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("warnings = %v, want one mentioning invalid UTF-8", rep.Warnings)
+	}
+
+	v, ok := w.Get(ref.GlobalEnvironment).Props.Get(".debug/lasterr")
+	if !ok {
+		t.Fatal("the property should still be set, just sanitized")
+	}
+	if !utf8.ValidString(v.Str) {
+		t.Errorf("stored value %q is still not valid UTF-8", v.Str)
 	}
 }
 
