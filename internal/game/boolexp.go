@@ -37,7 +37,10 @@ func (h *lockHost) Wizard(player ref.Ref) bool {
 	return false
 }
 
-func (h *lockHost) Name(r ref.Ref) string { return nameOf(h.w, r) }
+// Name is unparse_object, already ported as unparse (used by @examine and
+// wizard output): r's bare name, or "name(#dbref FLAGS)" when viewer
+// controls r or may otherwise see its flags.
+func (h *lockHost) Name(viewer, r ref.Ref) string { return unparse(h.w, viewer, r) }
 
 func (h *lockHost) Valid(r ref.Ref) bool { return h.w.Valid(r) }
 
@@ -185,7 +188,7 @@ func (h *mufHost) SetLockString(descr int, matchPlayer, obj ref.Ref, raw string)
 	if err != nil {
 		return false
 	}
-	h.w.SetProp(obj, propLock, props.Value{Type: props.Lock, Str: boolexp.Unparse(lh, key, false)})
+	h.w.SetProp(obj, propLock, props.Value{Type: props.Lock, Str: boolexp.Unparse(lh, matchPlayer, key, false)})
 	return true
 }
 
@@ -203,12 +206,20 @@ func (h *mufHost) ParseLock(descr int, matchPlayer ref.Ref, raw string) *boolexp
 }
 
 // UnparseLock implements muf.Host for UNPARSELOCK.
-func (h *mufHost) UnparseLock(lock *boolexp.Expr) string {
+func (h *mufHost) UnparseLock(matchPlayer ref.Ref, lock *boolexp.Expr) string {
 	if lock == nil {
 		return ""
 	}
 	lh := &lockHost{s: h.s, w: h.w}
-	return boolexp.Unparse(lh, lock, false)
+	return boolexp.Unparse(lh, matchPlayer, lock, false)
+}
+
+// PrettyLock implements muf.Host for PRETTYLOCK: unparse_boolexp with
+// fullname true, so a CONST dbref renders the way a player would see it
+// rather than as a bare "#123".
+func (h *mufHost) PrettyLock(matchPlayer ref.Ref, lock *boolexp.Expr) string {
+	lh := &lockHost{s: h.s, w: h.w}
+	return boolexp.Unparse(lh, matchPlayer, lock, true)
 }
 
 // couldDoit is upstream's could_doit: if thing is an exit, the destination it

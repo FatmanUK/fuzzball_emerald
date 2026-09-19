@@ -161,8 +161,15 @@ type Host interface {
 	// UnparseLock renders a parsed lock back to its stored form, upstream's
 	// UNPARSELOCK. A nil lock (TRUE_BOOLEXP) renders as "", not
 	// "*UNLOCKED*" — that is UNPARSELOCK's own special case, not shared with
-	// LockString/GETLOCKSTR.
-	UnparseLock(lock *boolexp.Expr) string
+	// LockString/GETLOCKSTR. matchPlayer is upstream's ProgUID, unused unless
+	// a dbref inside the lock ever needs rendering with a viewer's
+	// permissions, which UNPARSELOCK's own fullname-false form never does.
+	UnparseLock(matchPlayer ref.Ref, lock *boolexp.Expr) string
+	// PrettyLock renders a parsed lock as a human-readable string, upstream's
+	// PRETTYLOCK: unparse_boolexp with fullname true, so a CONST dbref shows
+	// the way matchPlayer (ProgUID) would see it rather than as a bare
+	// "#123".
+	PrettyLock(matchPlayer ref.Ref, lock *boolexp.Expr) string
 }
 
 // MCPArg is one argument of an outgoing MCP message: a name and its lines.

@@ -60,8 +60,10 @@ type Host interface {
 	// Wizard reports whether player may reference a hidden property in a
 	// lock.
 	Wizard(player ref.Ref) bool
-	// Name returns an object's name, for Unparse's fullname form.
-	Name(r ref.Ref) string
+	// Name renders r the way Unparse's fullname form shows it to viewer —
+	// upstream's unparse_object, which includes the dbref and flags when
+	// viewer may see them, not just a bare name.
+	Name(viewer, r ref.Ref) string
 
 	// Valid reports whether r names a live object, upstream's OkObj.
 	Valid(r ref.Ref) bool

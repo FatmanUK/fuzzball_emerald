@@ -46,12 +46,12 @@ func (h *fakeHost) Match(player ref.Ref, name string) ref.Ref {
 	}
 	return ref.Nothing
 }
-func (h *fakeHost) Wizard(player ref.Ref) bool { return h.wizards[player] }
-func (h *fakeHost) Name(r ref.Ref) string      { return h.names[r] }
-func (h *fakeHost) Valid(r ref.Ref) bool       { _, ok := h.types[r]; return ok }
-func (h *fakeHost) Type(r ref.Ref) ref.ObjType { return h.types[r] }
-func (h *fakeHost) Owner(r ref.Ref) ref.Ref    { return h.owner[r] }
-func (h *fakeHost) Location(r ref.Ref) ref.Ref { return h.location[r] }
+func (h *fakeHost) Wizard(player ref.Ref) bool    { return h.wizards[player] }
+func (h *fakeHost) Name(viewer, r ref.Ref) string { return h.names[r] }
+func (h *fakeHost) Valid(r ref.Ref) bool          { _, ok := h.types[r]; return ok }
+func (h *fakeHost) Type(r ref.Ref) ref.ObjType    { return h.types[r] }
+func (h *fakeHost) Owner(r ref.Ref) ref.Ref       { return h.owner[r] }
+func (h *fakeHost) Location(r ref.Ref) ref.Ref    { return h.location[r] }
 func (h *fakeHost) Contents(r ref.Ref) []ref.Ref {
 	return h.contents[r]
 }
@@ -375,12 +375,12 @@ func TestUnparseRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse(%q): %v", in, err)
 		}
-		out := Unparse(h, b, false)
+		out := Unparse(h, player1, b, false)
 		b2, err := Parse(h, 0, player1, out, true)
 		if err != nil {
 			t.Fatalf("re-Parse(%q): %v", out, err)
 		}
-		out2 := Unparse(h, b2, false)
+		out2 := Unparse(h, player1, b2, false)
 		if out != out2 {
 			t.Fatalf("Unparse not stable for %q: %q vs %q", in, out, out2)
 		}
@@ -389,7 +389,7 @@ func TestUnparseRoundTrip(t *testing.T) {
 
 func TestUnparseUnlocked(t *testing.T) {
 	h := newFakeHost()
-	if got := Unparse(h, nil, false); got != Unlocked {
+	if got := Unparse(h, player1, nil, false); got != Unlocked {
 		t.Fatalf("got %q, want %q", got, Unlocked)
 	}
 }
@@ -398,7 +398,7 @@ func TestUnparseFullname(t *testing.T) {
 	h := newFakeHost()
 	h.names[thing1] = "Rex"
 	b := &Expr{Kind: Const, Thing: thing1}
-	if got := Unparse(h, b, true); got != "Rex" {
+	if got := Unparse(h, player1, b, true); got != "Rex" {
 		t.Fatalf("got %q, want Rex", got)
 	}
 }
@@ -407,7 +407,7 @@ func TestUnparseParenthesizesOrUnderAnd(t *testing.T) {
 	h := newFakeHost()
 	b := &Expr{Kind: And, Sub1: &Expr{Kind: Const, Thing: 1}, Sub2: &Expr{Kind: Or,
 		Sub1: &Expr{Kind: Const, Thing: 2}, Sub2: &Expr{Kind: Const, Thing: 3}}}
-	got := Unparse(h, b, false)
+	got := Unparse(h, player1, b, false)
 	want := "#1&(#2|#3)"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)

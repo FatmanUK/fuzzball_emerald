@@ -146,11 +146,13 @@ func init() {
 	})
 }
 
-// GETLOCKSTR, SETLOCKSTR, PARSELOCK and UNPARSELOCK are ports of
-// prim_getlockstr and prim_setlockstr (src/p_db.c) and prim_parselock and
-// prim_unparselock (src/p_misc.c). GETLOCKSTR/SETLOCKSTR read and write the
-// standard @lock property directly; PARSELOCK/UNPARSELOCK convert between a
-// lock string and a TypeLock value without touching any object.
+// GETLOCKSTR, SETLOCKSTR, PARSELOCK, UNPARSELOCK and PRETTYLOCK are ports of
+// prim_getlockstr and prim_setlockstr (src/p_db.c) and prim_parselock,
+// prim_unparselock and prim_prettylock (src/p_misc.c). GETLOCKSTR/SETLOCKSTR
+// read and write the standard @lock property directly; PARSELOCK/
+// UNPARSELOCK/PRETTYLOCK convert between a lock string and a TypeLock value
+// without touching any object — PRETTYLOCK differs from UNPARSELOCK only in
+// rendering dbrefs the way a player would see them, not as bare "#123"s.
 func init() {
 	register("GETLOCKSTR", func(f *Frame) (*Result, error) {
 		obj, err := f.Pop()
@@ -242,6 +244,22 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, f.Push(Str(h.UnparseLock(v.Lock)))
+		return nil, f.Push(Str(h.UnparseLock(f.progUID(h), v.Lock)))
+	})
+
+	register("PRETTYLOCK", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if v.Type != TypeLock {
+			return nil, errf("Invalid argument.")
+		}
+
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Str(h.PrettyLock(f.progUID(h), v.Lock)))
 	})
 }

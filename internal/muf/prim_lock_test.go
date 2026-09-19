@@ -27,13 +27,17 @@ type lockTestHost struct {
 
 	maxRecursion int
 
-	lockStrings     map[ref.Ref]string
-	setLockCalls    []setLockCall
-	setLockOK       bool
-	parseLockCalls  []parseLockCall
-	parseLockResult *boolexp.Expr
-	unparseLockArg  *boolexp.Expr
-	unparseLockStr  string
+	lockStrings       map[ref.Ref]string
+	setLockCalls      []setLockCall
+	setLockOK         bool
+	parseLockCalls    []parseLockCall
+	parseLockResult   *boolexp.Expr
+	unparseLockArg    *boolexp.Expr
+	unparseLockPlayer ref.Ref
+	unparseLockStr    string
+	prettyLockArg     *boolexp.Expr
+	prettyLockPlayer  ref.Ref
+	prettyLockStr     string
 }
 
 type setLockCall struct {
@@ -82,9 +86,16 @@ func (h *lockTestHost) ParseLock(descr int, matchPlayer ref.Ref, raw string) *bo
 	return h.parseLockResult
 }
 
-func (h *lockTestHost) UnparseLock(lock *boolexp.Expr) string {
+func (h *lockTestHost) UnparseLock(matchPlayer ref.Ref, lock *boolexp.Expr) string {
 	h.unparseLockArg = lock
+	h.unparseLockPlayer = matchPlayer
 	return h.unparseLockStr
+}
+
+func (h *lockTestHost) PrettyLock(matchPlayer ref.Ref, lock *boolexp.Expr) string {
+	h.prettyLockArg = lock
+	h.prettyLockPlayer = matchPlayer
+	return h.prettyLockStr
 }
 
 func (h *lockTestHost) TestLock(descr, level int, testPlayer ref.Ref, lock *boolexp.Expr, trig, caller ref.Ref) (bool, error) {
@@ -505,6 +516,49 @@ func TestUnparselockInvalidArg(t *testing.T) {
 	}
 
 	_, err := prims[PrimNumber("UNPARSELOCK")](f)
+	if err == nil || err.Error() != "Invalid argument." {
+		t.Fatalf("err = %v, want the invalid-argument message", err)
+	}
+}
+
+func TestPrettylockPushesHostResult(t *testing.T) {
+	h := newLockTestHost()
+	h.prettyLockStr = "Rex(#11PF)"
+	h.owner[testPlayer] = ref.Ref(300) // progUID at mlev>=2 uses Owner(f.Caller)
+	lock := &boolexp.Expr{Kind: boolexp.Const, Thing: testThing}
+
+	f := newTestFrame(h)
+	f.Caller = testPlayer
+	if err := f.Push(LockVal(lock)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prims[PrimNumber("PRETTYLOCK")](f); err != nil {
+		t.Fatalf("PRETTYLOCK: %v", err)
+	}
+	v, err := f.Pop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Type != TypeString || v.Str != "Rex(#11PF)" {
+		t.Fatalf("result = %+v, want Rex(#11PF)", v)
+	}
+	if h.prettyLockArg != lock {
+		t.Fatalf("PrettyLock was not called with the pushed lock")
+	}
+	if h.prettyLockPlayer != h.owner[testPlayer] {
+		t.Fatalf("PrettyLock's viewer = %v, want ProgUID (owner of caller)", h.prettyLockPlayer)
+	}
+}
+
+func TestPrettylockInvalidArg(t *testing.T) {
+	h := newLockTestHost()
+	f := newTestFrame(h)
+	if err := f.Push(Str("not a lock")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prims[PrimNumber("PRETTYLOCK")](f)
 	if err == nil || err.Error() != "Invalid argument." {
 		t.Fatalf("err = %v, want the invalid-argument message", err)
 	}

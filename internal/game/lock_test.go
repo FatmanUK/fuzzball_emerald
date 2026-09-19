@@ -54,9 +54,10 @@ func TestLockedAgainstWizardAndStranger(t *testing.T) {
 	}
 }
 
-// TestLockStringPrimitives exercises SETLOCKSTR, GETLOCKSTR, PARSELOCK and
-// UNPARSELOCK together through a real MUF program: setting a lock string,
-// reading it back, then round-tripping it through PARSELOCK/UNPARSELOCK.
+// TestLockStringPrimitives exercises SETLOCKSTR, GETLOCKSTR, PARSELOCK,
+// UNPARSELOCK and PRETTYLOCK together through a real MUF program: setting a
+// lock string, reading it back, round-tripping it through PARSELOCK/
+// UNPARSELOCK, and rendering it human-readably with PRETTYLOCK.
 func TestLockStringPrimitives(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -78,9 +79,10 @@ func TestLockStringPrimitives(t *testing.T) {
   #%d "#%d" SETLOCKSTR if "set:ok" else "set:fail" then me @ swap notify
   #%d GETLOCKSTR me @ swap notify
   "#%d" PARSELOCK UNPARSELOCK me @ swap notify
+  "#%d" PARSELOCK PRETTYLOCK me @ swap notify
   #%d "" SETLOCKSTR if "clear:ok" else "clear:fail" then me @ swap notify
   #%d GETLOCKSTR me @ swap notify
-;`, int(thing), int(wiz), int(thing), int(wiz), int(thing), int(thing)))
+;`, int(thing), int(wiz), int(thing), int(wiz), int(wiz), int(thing), int(thing)))
 
 	h.send("checklockstr")
 	got := h.out()
@@ -88,6 +90,7 @@ func TestLockStringPrimitives(t *testing.T) {
 	for _, want := range []string{
 		"set:ok",
 		fmt.Sprintf("#%d", int(wiz)),
+		"Wizard(#" + fmt.Sprintf("%d", int(wiz)), // PRETTYLOCK's fullname rendering
 		"clear:ok",
 		"*UNLOCKED*",
 	} {
