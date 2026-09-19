@@ -111,6 +111,7 @@ func cmdServe(args []string) error {
 	gs := game.New(engine, game.Options{Logger: base})
 
 	engine.OnTick(gs.OnTick())
+	engine.OnEachOp(gs.OnTick())
 
 	// Run the world first: the listeners enqueue work onto it from their
 	// own goroutines, so it has to be draining before they accept anyone.

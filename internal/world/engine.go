@@ -50,10 +50,26 @@ type Engine struct {
 	// onTick, when set, runs on the world goroutine at each interval. The
 	// process queue uses it to wake sleeping programs.
 	onTick func(*World)
+
+	// onEachOp, when set, runs on the world goroutine after every operation
+	// Run applies — not just at each flush interval. The process queue uses
+	// it too, so a freshly-forked or newly-queued process gets its first
+	// slice within the same tick of activity that created it, rather than
+	// waiting up to a full flush interval: upstream's own scheduler runs
+	// once per main-loop pass, which in Emerald's model is once per applied
+	// operation, not once per second. It is deliberately the same shape as
+	// onTick — most callers wire both to the same function — so periodic and
+	// event-driven scheduling stay in one place rather than two.
+	onEachOp func(*World)
 }
 
 // OnTick sets a callback run on the world goroutine at each flush interval.
 func (e *Engine) OnTick(fn func(*World)) { e.onTick = fn }
+
+// OnEachOp sets a callback run on the world goroutine after every operation,
+// in addition to OnTick's periodic firing. See onEachOp's own comment for why
+// this exists.
+func (e *Engine) OnEachOp(fn func(*World)) { e.onEachOp = fn }
 
 // OnPanic sets a callback run after a recovered panic in a world operation.
 // It runs on the world goroutine.
@@ -183,6 +199,9 @@ func (e *Engine) Run(ctx context.Context) error {
 		select {
 		case op := <-e.ops:
 			e.apply(op)
+			if e.onEachOp != nil {
+				e.apply(operation{fn: e.onEachOp})
+			}
 
 		case <-ticker.C:
 			if e.onTick != nil {

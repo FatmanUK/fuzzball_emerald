@@ -132,6 +132,54 @@ func TestEnginePanicDoesNotKillTheWorld(t *testing.T) {
 	}
 }
 
+// TestOnEachOpRunsAfterEveryOperation checks that an OnEachOp callback fires
+// once per applied operation, not just once per flush interval — the fix a
+// freshly-forked process needs so its first instruction slice does not wait
+// up to a full Interval to run.
+func TestOnEachOpRunsAfterEveryOperation(t *testing.T) {
+	w := newTestWorld(t)
+	// An hour-long interval, so only OnEachOp — never the ticker — could be
+	// responsible for what this test counts.
+	e := NewEngine(w, Options{Persister: &fakePersister{}, Interval: time.Hour})
+
+	var mu sync.Mutex
+	calls := 0
+	e.OnEachOp(func(*World) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- e.Run(ctx) }()
+	defer func() {
+		cancel()
+		select {
+		case err := <-errc:
+			if err != nil {
+				t.Errorf("Run returned %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("engine did not shut down")
+		}
+	}()
+
+	const n = 20
+	for i := 0; i < n; i++ {
+		if err := e.Do(context.Background(), func(*World) {}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mu.Lock()
+	got := calls
+	mu.Unlock()
+	if got != n {
+		t.Errorf("OnEachOp ran %d times for %d operations, want %d", got, n, n)
+	}
+}
+
 func TestEngineFlushesOnInterval(t *testing.T) {
 	p := &fakePersister{}
 	e, _, stop := startEngine(t, p, 10*time.Millisecond)

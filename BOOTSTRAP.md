@@ -53,13 +53,22 @@ alone rather than reworked to share `ControlsProcess`: upstream's `@kill` is
 `do_kill_process`, a materially richer command (kills by player name, by
 program dbref, or "all", not just by pid) that Emerald's `cmdKill` does not
 attempt yet — porting that is its own task, not a refactor incidental to the
-`KILL` primitive. Still to come from the Phase 2 plan, in order: an engine
-scheduling-granularity fix (`internal/world/engine.go`, needed before `FORK`
-so a freshly-forked process doesn't wait a full flush interval for its first
-slice), `FORK`, `QUEUE`, `FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY` (share
-permission logic with `internal/game/wiz.go`'s `@force`), `GETPIDS`/
-`GETPIDINFO`, and last `WATCHPID` (needs a still-missing generic
-event-delivery mechanism built alongside it).
+`KILL` primitive. The engine scheduling-granularity fix Phase 2 needed before
+`FORK` has landed too: `Engine.OnEachOp` (`internal/world/engine.go`) runs a
+callback after every applied operation, not just once per flush interval —
+`cmd/fbemerald/commands.go` and `internal/golden/emerald.go` both wire it to
+the same `Server.Tick` `OnTick` already uses, so a freshly-runnable process
+gets its first instruction slice within the same op that created it rather
+than waiting up to `FBE_FLUSH_INTERVAL`. It is deliberately not wired into
+the test harness (`internal/game/game_test.go`'s `newHarness`): existing
+sleep/process tests (`TestSleepingProgramResumes` and others) depend on
+nothing resuming a suspended program except an explicit `h.s.Tick(w)` call,
+and auto-draining there would make their assertions race their own setup.
+Still to come from the Phase 2 plan, in order: `FORK`, `QUEUE`, `FORCE`/
+`FORCEDBY`/`FORCEDBY_ARRAY` (share permission logic with
+`internal/game/wiz.go`'s `@force`), `GETPIDS`/`GETPIDINFO`, and last
+`WATCHPID` (needs a still-missing generic event-delivery mechanism built
+alongside it).
 
 1. **Port more MUF primitives.** 96 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact

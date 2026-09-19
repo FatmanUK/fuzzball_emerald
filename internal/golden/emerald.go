@@ -53,6 +53,7 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 
 	gs := game.New(engine, game.Options{})
 	engine.OnTick(gs.OnTick())
+	engine.OnEachOp(gs.OnTick())
 
 	d, err := gs.Connect(session.TransportLine, "golden")
 	if err != nil {
