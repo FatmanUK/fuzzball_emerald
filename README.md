@@ -1,5 +1,9 @@
 # Fuzzball Emerald
 
+[![Test](https://github.com/FatmanUK/fuzzball_emerald/actions/workflows/test.yml/badge.svg)](https://github.com/FatmanUK/fuzzball_emerald/actions/workflows/test.yml)
+[![Build](https://github.com/FatmanUK/fuzzball_emerald/actions/workflows/build.yml/badge.svg)](https://github.com/FatmanUK/fuzzball_emerald/actions/workflows/build.yml)
+[![Push](https://github.com/FatmanUK/fuzzball_emerald/actions/workflows/push.yml/badge.svg)](https://github.com/FatmanUK/fuzzball_emerald/actions/workflows/push.yml)
+
 A MUCK server in Go, behaviour-compatible with [Fuzzball 7][fb] — existing MUF
 programs, MPI descriptions and `.db` worlds are meant to work unchanged — with
 four deliberate departures:
