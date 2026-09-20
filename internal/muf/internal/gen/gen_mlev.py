@@ -70,6 +70,23 @@ CUSTOM_ABORT_MESSAGE = {
     "DESCRHOST", "DESCRUSER", "DESCRBOOT", "DESCRNOTIFY", "NEXTDESCR",
     "DESCRIPTORS", "DESCR_ARRAY", "DESCR_SETUSER", "DESCRFLUSH",
     "FIRSTDESCR", "LASTDESCR", "DESCRBUFSIZE", "SETWIDTH", "SETHEIGHT",
+    # src/p_misc.c: SETSYSPARM's own "Wizbit only primitive." — see
+    # prim_sysparm.go. SYSPARM/SYSPARM_ARRAY have no fixed floor of their
+    # own at all; their gate is per-parameter (TUNE_MLEV(player)).
+    "SETSYSPARM",
+    # src/p_misc.c: IGNORING?/IGNORE_ADD/IGNORE_DEL's own capitalised
+    # "Permission Denied." — see prim_misc2.go.
+    "IGNORING?", "IGNORE_ADD", "IGNORE_DEL",
+    # src/p_array.c: ARRAY_NOTIFY_SECURE's own "Mucker level 3 primitive.",
+    # the same non-generic wording as most of p_connects.c.
+    "ARRAY_NOTIFY_SECURE",
+    # src/p_props.c: plain "Permission denied." at mlev 4, not the generic
+    # dispatcher's "Permission denied.  Requires Wizbit."
+    "BLESSPROP", "UNBLESSPROP", "PARSEMPIBLESSED",
+    # src/p_db.c: NEXTENTRANCE's own "Permission denied.  Requires Mucker
+    # Level 3." — the generic dispatcher's level<4 wording has no such
+    # suffix at all.
+    "NEXTENTRANCE",
 }
 
 
@@ -126,7 +143,13 @@ def main():
                              # of an owned object; found the same way KILL's
                              # control_process gap was, by checking the C
                              # once a primitive using this table read wrong.
-                             r'fr\s*->\s*pid', cond):
+                             r'fr\s*->\s*pid|'
+                             # STATS/STATS_ARRAY's own "mlev < 3 &&
+                             # OWNER(ref) != player" — the same ownership
+                             # escape hatch as "permissions(...)", just
+                             # spelled directly instead of through that
+                             # helper.
+                             r'OWNER\s*\(', cond):
                     continue
                 for lv in re.findall(r'mlev\s*<\s*(\w+)', cond):
                     if lv in LEVELS:

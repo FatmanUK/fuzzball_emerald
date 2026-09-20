@@ -251,21 +251,107 @@ wall-clock- or OS-buffer-dependent) plus a new dedicated `connects_test.go`
 for `DESCRHOST`/`DESCRUSER`, which need mlevel 4 the way `FORCE`'s own
 dedicated fixture did.
 
-1. **Port more MUF primitives.** 72 of 417 are still unimplemented (see
-   `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
-   count and which ones). Each must be checked against the real C server via
-   the golden harness (`internal/golden`), not just read from source — this
-   has repeatedly caught real divergences that unit tests missed: two in the
-   lock work (`PARSELOCK` on `""`, and `_set_lock`'s own match-failure
-   message bypassing its `silent` flag), a generator false-positive gating
-   `KILL` at an unconditional floor it does not have, `FORCE`/`FORCEDBY`/
-   `FORCEDBY_ARRAY`'s own distinct abort wording, `GETPIDS`'s `#-1`
-   wildcard wrongly including the caller's own pid, and this phase's
-   `FIRSTDESCR`/`LASTDESCR` asymmetry — see Phases 2 and 3 of the plan
-   above, both now finished. Phase 4 (`p_db.c`/`p_array.c`/`p_props.c`/
-   `p_strings.c`/`p_misc.c` remainders) is next; the plan's own note on
-   verifying `CALL`/`CATCH`/`EXIT`/`JMP`/`READ`/`SLEEP` as a coverage-test
-   false positive, not a real gap, is worth doing first.
+Phase 4 landed most of what it scoped, but not all of it — see below for
+exactly what and why. Confirmed first, per the plan's own note: `CALL`,
+`CATCH`, `CATCH_DETAILED`, `EVENT_WAITFOR`, `EXIT`, `JMP`, `READ` and
+`SLEEP` are coverage-test false positives, dispatched as compiler
+pseudo-ops in `internal/muf/prim.go`'s own `primitive()` switch rather than
+registered in the `prims` map — and so, it turns out, is `EXECUTE`, which
+the plan's own note missed. `INTERP`, despite the name similarity, is a
+real, separate, still-missing primitive (a synchronous sub-invocation of
+another program) — see below.
+
+**Landed** (35 primitives, `go test -run TestPrimitiveCoverage` now reads
+380/417): `p_strings.c`'s `STOD`, `OTELL`, `PRONOUN_SUB`, `STRENCRYPT`,
+`STRDECRYPT`, `TEXTATTR`, `POSE-SEPARATOR?`; `p_misc.c`'s `SYSPARM`,
+`SETSYSPARM`, `SYSPARM_ARRAY`, `EVENT_COUNT`, `EVENT_EXISTS`,
+`EXT-NAME-OK?`, `READ_WANTS_BLANKS`, `READ_WANTS_NO_BLANKS`, `IGNORING?`,
+`IGNORE_ADD`, `IGNORE_DEL`, `CONVTIME`, `STATS`, `STATS_ARRAY`, `USERLOG`;
+`p_array.c`'s `ARRAY_INSERTRANGE`, `ARRAY_SORT_INDEXED`,
+`ARRAY_PUT_PROPVALS`, `ARRAY_GET_IGNORELIST`, `ARRAY_INTERPRET`,
+`ARRAY_NOTIFY_SECURE`; `p_props.c`'s `BLESSPROP`, `UNBLESSPROP`,
+`BLESSED?`, `PROP-NAME-OK?`, `PARSEMPI`, `PARSEMPIBLESSED`,
+`ARRAY_FILTER_PROP`; `p_db.c`'s `COMPILE`, `COMPILED?`, `UNCOMPILE`,
+`PROGRAM_GETLINES`, `NEXTENTRANCE`.
+
+Real findings, not just wording, golden caught along the way:
+
+- **`FIRSTDESCR`/`LASTDESCR`'s player-scoped/global asymmetry** was already
+  documented in Phase 3; this phase found the same *class* of upstream
+  doc-comment-vs-code mismatch repeatedly enough to be worth naming as a
+  pattern: `tune_parms_array`'s and `muf_event_exists`'s own "smatch
+  pattern" doc comments, both actually exact `equalstr` matches;
+  `STATS_ARRAY`'s doc comment ordering ("players, programs") the reverse of
+  what the code actually builds ("program, player"); `COPYOBJ`'s doc
+  comment claiming a clone's value resets to 0 when the code clamps and
+  copies it instead. None of these were assumed from the comment — each was
+  checked against the code once read, the same discipline that caught
+  `GETPIDS`'s wildcard gap last phase.
+- **A test bug, not an implementation bug, on the first pass of two unit
+  tests** for the new `pronounSub`/`strEncrypt`/`strDecrypt` helpers: an
+  expected capitalization result written backwards against upstream's own
+  `isupper(prn[1])` rule, and a round-trip case using control-byte input
+  outside the cipher's own documented "visible ASCII" range. Both were the
+  test's own expectation being wrong, caught by writing the test and
+  reading the C again to check the failure rather than "fixing" working
+  code to match a guess.
+- **Golden caught two real primitive bugs before this session considered
+  them done**: `ARRAY_INSERTRANGE` and `ARRAY_SORT_INDEXED` used generic
+  stack-helper error messages (`"Argument not an array."`) instead of
+  upstream's own argument-numbered wording (`"Argument not an array. (3)"`)
+  — using `f.popArray()`/`f.popInt()` where upstream's own message needed a
+  number those helpers don't carry.
+
+Genuinely deferred, not attempted, each needing more than a primitive port
+on its own:
+
+- **`INTERP`** (`src/p_stack.c`) — a synchronous sub-invocation of another
+  program, architecturally close to `RunLock`'s own pattern
+  (`internal/game/boolexp.go`) for a program-type lock constant. The
+  clearest next primitive to pick up.
+- **`checkflags`/`init_checkflags`**, upstream's flag-matching
+  mini-language (`@W`, `!D`, and so on) — blocks `ARRAY_FILTER_FLAGS`
+  (`p_array.c`) and `FINDNEXT` (`p_db.c`) alike, and `@find` besides, were
+  it ever built. Worth its own task; two primitives and a command are
+  waiting on it.
+- **Player lifecycle and object cloning** (`p_db.c`): `NEWPLAYER`,
+  `COPYPLAYER`, `TOADPLAYER`, `PNAME_HISTORY`, `COPYOBJ`, `DUMP` — real
+  design work (creation-cost accounting, name-history storage, `@toad`'s
+  own belongings-transfer logic `internal/game/wiz.go`'s `toadPlayer`
+  already has and these primitives would need to share) rather than a
+  mechanical port.
+- **`PROGRAM_SETLINES`** (`p_db.c`) — the write side of the now-landed
+  `PROGRAM_GETLINES`, needs an "is this program currently open in the MUF
+  editor" check against `internal/game/edit.go`'s own session state before
+  it is safe to port; deferred rather than risk that interaction.
+- **A delayed, out-of-band event-delivery scheduler** distinct from
+  `WATCHPID`'s own synchronous one — blocks `TIMER_START`, `TIMER_STOP` and
+  `EVENT_SEND` (`p_misc.c`) together.
+- **`FMTTIME`** (`p_misc.c`) — upstream calls C's `strptime` with an
+  arbitrary caller-supplied format string; Go has no equivalent to wrap.
+  `CONVTIME`, which only needs one fixed format, is ported.
+- **The MUF single-step debugger** — `DEBUGGER_BREAK`, `DEBUG_LINE`,
+  `DEBUG_ON`, `DEBUG_OFF` (`p_misc.c`) — unimplemented in Emerald entirely,
+  not a gap specific to these four.
+- **A per-frame seeded RNG** — `GETSEED`/`SETSEED` (`p_math.c`) read and
+  write state `SRAND` doesn't actually keep in Emerald either (it currently
+  returns the same thing `RANDOM` does); fixing that is its own task, not
+  incidental to these two.
+- **`SMTP_SEND`** (`p_misc.c`) — a real SMTP client.
+- **`ARRAY_FMTSTRINGS`** (`p_strings.c`) — a dict-driven `%(field)s`
+  reimplementation of `FMTSTRING`'s own sprintf-alike parser; the C's own
+  doc comment calls it "actually very complex."
+- **`PARSEPROPEX`** (`p_props.c`) — converts a whole caller-supplied
+  dictionary into MPI variables and hands one back; materially more
+  plumbing than `PARSEMPI`, which is ported.
+
+One divergence found but not fixed, outside this phase's own scope: piping
+`TEXTATTR`'s ANSI-coded output to a live connection showed real Fuzzball
+suppressing the escape codes entirely while Emerald sent them raw — likely
+upstream gates color on whatever capability a client negotiated, which nothing
+in Emerald's own `NOTIFY` path currently checks either. Not specific to
+`TEXTATTR`; worth its own look before assuming any primitive's ANSI output is
+byte-for-byte comparable over a real connection.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
@@ -336,7 +422,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~340 primitives
+internal/muf/           — instruction set, VM/interpreter, ~380 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -573,7 +659,7 @@ enforcement — see `git log` for the exact commits):
     `"queue"` case (COMMAND vs. stack argument)
   - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
     self-forcing program)
-- Primitive coverage: **340 of 417** implemented
+- Primitive coverage: **380 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

@@ -150,6 +150,92 @@ type Host interface {
 	// is a host method because MUF and MPI are separate languages that the
 	// server joins, not layers of one another.
 	ParseProp(obj ref.Ref, path, arg string, private bool) (string, error)
+	// ParseMPI evaluates source as MPI directly — PARSEMPI/PARSEMPIBLESSED,
+	// as opposed to ParseProp's own "read a property, then evaluate it".
+	// who is both the audience and the permissions object, upstream's own
+	// do_parse_mesg(player, who, ...) convention. blessed skips permission
+	// checks, matching a blessed property. Unlike ParseProp, there is no
+	// private/public delay-message-audience distinction — see
+	// prim_props.go's own doc comment for why.
+	ParseMPI(who ref.Ref, source, arg string, blessed bool) (string, error)
+
+	// BlessProp and UnblessProp set and clear a property's blessed flag —
+	// BLESSPROP/UNBLESSPROP. IsPropBlessed reads it back — BLESSED?.
+	BlessProp(obj ref.Ref, path string, blessed bool)
+	IsPropBlessed(obj ref.Ref, path string) bool
+
+	// TuneGet is upstream's tune_get_parmstring, minus its own mlev gate —
+	// SYSPARM and PRONOUN_SUB check TuneReadMLevel themselves, against the
+	// reading player's own mlevel (upstream's TUNE_MLEV(player) macro), not
+	// the calling program's. ok is false for an unknown parameter name.
+	TuneGet(name string) (value string, ok bool)
+	// TuneReadMLevel and TuneWriteMLevel are one parameter's own read/write
+	// floor. ok is false for an unknown parameter name.
+	TuneReadMLevel(name string) (mlev int, ok bool)
+	TuneWriteMLevel(name string) (mlev int, ok bool)
+	// TuneSet is upstream's tune_setparm, minus its own mlev gate —
+	// SETSYSPARM checks TuneWriteMLevel itself. name starting with "%"
+	// resets the parameter to its default, upstream's own
+	// TP_HAS_FLAG_DEFAULT convention; value is then ignored. ok is false
+	// for an unknown parameter name; err is the parse failure otherwise.
+	TuneSet(name, value string) (ok bool, err error)
+	// TuneList is upstream's tune_parms_array: every parameter mlevel may
+	// read, matching pattern — upstream's own exact, case-insensitive
+	// equalstr, not truly an smatch pattern despite what its own argument
+	// name and abort message claim; an empty pattern matches everything.
+	TuneList(pattern string, mlevel int) []TuneEntry
+	// TuneBool and TuneInt are typed reads for server-side policy checks —
+	// tp_ignore_support, tp_userlog_mlev and the like — as opposed to
+	// TuneGet's MUF-facing formatted string. Both panic if name does not
+	// name a parameter of that type, the same "every call site names a
+	// compile-time constant" contract tune.Set's own typed accessors use.
+	TuneBool(name string) bool
+	TuneInt(name string) int64
+
+	// NameOK is upstream's ok_object_name: whether name is acceptable for a
+	// newly created object of type t. EXT-NAME-OK?'s own primitive.
+	NameOK(name string, t ref.ObjType) bool
+
+	// UserLog is upstream's log_user: appends a line to the MUF diagnostic
+	// log, upstream's own "player(#) [program.muf(#)] timestamp: message"
+	// format, for USERLOG.
+	UserLog(player, program ref.Ref, msg string)
+
+	// IsIgnoring is upstream's ignore_is_ignoring, IgnoreAdd/IgnoreDel
+	// upstream's ignore_add_player/ignore_remove_player — the whole
+	// ignore-list feature keyed off tp_ignore_support. All three resolve
+	// both objects to their owners internally, matching upstream's own
+	// OWNER() calls inside each — IGNORING?/IGNORE_ADD/IGNORE_DEL pass
+	// their arguments straight through unresolved.
+	IsIgnoring(player, who ref.Ref) bool
+	IgnoreAdd(player, who ref.Ref)
+	IgnoreDel(player, who ref.Ref)
+
+	// Controls is upstream's controls(): whether who has ownership-level
+	// authority over target — a wizard, or target's own owner.
+	Controls(who, target ref.Ref) bool
+
+	// CompiledSize reports a program's cached instruction count without
+	// compiling it — upstream's PROGRAM_SIZ, and the same "from the cache,
+	// never by compiling to find out" rule examine's own doc comment
+	// documents. 0 means uncompiled or never run.
+	CompiledSize(prog ref.Ref) int
+	// Compile (re)compiles a program and replaces its cache entry —
+	// COMPILE — reporting its new instruction count.
+	Compile(prog ref.Ref) (int, error)
+	// Uncompile drops a program's cache entry — UNCOMPILE.
+	Uncompile(prog ref.Ref)
+	// ProgramLines splits a program's saved source into lines, upstream's
+	// own struct line chain — PROGRAM_GETLINES.
+	ProgramLines(prog ref.Ref) []string
+
+	// Stats is upstream's the counting loop shared by STATS and
+	// STATS_ARRAY: how many objects owner owns, by type — total, rooms,
+	// exits, things, players, programs, garbage, in that order (upstream's
+	// own types[] array order, not the text its two doc comments each
+	// describe, which disagree with the code and with each other).
+	// owner == ref.Nothing counts every object.
+	Stats(owner ref.Ref) [7]int
 
 	// MCPMinLevel is the mucker level the mcp_muf_mlev parameter names.
 	MCPMinLevel() int
@@ -306,6 +392,25 @@ type Host interface {
 	WatchPID(callerPID, targetPID int) bool
 }
 
+// TuneEntry is one row of SYSPARM_ARRAY's result, upstream's own
+// tune_parms_array dictionary.
+type TuneEntry struct {
+	Group, Name, Label, Type  string
+	ReadMLev, WriteMLev       int
+	Nullable, Active, Default bool
+
+	// Only the field matching Type ("string", "integer", "dbref" or
+	// "boolean") is meaningful — the same one-of-several-fields shape
+	// tune.Value itself uses, not reused directly so this package need not
+	// import internal/tune.
+	ValueStr  string
+	ValueNum  int64
+	ValueRef  ref.Ref
+	ValueBool bool
+	// ObjType is set only when Type is "dbref", upstream's own str_objecttype.
+	ObjType string
+}
+
 // PIDInfo is the subset of get_pidinfo's dictionary that depends on which
 // process pid names, rather than on the calling frame — GETPIDINFO fills in
 // the rest (PID, MLEVEL, CPU, FILTERS, TYPE) itself, the same fields upstream
@@ -434,6 +539,12 @@ type Frame struct {
 	// already names no live process, or later by whoever runs that process
 	// to completion. EVENT_WAITFOR consumes from here.
 	PendingEvents []MufEvent
+
+	// WantsBlanks is READ_WANTS_BLANKS/READ_WANTS_NO_BLANKS's own flag:
+	// whether an empty line typed while this frame is blocked on READ
+	// should resume it. Upstream defaults this false, so a blank line is
+	// swallowed rather than delivered until a program asks otherwise.
+	WantsBlanks bool
 
 	host Host
 }

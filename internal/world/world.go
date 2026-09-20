@@ -259,6 +259,16 @@ func (w *World) SetTune(name, value string) error {
 	return nil
 }
 
+// ResetTune returns a parameter to its default and marks the table for
+// persistence — SETSYSPARM's own "%name" reset convention.
+func (w *World) ResetTune(name string) error {
+	if err := w.Tune.Reset(name); err != nil {
+		return err
+	}
+	w.tuneDirty = true
+	return nil
+}
+
 // chainHead returns a pointer to the list head an object of this type belongs
 // on: exits thread onto the Exits list, everything else onto Contents.
 func chainHead(container *Object, member *Object) *ref.Ref {

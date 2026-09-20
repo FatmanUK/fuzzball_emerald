@@ -327,6 +327,14 @@ func (s *Server) readInput(w *world.World, descr int, line string) bool {
 	if p == nil {
 		return false
 	}
+	// A blank line does not resume a READ that has not asked for one —
+	// READ_WANTS_BLANKS/READ_WANTS_NO_BLANKS, upstream's own default being
+	// "no" — but it is still swallowed here rather than reaching the
+	// command parser, matching upstream: while blocked on READ, every line
+	// goes to the reader, delivered or not.
+	if line == "" && !p.frame.WantsBlanks {
+		return true
+	}
 	v := muf.Str(line)
 	s.resume(w, p, &v)
 	return true

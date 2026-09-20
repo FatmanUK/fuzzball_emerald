@@ -93,6 +93,16 @@ func (h *fakeHost) DescrSize(int) (int, int) { return 80, 24 }
 func (h *fakeHost) ParseProp(ref.Ref, string, string, bool) (string, error) {
 	return "", nil
 }
+func (h *fakeHost) ParseMPI(ref.Ref, string, string, bool) (string, error) {
+	return "", nil
+}
+func (h *fakeHost) BlessProp(ref.Ref, string, bool)    {}
+func (h *fakeHost) IsPropBlessed(ref.Ref, string) bool { return false }
+func (h *fakeHost) Controls(ref.Ref, ref.Ref) bool     { return false }
+func (h *fakeHost) CompiledSize(ref.Ref) int           { return 0 }
+func (h *fakeHost) Compile(ref.Ref) (int, error)       { return 0, nil }
+func (h *fakeHost) Uncompile(ref.Ref)                  {}
+func (h *fakeHost) ProgramLines(ref.Ref) []string      { return nil }
 
 // The MCP methods are stubs: this host has no connections, so a program that
 // reaches for one gets the same answer as a player with no MCP-capable client.
@@ -161,6 +171,19 @@ func (h *fakeHost) NextDescr(int) int                            { return 0 }
 func (h *fakeHost) FirstDescr(ref.Ref) int                       { return 0 }
 func (h *fakeHost) LastDescr(ref.Ref) int                        { return 0 }
 func (h *fakeHost) SetUser(int, ref.Ref) bool                    { return false }
+func (h *fakeHost) TuneGet(string) (string, bool)                { return "", false }
+func (h *fakeHost) TuneReadMLevel(string) (int, bool)            { return 0, false }
+func (h *fakeHost) TuneWriteMLevel(string) (int, bool)           { return 0, false }
+func (h *fakeHost) TuneSet(string, string) (bool, error)         { return false, nil }
+func (h *fakeHost) TuneList(string, int) []muf.TuneEntry         { return nil }
+func (h *fakeHost) TuneBool(string) bool                         { return false }
+func (h *fakeHost) TuneInt(string) int64                         { return 0 }
+func (h *fakeHost) NameOK(string, ref.ObjType) bool              { return true }
+func (h *fakeHost) UserLog(ref.Ref, ref.Ref, string)             {}
+func (h *fakeHost) IsIgnoring(ref.Ref, ref.Ref) bool             { return false }
+func (h *fakeHost) IgnoreAdd(ref.Ref, ref.Ref)                   {}
+func (h *fakeHost) IgnoreDel(ref.Ref, ref.Ref)                   {}
+func (h *fakeHost) Stats(ref.Ref) [7]int                         { return [7]int{} }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

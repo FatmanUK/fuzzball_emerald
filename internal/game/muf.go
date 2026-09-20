@@ -356,6 +356,43 @@ func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string
 	return mpi.Eval(env, v.StringValue()), nil
 }
 
+// ParseMPI implements muf.Host for PARSEMPI/PARSEMPIBLESSED: evaluates
+// source directly as MPI, rather than reading it from a property first.
+func (h *mufHost) ParseMPI(who ref.Ref, source, arg string, blessed bool) (string, error) {
+	if source == "" {
+		return "", nil
+	}
+	env := &mpi.Env{
+		Who:     mpi.Ref(who),
+		What:    mpi.Ref(who),
+		Perms:   mpi.Ref(who),
+		Blessed: blessed,
+		Host:    &mpiHost{s: h.s, w: h.w},
+	}
+	if arg != "" {
+		if err := env.SetVar("arg", arg); err != nil {
+			return "", err
+		}
+	}
+	return mpi.Eval(env, source), nil
+}
+
+// BlessProp and IsPropBlessed implement muf.Host for BLESSPROP/UNBLESSPROP
+// and BLESSED?.
+func (h *mufHost) BlessProp(obj ref.Ref, path string, blessed bool) {
+	v, ok := h.GetProp(obj, path)
+	if !ok {
+		return
+	}
+	v.Blessed = blessed
+	h.SetProp(obj, path, v)
+}
+
+func (h *mufHost) IsPropBlessed(obj ref.Ref, path string) bool {
+	v, ok := h.GetProp(obj, path)
+	return ok && v.Blessed
+}
+
 func (h *mufHost) Now() time.Time { return h.w.Now() }
 
 func (h *mufHost) Uptime() time.Duration { return h.w.Now().Sub(h.s.started) }

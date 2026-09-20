@@ -669,6 +669,41 @@ public foo
   0 try "x" descrflush catch ts endcatch
 ;`,
 	},
+	{
+		// Phase 4: a sample of the more tractable p_strings.c/p_misc.c/
+		// p_array.c/p_props.c/p_db.c primitives, run at the harness's own
+		// mlevel 3 — the mlevel-4 ones (SETSYSPARM, BLESSPROP/UNBLESSPROP,
+		// PARSEMPIBLESSED, COMPILE, UNCOMPILE) are covered by their own
+		// dedicated wizard-mlevel fixture instead, the same way FORCE's own
+		// family needed one.
+		Name: "phase4",
+		Source: tellPrelude + `: main
+  "#5" stod intostr ts
+  "nonsense" stod intostr ts
+  "'s test" pose-separator? t
+  "xtest" pose-separator? t
+  "hello" "key" strencrypt "key" strdecrypt ts
+  "hi" "bold,red" textattr strlen 0 > t
+  { { 3 "c" }list { 1 "a" }list { 2 "b" }list }list 0 0 array_sort_indexed
+  dup 0 [] 0 [] t
+  dup 1 [] 0 [] t
+  2 [] 0 [] t
+  { 1 2 3 }list { 9 8 }list 1 array_insertrange array_count t
+  me @ "_test/a" 1 setprop
+  me @ "_test" { "a" 1 }dict array_put_propvals
+  me @ "_test/a" getpropval t
+  me @ array_get_ignorelist array_count t
+  { "a" 1 me @ }list array_interpret ts
+  me @ "{name}" "" 0 parsempi ts
+  me @ "_test/a" blessed? t
+  "good" prop-name-ok? t
+  "bad:name" prop-name-ok? t
+  { me @ }list "_test/a" "1" array_filter_prop array_count t
+  prog compiled? 0 >= t
+  prog 1 1 program_getlines array_count 0 >= t
+  0 try #5 stats catch ts endcatch
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this
