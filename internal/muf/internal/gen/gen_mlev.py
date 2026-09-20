@@ -57,7 +57,20 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
 # denied." — also not universal: GETPIDS (src/p_db.c) aborts with
 # "Permission denied.  Requires Mucker Level 3.", found the same way, when
 # it was ported.
-CUSTOM_ABORT_MESSAGE = {"FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS", "WATCHPID"}
+CUSTOM_ABORT_MESSAGE = {
+    "FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS", "WATCHPID",
+    # src/p_connects.c: every mlev floor in this module has its own wording,
+    # never the dispatcher's generic "Permission denied." or "Permission
+    # denied.  Requires Wizbit." — three distinct level-3 variants alone
+    # ("Mucker level 3 primitive.", "Requires Mucker Level 3.", "Requires
+    # Mucker Level 3 or better.") plus two level-4 variants ("Primitive is a
+    # wizbit only command.", "Requires Wizbit."). See prim_connects.go.
+    "ONLINE", "ONLINE_ARRAY", "DESCRDBREF", "DESCRSECURE?",
+    "DESCRIDLE", "DESCRLEASTIDLE", "DESCRMOSTIDLE", "DESCRTIME",
+    "DESCRHOST", "DESCRUSER", "DESCRBOOT", "DESCRNOTIFY", "NEXTDESCR",
+    "DESCRIPTORS", "DESCR_ARRAY", "DESCR_SETUSER", "DESCRFLUSH",
+    "FIRSTDESCR", "LASTDESCR", "DESCRBUFSIZE", "SETWIDTH", "SETHEIGHT",
+}
 
 
 

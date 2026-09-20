@@ -88,6 +88,63 @@ type Host interface {
 	DescrPlayer(descr int) ref.Ref
 	// DescrSize is a connection's reported terminal width and height.
 	DescrSize(descr int) (width, height int)
+	// SetDescrSize sets what DescrSize reports, for SETWIDTH and SETHEIGHT.
+	// ok is false when descr names no live connection.
+	SetDescrSize(descr, width, height int) (ok bool)
+
+	// DescrIdle and DescrOnTime are upstream's pdescridle/pdescrontime: how
+	// long a connection has been quiet, and how long it has been open. Both
+	// report -1 for a descr naming no connection at all — pre-login
+	// included, unlike DescrPlayer/DescrSize's own "connected" requirement.
+	DescrIdle(descr int) int
+	DescrOnTime(descr int) int
+	// DescrHost and DescrUser are upstream's pdescrhost/pdescruser. ok is
+	// false when descr names no connection. DescrUser's user is always ""
+	// here — see the primitive's own doc comment for why.
+	DescrHost(descr int) (host string, ok bool)
+	DescrUser(descr int) (user string, ok bool)
+	// DescrBoot disconnects descr, upstream's pdescrboot, and reports
+	// whether it named a live connection at all.
+	DescrBoot(descr int) bool
+	// DescrNotify sends msg straight to descr, bypassing any object or
+	// listen-prop machinery — upstream's pdescrnotify — and reports whether
+	// descr named a live connection.
+	DescrNotify(descr int, msg string) bool
+	// DescrFlush is upstream's pdescrflush: -1 flushes every connection's
+	// queued output and reports how many there were; any other descr
+	// flushes just that one and reports 1 found or 0 not found. Emerald's
+	// output channel has no separate flush step of its own, so this is a
+	// counting no-op beyond validating descr exists.
+	DescrFlush(descr int) int
+	// DescrBufSize is upstream's pdescrbufsize: how much room is left in
+	// descr's output buffer, or -1 if descr names no connection. Emerald's
+	// output channel has no byte-budget of its own — see the primitive's own
+	// doc comment for what this reports instead.
+	DescrBufSize(descr int) int
+	// DescrLeastIdle and DescrMostIdle are upstream's
+	// least_idle_player_descr/most_idle_player_descr: among player's own
+	// connections, the one that has seen input most recently, and the one
+	// that has seen it least recently. Both report -1 when player has none.
+	DescrLeastIdle(player ref.Ref) int
+	DescrMostIdle(player ref.Ref) int
+	// NextDescr is upstream's pnextdescr: the next live, logged-in
+	// connection after descr, in connection order, or 0 if there is none —
+	// including when descr itself names no connection at all, live or not,
+	// which upstream's own null-frame short-circuit means even a genuinely
+	// later connection is never found from an invalid starting point.
+	NextDescr(descr int) int
+	// FirstDescr and LastDescr are upstream's pfirstdescr/plastdescr with
+	// player ref.Nothing, or their own player-scoped branches otherwise —
+	// see the primitives' own doc comments for the asymmetry between the
+	// two forms this file found in the C.
+	FirstDescr(player ref.Ref) int
+	LastDescr(player ref.Ref) int
+	// SetUser is upstream's pset_user, upstream's caller having already
+	// verified the password — DESCR_SETUSER does that itself, the same
+	// split as its own C. who == ref.Nothing disconnects descr from
+	// whoever it was bound to without binding it to anyone new. Reports
+	// whether descr named a live connection.
+	SetUser(descr int, who ref.Ref) bool
 
 	// ParseProp evaluates the MPI in a property and returns the result. It
 	// is a host method because MUF and MPI are separate languages that the

@@ -146,6 +146,21 @@ func (h *fakeHost) ForcedByArray() []ref.Ref                     { return nil }
 func (h *fakeHost) GetPIDs(ref.Ref, int) []int                   { return nil }
 func (h *fakeHost) PIDInfo(int) (muf.PIDInfo, bool)              { return muf.PIDInfo{}, false }
 func (h *fakeHost) WatchPID(int, int) bool                       { return false }
+func (h *fakeHost) SetDescrSize(int, int, int) bool              { return false }
+func (h *fakeHost) DescrIdle(int) int                            { return -1 }
+func (h *fakeHost) DescrOnTime(int) int                          { return -1 }
+func (h *fakeHost) DescrHost(int) (string, bool)                 { return "", false }
+func (h *fakeHost) DescrUser(int) (string, bool)                 { return "", false }
+func (h *fakeHost) DescrBoot(int) bool                           { return false }
+func (h *fakeHost) DescrNotify(int, string) bool                 { return false }
+func (h *fakeHost) DescrFlush(int) int                           { return 0 }
+func (h *fakeHost) DescrBufSize(int) int                         { return -1 }
+func (h *fakeHost) DescrLeastIdle(ref.Ref) int                   { return -1 }
+func (h *fakeHost) DescrMostIdle(ref.Ref) int                    { return -1 }
+func (h *fakeHost) NextDescr(int) int                            { return 0 }
+func (h *fakeHost) FirstDescr(ref.Ref) int                       { return 0 }
+func (h *fakeHost) LastDescr(ref.Ref) int                        { return 0 }
+func (h *fakeHost) SetUser(int, ref.Ref) bool                    { return false }
 
 // run compiles and executes a program, returning the frame and the host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {

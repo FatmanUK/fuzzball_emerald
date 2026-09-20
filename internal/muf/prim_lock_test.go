@@ -73,6 +73,52 @@ type lockTestHost struct {
 
 	watchPIDCalls  []watchPIDCall
 	watchPIDResult bool
+
+	checkPasswordCalls  []checkPasswordCall
+	checkPasswordResult bool
+
+	setDescrSizeCalls  []setDescrSizeCall
+	setDescrSizeResult bool
+
+	descrIdleCalls    []int
+	descrIdleResult   int
+	descrOnTimeCalls  []int
+	descrOnTimeResult int
+
+	descrHostCalls  []int
+	descrHostResult string
+	descrHostOK     bool
+	descrUserCalls  []int
+	descrUserResult string
+	descrUserOK     bool
+
+	descrBootCalls  []int
+	descrBootResult bool
+
+	descrNotifyCalls  []descrNotifyCall
+	descrNotifyResult bool
+
+	descrFlushCalls  []int
+	descrFlushResult int
+
+	descrBufSizeCalls  []int
+	descrBufSizeResult int
+
+	descrLeastIdleCalls  []ref.Ref
+	descrLeastIdleResult int
+	descrMostIdleCalls   []ref.Ref
+	descrMostIdleResult  int
+
+	nextDescrCalls  []int
+	nextDescrResult int
+
+	firstDescrCalls  []ref.Ref
+	firstDescrResult int
+	lastDescrCalls   []ref.Ref
+	lastDescrResult  int
+
+	setUserCalls  []setUserCall
+	setUserResult bool
 }
 
 type getPIDsCall struct {
@@ -230,6 +276,103 @@ type watchPIDCall struct {
 func (h *lockTestHost) WatchPID(callerPID, targetPID int) bool {
 	h.watchPIDCalls = append(h.watchPIDCalls, watchPIDCall{callerPID, targetPID})
 	return h.watchPIDResult
+}
+
+type checkPasswordCall struct {
+	player ref.Ref
+	pass   string
+}
+
+func (h *lockTestHost) CheckPassword(player ref.Ref, pass string) bool {
+	h.checkPasswordCalls = append(h.checkPasswordCalls, checkPasswordCall{player, pass})
+	return h.checkPasswordResult
+}
+
+type setDescrSizeCall struct{ descr, width, height int }
+
+func (h *lockTestHost) SetDescrSize(descr, width, height int) bool {
+	h.setDescrSizeCalls = append(h.setDescrSizeCalls, setDescrSizeCall{descr, width, height})
+	return h.setDescrSizeResult
+}
+
+func (h *lockTestHost) DescrIdle(descr int) int {
+	h.descrIdleCalls = append(h.descrIdleCalls, descr)
+	return h.descrIdleResult
+}
+
+func (h *lockTestHost) DescrOnTime(descr int) int {
+	h.descrOnTimeCalls = append(h.descrOnTimeCalls, descr)
+	return h.descrOnTimeResult
+}
+
+func (h *lockTestHost) DescrHost(descr int) (string, bool) {
+	h.descrHostCalls = append(h.descrHostCalls, descr)
+	return h.descrHostResult, h.descrHostOK
+}
+
+func (h *lockTestHost) DescrUser(descr int) (string, bool) {
+	h.descrUserCalls = append(h.descrUserCalls, descr)
+	return h.descrUserResult, h.descrUserOK
+}
+
+func (h *lockTestHost) DescrBoot(descr int) bool {
+	h.descrBootCalls = append(h.descrBootCalls, descr)
+	return h.descrBootResult
+}
+
+type descrNotifyCall struct {
+	descr int
+	msg   string
+}
+
+func (h *lockTestHost) DescrNotify(descr int, msg string) bool {
+	h.descrNotifyCalls = append(h.descrNotifyCalls, descrNotifyCall{descr, msg})
+	return h.descrNotifyResult
+}
+
+func (h *lockTestHost) DescrFlush(descr int) int {
+	h.descrFlushCalls = append(h.descrFlushCalls, descr)
+	return h.descrFlushResult
+}
+
+func (h *lockTestHost) DescrBufSize(descr int) int {
+	h.descrBufSizeCalls = append(h.descrBufSizeCalls, descr)
+	return h.descrBufSizeResult
+}
+
+func (h *lockTestHost) DescrLeastIdle(player ref.Ref) int {
+	h.descrLeastIdleCalls = append(h.descrLeastIdleCalls, player)
+	return h.descrLeastIdleResult
+}
+
+func (h *lockTestHost) DescrMostIdle(player ref.Ref) int {
+	h.descrMostIdleCalls = append(h.descrMostIdleCalls, player)
+	return h.descrMostIdleResult
+}
+
+func (h *lockTestHost) NextDescr(descr int) int {
+	h.nextDescrCalls = append(h.nextDescrCalls, descr)
+	return h.nextDescrResult
+}
+
+func (h *lockTestHost) FirstDescr(player ref.Ref) int {
+	h.firstDescrCalls = append(h.firstDescrCalls, player)
+	return h.firstDescrResult
+}
+
+func (h *lockTestHost) LastDescr(player ref.Ref) int {
+	h.lastDescrCalls = append(h.lastDescrCalls, player)
+	return h.lastDescrResult
+}
+
+type setUserCall struct {
+	descr int
+	who   ref.Ref
+}
+
+func (h *lockTestHost) SetUser(descr int, who ref.Ref) bool {
+	h.setUserCalls = append(h.setUserCalls, setUserCall{descr, who})
+	return h.setUserResult
 }
 
 const testProgram ref.Ref = 99

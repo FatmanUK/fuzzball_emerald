@@ -619,6 +619,56 @@ public foo
   intostr ts
 ;`,
 	},
+	{
+		// Phase 3: descriptor/connection introspection (src/p_connects.c).
+		// Only one connection is live for the whole run, so every check is
+		// either shape-only (counts, round-trips through SETWIDTH/
+		// SETHEIGHT) or an argument-validation abort, whose wording is
+		// exactly what golden exists to catch — DESCRIDLE, DESCRTIME,
+		// DESCRBUFSIZE, DESCRHOST and DESCRUSER's own successful-path
+		// values are environment-dependent (wall-clock elapsed time, an
+		// OS-assigned buffer size, a container's own view of the peer
+		// address) and deliberately not compared here.
+		Name: "connects",
+		Source: tellPrelude + `: main
+  descr me @ descrdbref = t
+  online array_count t
+  online_array array_count t
+  descrcount t
+  me @ descriptors array_count t
+  me @ descr_array array_count t
+  descr nextdescr t
+  #-1 firstdescr descr = t
+  #-1 lastdescr descr = t
+  me @ firstdescr descr = t
+  me @ lastdescr descr = t
+  me @ descrleastidle descr = t
+  me @ descrmostidle descr = t
+  descr descrflush
+  descr 132 setwidth
+  descr width t
+  descr 43 setheight
+  descr height t
+  0 try "x" descridle catch ts endcatch
+  0 try 999999 descridle catch ts endcatch
+  0 try "x" descrtime catch ts endcatch
+  0 try 999999 descrtime catch ts endcatch
+  0 try "x" descrbufsize catch ts endcatch
+  0 try 999999 descrbufsize catch ts endcatch
+  0 try "x" descrsecure? catch ts endcatch
+  0 try "x" descrdbref catch ts endcatch
+  0 try descr "x" descrnotify catch ts endcatch
+  0 try 999999 "hi" descrnotify catch ts endcatch
+  0 try "x" nextdescr catch ts endcatch
+  0 try 5 firstdescr catch ts endcatch
+  0 try 5 lastdescr catch ts endcatch
+  0 try "x" 5 setwidth catch ts endcatch
+  0 try descr 70000 setwidth catch ts endcatch
+  0 try "x" 5 setheight catch ts endcatch
+  0 try descr 70000 setheight catch ts endcatch
+  0 try "x" descrflush catch ts endcatch
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

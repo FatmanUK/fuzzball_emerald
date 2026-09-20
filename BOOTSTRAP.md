@@ -183,7 +183,75 @@ matching what upstream's own comment says it meant to do.
 
 Phase 2 of the remaining-work plan is now complete.
 
-1. **Port more MUF primitives.** 88 of 417 are still unimplemented (see
+Phase 3 (`src/p_connects.c`'s 16 descriptor/connection introspection
+primitives — `DESCRBOOT`, `DESCRBUFSIZE`, `DESCRFLUSH`, `DESCRHOST`,
+`DESCRIDLE`, `DESCRLEASTIDLE`, `DESCRMOSTIDLE`, `DESCRNOTIFY`, `DESCRTIME`,
+`DESCRUSER`, `DESCR_SETUSER`, `FIRSTDESCR`, `LASTDESCR`, `NEXTDESCR`,
+`SETHEIGHT`, `SETWIDTH`) is now also complete, in `internal/muf/prim_connects.go`
+and a new `internal/game/conn_host.go`. It turned out less mechanical than
+the plan expected: **every mlev floor in this C file has its own wording**,
+never the dispatcher's generic "Permission denied."/"Permission denied.
+Requires Wizbit." — three distinct level-3 variants alone ("Mucker level 3
+primitive.", "Requires Mucker Level 3.", "Requires Mucker Level 3 or
+better.") plus two level-4 variants ("Primitive is a wizbit only command.",
+"Requires Wizbit."). `gen_mlev.py`'s `CUSTOM_ABORT_MESSAGE` grew all 16 new
+primitives plus four already-shipped ones this phase found using the wrong,
+generic wording since an earlier milestone — `ONLINE`, `ONLINE_ARRAY`,
+`DESCRDBREF` and `DESCRSECURE?` — fixed alongside everything new rather than
+left inconsistent in the same file.
+
+Real behavioural findings, not just wording, caught by reading the C before
+porting (per `CLAUDE.md`'s own mandate):
+
+- **`FIRSTDESCR`/`LASTDESCR`'s player-scoped branch is the opposite way
+  around from their own global form.** `#-1 firstdescr`/`#-1 lastdescr`
+  answer the globally oldest/newest connection (upstream's own
+  `pfirstdescr`/`plastdescr`), but `<player> firstdescr` answers that
+  player's *newest* connection and `<player> lastdescr` their *oldest* —
+  `prim_firstdescr` reads `darr[dcount-1]`, `prim_lastdescr` reads
+  `darr[0]`. Checked against the C twice before trusting it, and pinned by
+  `TestFirstLastDescrPlayerScopedAsymmetry`
+  (`internal/game/conn_host_test.go`).
+- **`DESCRFLUSH` is genuinely stack-neutral.** `prim_descrflush` computes a
+  result from `pdescrflush` but never pushes it — consumes its descriptor
+  argument and returns nothing, not even on error. Pinned by
+  `TestDescrFlushIsStackNeutral`.
+- **`DESCRUSER`'s "username" is not an identity.** `pdescruser`/`d->username`
+  is the client's own ephemeral TCP source port, parsed out of the
+  `"host(port)"` string `addrout` builds for logging — a naming accident from
+  when the field really did hold ident-protocol data. Emerald's transports
+  discard the remote port on accept, so a live connection always answers
+  `""` here; see `Host.DescrUser`'s own doc comment.
+- **`DESCRBUFSIZE` has no real equivalent to report.** Upstream subtracts a
+  connection's queued OS socket-buffer bytes from `tp_max_output`; Emerald's
+  output channel (`internal/session.Descriptor`) has no byte-budget of its
+  own, only a message-count depth, so this reports the tune parameter's own
+  ceiling untouched rather than fabricating a number.
+- **`SETWIDTH`'s invalid-descriptor message has no trailing period** —
+  `"Invalid descriptor number (2)"` — unlike almost every other one in this
+  file, which do end `. (1)`. Preserved exactly; pinned by
+  `TestSetHeightReportsInvalidDescriptorWithoutAPeriod`.
+
+`DESCR_SETUSER` (`Host.SetUser`, `internal/game/conn_host.go`) needed a new
+`session.Hub.Unbind`, since upstream's own `pset_user` leaves `d->player`/
+`d->connected` in an ambiguous half-state when told to set a descriptor to
+`NOTHING` (the `if (who != NOTHING)` branch that would update them is simply
+skipped) — read as unfinished state management rather than a deliberate
+no-op, so Emerald instead returns the descriptor to a clean pre-login state
+in that case. `DESCRBOOT` (`Host.DescrBoot`) mirrors `Server.Disconnect`'s
+own body directly rather than calling it, since `Disconnect` re-enters the
+world goroutine through `Engine.Go` for a transport reporting an
+already-closed connection — not for ending one from inside a handler that is
+already running on that goroutine.
+
+Golden-verified: a new `"connects"` case in `golden_test.go` (single
+connection — shape and argument-validation wording only, since
+`DESCRIDLE`/`DESCRTIME`/`DESCRBUFSIZE`'s own successful-path values are
+wall-clock- or OS-buffer-dependent) plus a new dedicated `connects_test.go`
+for `DESCRHOST`/`DESCRUSER`, which need mlevel 4 the way `FORCE`'s own
+dedicated fixture did.
+
+1. **Port more MUF primitives.** 72 of 417 are still unimplemented (see
    `go test -run TestPrimitiveCoverage -v ./internal/muf/` for the exact
    count and which ones). Each must be checked against the real C server via
    the golden harness (`internal/golden`), not just read from source — this
@@ -191,10 +259,13 @@ Phase 2 of the remaining-work plan is now complete.
    lock work (`PARSELOCK` on `""`, and `_set_lock`'s own match-failure
    message bypassing its `silent` flag), a generator false-positive gating
    `KILL` at an unconditional floor it does not have, `FORCE`/`FORCEDBY`/
-   `FORCEDBY_ARRAY`'s own distinct abort wording, and `GETPIDS`'s `#-1`
-   wildcard wrongly including the caller's own pid — see Phase 2 of the plan
-   above for all four, now finished. Phase 3 (`src/p_connects.c`'s
-   descriptor/connection introspection primitives) is next.
+   `FORCEDBY_ARRAY`'s own distinct abort wording, `GETPIDS`'s `#-1`
+   wildcard wrongly including the caller's own pid, and this phase's
+   `FIRSTDESCR`/`LASTDESCR` asymmetry — see Phases 2 and 3 of the plan
+   above, both now finished. Phase 4 (`p_db.c`/`p_array.c`/`p_props.c`/
+   `p_strings.c`/`p_misc.c` remainders) is next; the plan's own note on
+   verifying `CALL`/`CATCH`/`EXIT`/`JMP`/`READ`/`SLEEP` as a coverage-test
+   false positive, not a real gap, is worth doing first.
 2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
@@ -265,7 +336,7 @@ internal/match/         — name resolution: exits, aliases, environment walk,
                             $registered names, priority
 internal/session/       — Descriptor, Hub, telnet codec, MCP frame attachment
 internal/mcp/           — MCP 2.1 protocol: framing, negotiation, GUI dialogs
-internal/muf/           — instruction set, VM/interpreter, ~324 primitives
+internal/muf/           — instruction set, VM/interpreter, ~340 primitives
 internal/muf/compiler/  — the MUF compiler (lexer + compile.c port)
 internal/mpi/           — MPI parser + ~51 mfn_* functions (generated table)
 internal/boolexp/       — lock expressions: parse_boolexp/eval_boolexp/
@@ -502,7 +573,7 @@ enforcement — see `git log` for the exact commits):
     `"queue"` case (COMMAND vs. stack argument)
   - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
     self-forcing program)
-- Primitive coverage: **324 of 417** implemented
+- Primitive coverage: **340 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

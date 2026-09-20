@@ -218,6 +218,15 @@ func (h *Hub) Bind(d *Descriptor, player ref.Ref, now time.Time) {
 	h.byPlayer[player] = append(h.byPlayer[player], d)
 }
 
+// Unbind detaches a descriptor from whoever it was bound to, leaving it open
+// but back in the pre-login state — DESCR_SETUSER's own "set to no one"
+// case, unlike Remove, which closes the connection outright.
+func (h *Hub) Unbind(d *Descriptor) {
+	h.unindex(d)
+	d.Player = ref.Nothing
+	d.Connected = false
+}
+
 func (h *Hub) unindex(d *Descriptor) {
 	if d.Player == ref.Nothing {
 		return
