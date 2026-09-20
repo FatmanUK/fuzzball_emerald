@@ -42,6 +42,4 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Tag and push image to GHCR
-      run: |
-        podman tag localhost/fbemerald:dev ghcr.io/fatmanuk/fuzzball_emerald:latest
-        podman push ghcr.io/fatmanuk/fuzzball_emerald:latest
+      run: make pod-push
