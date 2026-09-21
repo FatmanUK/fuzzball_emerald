@@ -245,6 +245,8 @@ pod-push: pod-build ## Push the container image
 	podman push $(PUBLISH_IMAGE):$(VERSION)
 	podman tag $(IMAGE):$(TAG) $(PUBLISH_IMAGE):$(PUBLISH_DATE)
 	podman push $(PUBLISH_IMAGE):$(PUBLISH_DATE)
+	podman tag $(IMAGE):$(TAG) $(PUBLISH_IMAGE):$(TAG)
+	podman push $(PUBLISH_IMAGE):$(TAG)
 
 .PHONY: pod-run
 pod-run: pod-build certs db-up ## Run the server in a container
