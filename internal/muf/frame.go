@@ -191,6 +191,7 @@ type Host interface {
 	// compile-time constant" contract tune.Set's own typed accessors use.
 	TuneBool(name string) bool
 	TuneInt(name string) int64
+	TuneSpan(name string) time.Duration
 
 	// NameOK is upstream's ok_object_name: whether name is acceptable for a
 	// newly created object of type t. EXT-NAME-OK?'s own primitive.
@@ -228,6 +229,49 @@ type Host interface {
 	// ProgramLines splits a program's saved source into lines, upstream's
 	// own struct line chain — PROGRAM_GETLINES.
 	ProgramLines(prog ref.Ref) []string
+	// SetProgramLines replaces a program's saved source and drops its
+	// compiled form — PROGRAM_SETLINES. Every check the primitive makes is
+	// its own; this is only the write.
+	SetProgramLines(prog ref.Ref, lines []string)
+
+	// NewPlayer is upstream's create_player — NEWPLAYER. CopyPlayer is
+	// COPYPLAYER's own create-then-copy, and ToadPlayer TOADPLAYER's
+	// deletion, with every check the primitive makes left to the primitive.
+	NewPlayer(name, password string) (ref.Ref, error)
+	CopyPlayer(src ref.Ref, name, password string) (ref.Ref, error)
+	ToadPlayer(victim, recipient ref.Ref)
+	// TuneRefersTo reports whether some @tune parameter points at obj,
+	// which is TOADPLAYER's own reason to refuse: deleting a player a
+	// parameter names would leave it pointing at the wrong type of object.
+	TuneRefersTo(obj ref.Ref) bool
+
+	// Interp runs prog to completion as its own nested frame and returns
+	// what it left on its stack — INTERP. ok is false when the program
+	// aborted, blocked or finished with an empty stack, all three of which
+	// the primitive turns into an empty string rather than a failure.
+	Interp(descr, level int, prog, trig ref.Ref, arg string) (Value, bool)
+
+	// CopyObject is upstream's clone_thing — COPYOBJ. copyHidden carries
+	// the source's '@'-prefixed properties over, which only a wizard's copy
+	// does.
+	CopyObject(src ref.Ref, copyHidden bool) (ref.Ref, error)
+	// DumpNow asks the persister to write what is pending — DUMP.
+	DumpNow()
+
+	// TimerCount, TimerStart and TimerStop are TIMER_START/TIMER_STOP's own
+	// bookkeeping against one process's pending timers. A timer that comes
+	// due delivers a TIMER.<id> event to that process's frame; starting one
+	// that is already running replaces it. A pid naming no live process is
+	// silently ignored, which is what a frame that never became a process
+	// (pid 0) does.
+	TimerCount(pid int) int
+	TimerStart(pid int, id string, seconds int64)
+	TimerStop(pid int, id string)
+	// SendEvent queues a named event on another live process, resuming it
+	// if it is already waiting for one — EVENT_SEND. It reports whether pid
+	// named a live process, which upstream treats as nothing to do rather
+	// than an error.
+	SendEvent(pid int, name string, data Value) bool
 
 	// Stats is upstream's the counting loop shared by STATS and
 	// STATS_ARRAY: how many objects owner owns, by type — total, rooms,
@@ -539,6 +583,16 @@ type Frame struct {
 	// already names no live process, or later by whoever runs that process
 	// to completion. EVENT_WAITFOR consumes from here.
 	PendingEvents []MufEvent
+
+	// alreadyCreated is upstream's fr->already_created: how many objects
+	// this run has made. Below mucker level 3 it caps a program at one, so
+	// a low-level program cannot fill the database in a loop.
+	alreadyCreated int
+
+	// rndbuf is upstream's fr->rndbuf: the 16-byte state SRAND draws from,
+	// seeded on first use and readable and replaceable through
+	// GETSEED/SETSEED. RANDOM ignores it — only SRAND is the repeatable one.
+	rndbuf []byte
 
 	// WantsBlanks is READ_WANTS_BLANKS/READ_WANTS_NO_BLANKS's own flag:
 	// whether an empty line typed while this frame is blocked on READ

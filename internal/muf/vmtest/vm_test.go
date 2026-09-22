@@ -103,6 +103,31 @@ func (h *fakeHost) CompiledSize(ref.Ref) int           { return 0 }
 func (h *fakeHost) Compile(ref.Ref) (int, error)       { return 0, nil }
 func (h *fakeHost) Uncompile(ref.Ref)                  {}
 func (h *fakeHost) ProgramLines(ref.Ref) []string      { return nil }
+func (h *fakeHost) SetProgramLines(ref.Ref, []string)  {}
+func (h *fakeHost) ToadPlayer(ref.Ref, ref.Ref)        {}
+func (h *fakeHost) TuneRefersTo(ref.Ref) bool          { return false }
+func (h *fakeHost) DumpNow()                           {}
+func (h *fakeHost) TimerCount(int) int                 { return 0 }
+func (h *fakeHost) TimerStart(int, string, int64)      {}
+func (h *fakeHost) TimerStop(int, string)              {}
+
+func (h *fakeHost) SendEvent(int, string, muf.Value) bool { return false }
+
+func (h *fakeHost) NewPlayer(string, string) (ref.Ref, error) {
+	return ref.Nothing, nil
+}
+
+func (h *fakeHost) CopyPlayer(ref.Ref, string, string) (ref.Ref, error) {
+	return ref.Nothing, nil
+}
+
+func (h *fakeHost) CopyObject(ref.Ref, bool) (ref.Ref, error) {
+	return ref.Nothing, nil
+}
+
+func (h *fakeHost) Interp(int, int, ref.Ref, ref.Ref, string) (muf.Value, bool) {
+	return muf.Value{}, false
+}
 
 // The MCP methods are stubs: this host has no connections, so a program that
 // reaches for one gets the same answer as a player with no MCP-capable client.
@@ -178,6 +203,7 @@ func (h *fakeHost) TuneSet(string, string) (bool, error)         { return false,
 func (h *fakeHost) TuneList(string, int) []muf.TuneEntry         { return nil }
 func (h *fakeHost) TuneBool(string) bool                         { return false }
 func (h *fakeHost) TuneInt(string) int64                         { return 0 }
+func (h *fakeHost) TuneSpan(string) time.Duration                { return 0 }
 func (h *fakeHost) NameOK(string, ref.ObjType) bool              { return true }
 func (h *fakeHost) UserLog(ref.Ref, ref.Ref, string)             {}
 func (h *fakeHost) IsIgnoring(ref.Ref, ref.Ref) bool             { return false }

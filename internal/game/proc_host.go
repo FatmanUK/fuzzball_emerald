@@ -321,3 +321,69 @@ func (h *mufHost) nextRun(p *process) int64 {
 	}
 	return h.w.Now().Unix()
 }
+
+// timerEventName is the event a fired timer delivers, upstream's
+// "TIMER.%.32s". The id is truncated, so two timers whose names differ only
+// past the 32nd character are the same timer.
+func timerEventName(id string) string {
+	const maxTimerID = 32
+	if len(id) > maxTimerID {
+		id = id[:maxTimerID]
+	}
+	return "TIMER." + id
+}
+
+// TimerCount implements muf.Host for TIMER_START's own limit check.
+func (h *mufHost) TimerCount(pid int) int {
+	p := h.s.procs.get(pid)
+	if p == nil {
+		return 0
+	}
+	return len(p.timers)
+}
+
+// TimerStart implements muf.Host for TIMER_START. Restarting a timer that is
+// already running replaces it rather than adding a second, which is
+// upstream's own dequeue-then-add.
+func (h *mufHost) TimerStart(pid int, id string, seconds int64) {
+	p := h.s.procs.get(pid)
+	if p == nil {
+		return
+	}
+	h.TimerStop(pid, id)
+	p.timers = append(p.timers, mufTimer{
+		name:  id,
+		fires: h.w.Now().Add(time.Duration(seconds) * time.Second),
+	})
+}
+
+// TimerStop implements muf.Host for TIMER_STOP.
+func (h *mufHost) TimerStop(pid int, id string) {
+	p := h.s.procs.get(pid)
+	if p == nil {
+		return
+	}
+	want := timerEventName(id)
+	kept := p.timers[:0]
+	for _, t := range p.timers {
+		if timerEventName(t.name) != want {
+			kept = append(kept, t)
+		}
+	}
+	p.timers = kept
+}
+
+// SendEvent implements muf.Host for EVENT_SEND: queue a USER.<id> event on
+// another live process, resuming it if it is already waiting for one.
+//
+// It reports whether pid named a live process. Upstream silently does
+// nothing when it does not, which EVENT_SEND reproduces — a process that has
+// already finished is not an error to send to.
+func (h *mufHost) SendEvent(pid int, name string, data muf.Value) bool {
+	p := h.s.procs.get(pid)
+	if p == nil {
+		return false
+	}
+	h.s.deliverEvent(h.w, p, name, data)
+	return true
+}

@@ -87,6 +87,13 @@ CUSTOM_ABORT_MESSAGE = {
     # Level 3." — the generic dispatcher's level<4 wording has no such
     # suffix at all.
     "NEXTENTRANCE",
+    # src/p_db.c: FINDNEXT's own "Permission denied.  Requires at least
+    # Mucker Level 2.", plus two further level-3 messages that depend on
+    # which owner was asked for — see prim_findflags.go.
+    "FINDNEXT",
+    # src/p_misc.c: EVENT_SEND's own "Requires Mucker level 3 or better."
+    # — lowercase "level", and no "Permission denied." at all.
+    "EVENT_SEND",
 }
 
 
@@ -117,9 +124,12 @@ def main():
     levels = {}
     for module in MODULES:
         src = show(f"src/{module}.c")
-        # Split into functions: "prim_name(PRIM_PROTOTYPE)\n{ ... }"
+        # Split into functions: "prim_name(PRIM_PROTOTYPE)\n{ ... }".
+        # The return type is normally on its own line, but prim_dump puts it
+        # on the same one, so allow it either way — without the "void"
+        # alternative that one primitive's floor goes unrecorded.
         for m in re.finditer(
-                r'^(prim_\w+)\(PRIM_PROTOTYPE\)\s*\n\{(.*?)^\}',
+                r'^(?:void\s+)?(prim_\w+)\(PRIM_PROTOTYPE\)\s*\n?\s*\{(.*?)^\}',
                 src, re.M | re.S):
             fname, body = m.group(1), m.group(2)
             # Only an *unconditional* floor counts. A check written as

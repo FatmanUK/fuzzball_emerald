@@ -54,6 +54,11 @@ type process struct {
 	// arg string a QUEUE was given.
 	calledData string
 
+	// timers are upstream's muf timer events: TIMER_START schedules one and
+	// TIMER_STOP cancels it. When one fires the process gets a
+	// TIMER.<name> event, the same delivery path WATCHPID's PROC.EXIT uses.
+	timers []mufTimer
+
 	// waiters and waitees are upstream's fr->waiters/fr->waitees: WATCHPID
 	// bookkeeping. waiters lists the pids watching this process, notified
 	// with a PROC.EXIT.<pid> event when it ends; waitees lists the pids this
@@ -173,12 +178,49 @@ func (q *procQueue) forPlayer(player ref.Ref) []*process {
 	return out
 }
 
+// mufTimer is one pending TIMER_START.
+type mufTimer struct {
+	name  string
+	fires time.Time
+}
+
 // Tick runs whatever is due. The engine calls it once per flush interval,
-// which is also how often a sleeping program can wake.
+// which is also how often a sleeping program can wake or a timer fire.
 func (s *Server) Tick(w *world.World) {
 	now := w.Now()
+	s.fireTimers(w, now)
 	for _, p := range s.procs.due(now) {
 		s.resume(w, p, nil)
+	}
+}
+
+// fireTimers delivers every timer that has come due.
+//
+// A timer fires once and is then forgotten, which is upstream's own: a
+// program that wants another calls TIMER_START again. Delivery goes through
+// deliverEvent, so a process already waiting on the timer's name resumes
+// immediately rather than at the next tick.
+func (s *Server) fireTimers(w *world.World, now time.Time) {
+	for _, p := range s.procs.all() {
+		if len(p.timers) == 0 {
+			continue
+		}
+		var pending []mufTimer
+		var kept []mufTimer
+		for _, t := range p.timers {
+			if t.fires.After(now) {
+				kept = append(kept, t)
+				continue
+			}
+			pending = append(pending, t)
+		}
+		p.timers = kept
+		for _, t := range pending {
+			// The event carries when the timer was due, not its name —
+			// upstream pushes event->when as an integer.
+			s.deliverEvent(w, p, timerEventName(t.name),
+				muf.Int(t.fires.Unix()))
+		}
 	}
 }
 

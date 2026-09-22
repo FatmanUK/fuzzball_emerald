@@ -319,6 +319,11 @@ func (f *Frame) needHost() (Host, error) {
 	return f.host, nil
 }
 
+// hostOrNil returns the host without insisting on one, for a primitive that
+// only needs it down some of its paths — FMTSTRING's "%D" wants a name, and
+// every other directive it can be handed does not.
+func (f *Frame) hostOrNil() Host { return f.host }
+
 // refAndHost pops a dbref and returns it with the host.
 func (f *Frame) refAndHost() (ref.Ref, Host, error) {
 	r, err := f.popRef()

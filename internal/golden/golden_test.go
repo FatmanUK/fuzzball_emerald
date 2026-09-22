@@ -704,6 +704,113 @@ public foo
   0 try #5 stats catch ts endcatch
 ;`,
 	},
+	{
+		// Phase 4's remainder: the flag-match expression both
+		// ARRAY_FILTER_FLAGS and FINDNEXT take, the rewritten shared
+		// sprintf behind FMTSTRING and ARRAY_FMTSTRINGS, the seeded
+		// generator GETSEED/SETSEED expose, FMTTIME's arbitrary format and
+		// INTERP's nested run. Each is mlevel 3 or below; COPYOBJ,
+		// NEWPLAYER, COPYPLAYER, TOADPLAYER, PNAME_HISTORY,
+		// PROGRAM_SETLINES and DUMP are all mlevel 4 and covered by unit
+		// tests instead, for the same reason as the case above.
+		Name: "phase4b",
+		Source: tellPrelude + `: main
+  ( the flag language, positive and negated )
+  { me @ }list "P" array_filter_flags array_count t
+  { me @ }list "!P" array_filter_flags array_count t
+  { me @ }list "R" array_filter_flags array_count t
+  { me @ #0 }list "R" array_filter_flags array_count t
+  0 try { 1 2 }list "P" array_filter_flags catch ts endcatch
+  0 try { me @ }list "" array_filter_flags catch ts endcatch
+
+  ( findnext walks the db in ref order )
+  #-1 me @ "" "" findnext me @ = t
+  me @ me @ "" "" findnext t
+  #-1 me @ "nosuchname" "" findnext t
+
+  ( the shared sprintf: width, justification, padding and the verbs )
+  42 "%i" fmtstring ts
+  42 "[%5i]" fmtstring ts
+  42 "[%-5i]" fmtstring ts
+  42 "[%05i]" fmtstring ts
+  42 "[%+i]" fmtstring ts
+  "abc" "[%5s]" fmtstring ts
+  "abc" "[%-5s]" fmtstring ts
+  "abcdef" "[%.2s]" fmtstring ts
+  me @ "%d" fmtstring ts
+  me @ "%D" fmtstring ts
+  1.5 "%f" fmtstring ts
+  1.5 "[%.2f]" fmtstring ts
+  3 "%~" fmtstring ts
+  "hi" "%~" fmtstring ts
+  1.0 "%?" fmtstring ts
+  "100%% done" fmtstring ts
+  5 "abc" "[%*s]" fmtstring ts
+  0 try "abc" "%i" fmtstring catch ts endcatch
+  0 try 3 "%s" fmtstring catch ts endcatch
+
+  ( array_fmtstrings names its fields instead of popping them )
+  { { "name" "Rusty" "n" 3 }dict }list "%[name]s has %[n]i" array_fmtstrings
+  dup 0 [] ts array_count t
+  { { "name" "Rusty" }dict }list "%[missing]s|%[gone]i" array_fmtstrings 0 [] ts
+  0 try { { "a" 1 }dict }list "%s" array_fmtstrings catch ts endcatch
+
+  ( the seeded generator replays from a recorded seed )
+  "AAAABBBBCCCCDDDDAAAABBBBCCCCDDDD" setseed
+  getseed ts
+  srand intostr ts
+  srand intostr ts
+  getseed ts
+  "AAAABBBBCCCCDDDDAAAABBBBCCCCDDDD" setseed
+  srand intostr ts
+  "short" setseed
+  getseed ts
+  srand intostr ts
+
+  ( fmttime parses under a caller-supplied format )
+  "12:00:00 01/01/2000" "%T%t%D" fmttime t
+  "2000-01-01" "%Y-%m-%d" fmttime t
+  0 try "nonsense" "%Y-%m-%d" fmttime catch ts endcatch
+  0 try "2000" "" fmttime catch ts endcatch
+
+  ( interp runs another program and takes back its top value )
+  0 try #-1 me @ "" interp catch ts endcatch
+  0 try prog #-1 "" interp catch ts endcatch
+  0 try prog me @ 3 interp catch ts endcatch
+;`,
+	},
+	{
+		// Timers and cross-process events. A timer with a zero delay is
+		// already due when EVENT_WAITFOR asks for it, so this finishes in
+		// one step and needs no Pause — the delayed case is covered by a
+		// unit test instead, since the two servers' tick intervals differ.
+		Name: "timers",
+		Source: tellPrelude + `: main
+  0 try 0 "tick" timer_start catch ts endcatch
+  ( event_waitfor leaves the data below the event's name )
+  { "TIMER.tick" }list event_waitfor
+  ts pop
+  ( a timer cancelled before it fires delivers nothing )
+  0 "gone" timer_start
+  "gone" timer_stop
+  "TIMER.gone" event_exists t
+  ( event_send to our own pid lands on our own queue )
+  pid "hello" "payload" event_send
+  "USER.hello" event_exists t
+  { "USER.hello" }list event_waitfor
+  ts
+  dup "data" [] ts
+  dup "caller_pid" [] pid = t
+  "player" [] me @ = t
+  ( a pid that names nothing is silently ignored )
+  999999 "nowhere" 1 event_send
+  0 try 0 3 timer_start catch ts endcatch
+  0 try "x" "y" timer_start catch ts endcatch
+  0 try 3 timer_stop catch ts endcatch
+  0 try pid 3 "d" event_send catch ts endcatch
+  0 try "x" "e" "d" event_send catch ts endcatch
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

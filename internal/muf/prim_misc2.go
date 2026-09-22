@@ -1,25 +1,20 @@
 package muf
 
 import (
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
 // EVENT_COUNT, EVENT_EXISTS, EXT-NAME-OK?, READ_WANTS_BLANKS,
-// READ_WANTS_NO_BLANKS, IGNORING?, IGNORE_ADD, IGNORE_DEL, CONVTIME, STATS,
-// STATS_ARRAY and USERLOG are ports of the more tractable primitives left
-// in src/p_misc.c. Deliberately not ported this phase, each needing
-// substantially more than a primitive port on its own: TIMER_START/
-// TIMER_STOP/EVENT_SEND (a delayed, out-of-band event-delivery scheduler
-// distinct from WATCHPID's own synchronous one), FMTTIME (upstream calls
-// strptime with an arbitrary caller-supplied format string — Go has no
-// equivalent), DEBUGGER_BREAK/DEBUG_LINE/DEBUG_ON/DEBUG_OFF (the MUF
-// single-step debugger, unimplemented entirely), GETSEED/SETSEED (a
-// per-frame seeded RNG SRAND does not actually have here either), and
-// SMTP_SEND (a real SMTP client).
+// READ_WANTS_NO_BLANKS, IGNORING?, IGNORE_ADD, IGNORE_DEL, CONVTIME, FMTTIME,
+// STATS, STATS_ARRAY and USERLOG are ports of the more tractable primitives
+// left in src/p_misc.c. Deliberately not ported, each needing substantially
+// more than a primitive port on its own: TIMER_START/TIMER_STOP/EVENT_SEND (a
+// delayed, out-of-band event-delivery scheduler distinct from WATCHPID's own
+// synchronous one), DEBUGGER_BREAK/DEBUG_LINE/DEBUG_ON/DEBUG_OFF (the MUF
+// single-step debugger, unimplemented entirely), and SMTP_SEND (a real SMTP
+// client).
 func init() {
 	register("EVENT_COUNT", func(f *Frame) (*Result, error) {
 		return nil, f.Push(Int(int64(len(f.PendingEvents))))
@@ -124,7 +119,32 @@ func init() {
 		if s == "" {
 			return nil, errf("Invalid time string")
 		}
-		secs, ok := convTime(s)
+		secs, ok := fmtTimeSeconds(s, "%T%t%D")
+		if !ok {
+			return nil, errf("Time string does not match expected format.")
+		}
+		return nil, f.Push(Int(secs))
+	})
+
+	// FMTTIME is CONVTIME with the format under the caller's control, its
+	// name notwithstanding: it parses a time string rather than rendering
+	// one. TIMEFMT is the primitive that formats.
+	register("FMTTIME", func(f *Frame) (*Result, error) {
+		format, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		value, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if format.Type != TypeString || format.Str == "" {
+			return nil, errf("Invalid format string")
+		}
+		if value.Type != TypeString || value.Str == "" {
+			return nil, errf("Invalid time string")
+		}
+		secs, ok := fmtTimeSeconds(value.Str, format.Str)
 		if !ok {
 			return nil, errf("Time string does not match expected format.")
 		}
@@ -239,48 +259,4 @@ func statsArg(f *Frame) (ref.Ref, Host, error) {
 		return ref.Nothing, nil, errf("Requires Mucker Level 3.")
 	}
 	return owner, h, nil
-}
-
-// convTime is a port of time_string_to_seconds for CONVTIME's own fixed
-// "%T%t%D" format: "HH:MM:SS MO/DY/YR", the year either 2 or 4 digits.
-// FMTTIME, which lets a caller supply an arbitrary strptime-style format,
-// is not ported — see this file's own top-of-file doc comment.
-func convTime(s string) (int64, bool) {
-	fields := strings.Fields(s)
-	if len(fields) < 2 {
-		return 0, false
-	}
-	hms := strings.Split(fields[0], ":")
-	if len(hms) != 3 {
-		return 0, false
-	}
-	h, err1 := strconv.Atoi(hms[0])
-	m, err2 := strconv.Atoi(hms[1])
-	sec, err3 := strconv.Atoi(hms[2])
-	if err1 != nil || err2 != nil || err3 != nil {
-		return 0, false
-	}
-
-	dmy := strings.Split(fields[1], "/")
-	if len(dmy) != 3 {
-		return 0, false
-	}
-	mo, err4 := strconv.Atoi(dmy[0])
-	day, err5 := strconv.Atoi(dmy[1])
-	yr, err6 := strconv.Atoi(dmy[2])
-	if err4 != nil || err5 != nil || err6 != nil {
-		return 0, false
-	}
-	if len(dmy[2]) != 4 {
-		// A 2-digit year is a %y year: 69-99 -> 1900s, 0-68 -> 2000s,
-		// strptime's own convention.
-		if yr >= 69 {
-			yr += 1900
-		} else {
-			yr += 2000
-		}
-	}
-
-	t := time.Date(yr, time.Month(mo), day, h, m, sec, 0, time.UTC)
-	return t.Unix(), true
 }

@@ -302,48 +302,76 @@ Real findings, not just wording, golden caught along the way:
   — using `f.popArray()`/`f.popInt()` where upstream's own message needed a
   number those helpers don't carry.
 
+Phase 4's remainder then landed too, taking coverage to **397 of 417**. Of
+the 20 the coverage test still reports, nine are the pseudo-op false
+positives named above; six are genuinely unported (below).
+
+**Also landed** (17 further primitives): `INTERP` (`p_stack.c`);
+`GETSEED`/`SETSEED` (`p_math.c`); `FMTTIME`, `TIMER_START`, `TIMER_STOP`,
+`EVENT_SEND` (`p_misc.c`); `ARRAY_FILTER_FLAGS` (`p_array.c`); `FINDNEXT`,
+`NEWPLAYER`, `COPYPLAYER`, `TOADPLAYER`, `PNAME_HISTORY`, `COPYOBJ`,
+`PROGRAM_SETLINES`, `DUMP` (`p_db.c`); `ARRAY_FMTSTRINGS` (`p_strings.c`).
+
+What each needed, and what it found:
+
+- **`checkflags`/`init_checkflags`** is now `internal/muf/checkflags.go`,
+  which both `ARRAY_FILTER_FLAGS` and `FINDNEXT` compile their flag string
+  with. `@find` could use it too, unchanged, if it is ever built.
+  Upstream's two size tests (`~` and `^`) are parsed and then ignored: they
+  compare against `size_object`, and Emerald's objects are laid out nothing
+  like the C's — the same reason `examine`'s own "Memory used" line is
+  masked in its golden case.
+- **The seeded generator** turned out to be exactly reproducible, quirk
+  included. Upstream's `rnd()` hashes `sizeof(digest)` bytes where `digest`
+  is a `uint32*`, so it feeds MD5 the first **8** bytes of its 16-byte
+  buffer rather than all of it. Reproducing that is what makes a recorded
+  seed replay the same sequence on both servers, which the golden case now
+  checks by printing actual `SRAND` values rather than just comparing them
+  to each other.
+- **`FMTSTRING` was quietly wrong**, and porting `ARRAY_FMTSTRINGS` is what
+  surfaced it. The two are one grammar with two ways of reaching an
+  argument, so they now share `internal/muf/fmtstring.go` — and the old
+  implementation had `%d` and `%D` backwards (upstream's `%d` is a dbref as
+  `#123`, `%D` is its *name*; Emerald had `%d` as an integer and `%D` as a
+  dbref), and supported none of `|` centring, `+`/space sign padding, `0`
+  padding, `*` dynamic widths, `~`, `?`, `l`, or `\t` tab stops. The
+  starter world's own `25.m` uses `%d` and `%D` upstream's way, so this was
+  a live bug against shipped content, not a hypothetical one.
+- **`FMTTIME`** parses rather than formats, its name notwithstanding — it
+  is `time_string_to_seconds`, C's `strptime` under a caller-supplied
+  format. `internal/muf/strptime.go` is that parser, and `CONVTIME` now
+  goes through it too instead of keeping its own one-format copy.
+- **Timers** fit the existing scheduler without new machinery: a
+  `process.timers` list, a pass in `Server.Tick`, and delivery through the
+  `deliverEvent` path `WATCHPID` already built. `EVENT_SEND` needed only a
+  way to reach another live process's frame.
+- **`COPYPLAYER` reproduces two upstream results that look like mistakes.**
+  `copy_properties_onto` *replaces* the destination's property tree rather
+  than merging into it, so the new player loses the `created_as` and
+  starting pennies `create_player` had just given them; the value
+  arithmetic that follows then reads back the value it just copied, so a
+  copy ends up with twice the source's pennies rather than the source's
+  plus its own. Both are reproduced, because a program written against the
+  real server sees them.
+- **`PNAME_HISTORY` needed the history to exist first.** Nothing recorded
+  it — `World.Rename` now does, upstream's `change_player_name`
+  bookkeeping, expiring entries past `pname_history_threshold`.
+- **The mlev generator missed `prim_dump` entirely**, because its function
+  regex anchored on a line starting with `prim_`, and `prim_dump` is the
+  one primitive in `p_*.c` whose `void` sits on the same line. Widened;
+  `DUMP` is now gated like every other wizard primitive.
+
 Genuinely deferred, not attempted, each needing more than a primitive port
 on its own:
 
-- **`INTERP`** (`src/p_stack.c`) — a synchronous sub-invocation of another
-  program, architecturally close to `RunLock`'s own pattern
-  (`internal/game/boolexp.go`) for a program-type lock constant. The
-  clearest next primitive to pick up.
-- **`checkflags`/`init_checkflags`**, upstream's flag-matching
-  mini-language (`@W`, `!D`, and so on) — blocks `ARRAY_FILTER_FLAGS`
-  (`p_array.c`) and `FINDNEXT` (`p_db.c`) alike, and `@find` besides, were
-  it ever built. Worth its own task; two primitives and a command are
-  waiting on it.
-- **Player lifecycle and object cloning** (`p_db.c`): `NEWPLAYER`,
-  `COPYPLAYER`, `TOADPLAYER`, `PNAME_HISTORY`, `COPYOBJ`, `DUMP` — real
-  design work (creation-cost accounting, name-history storage, `@toad`'s
-  own belongings-transfer logic `internal/game/wiz.go`'s `toadPlayer`
-  already has and these primitives would need to share) rather than a
-  mechanical port.
-- **`PROGRAM_SETLINES`** (`p_db.c`) — the write side of the now-landed
-  `PROGRAM_GETLINES`, needs an "is this program currently open in the MUF
-  editor" check against `internal/game/edit.go`'s own session state before
-  it is safe to port; deferred rather than risk that interaction.
-- **A delayed, out-of-band event-delivery scheduler** distinct from
-  `WATCHPID`'s own synchronous one — blocks `TIMER_START`, `TIMER_STOP` and
-  `EVENT_SEND` (`p_misc.c`) together.
-- **`FMTTIME`** (`p_misc.c`) — upstream calls C's `strptime` with an
-  arbitrary caller-supplied format string; Go has no equivalent to wrap.
-  `CONVTIME`, which only needs one fixed format, is ported.
 - **The MUF single-step debugger** — `DEBUGGER_BREAK`, `DEBUG_LINE`,
   `DEBUG_ON`, `DEBUG_OFF` (`p_misc.c`) — unimplemented in Emerald entirely,
   not a gap specific to these four.
-- **A per-frame seeded RNG** — `GETSEED`/`SETSEED` (`p_math.c`) read and
-  write state `SRAND` doesn't actually keep in Emerald either (it currently
-  returns the same thing `RANDOM` does); fixing that is its own task, not
-  incidental to these two.
 - **`SMTP_SEND`** (`p_misc.c`) — a real SMTP client.
-- **`ARRAY_FMTSTRINGS`** (`p_strings.c`) — a dict-driven `%(field)s`
-  reimplementation of `FMTSTRING`'s own sprintf-alike parser; the C's own
-  doc comment calls it "actually very complex."
 - **`PARSEPROPEX`** (`p_props.c`) — converts a whole caller-supplied
   dictionary into MPI variables and hands one back; materially more
-  plumbing than `PARSEMPI`, which is ported.
+  plumbing than `PARSEMPI`, which is ported. Natural to pick up alongside
+  the MPI work rather than before it.
 
 One divergence found but not fixed, outside this phase's own scope: piping
 `TEXTATTR`'s ANSI-coded output to a live connection showed real Fuzzball
@@ -352,8 +380,13 @@ upstream gates color on whatever capability a client negotiated, which nothing
 in Emerald's own `NOTIFY` path currently checks either. Not specific to
 `TEXTATTR`; worth its own look before assuming any primitive's ANSI output is
 byte-for-byte comparable over a real connection.
-2. **Port more MPI functions.** ~89 of 140 `mfn_*` functions from
+
+The next three steps from here are:
+
+1. **Phase 5 — port the MPI functions.** ~89 of 140 `mfn_*` functions from
    `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
+   Add an MPI coverage test mirroring `internal/muf/coverage_test.go` first;
+   none exists yet, and it is a small addition before porting 89 of anything.
 3. **Start M8**: rate limiting/connection caps and `pprof` behind a
    localhost-only port are genuinely missing. Structured audit logging is
    partial (`internal/logging` has no security-specific channel yet).
@@ -659,7 +692,7 @@ enforcement — see `git log` for the exact commits):
     `"queue"` case (COMMAND vs. stack argument)
   - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
     self-forcing program)
-- Primitive coverage: **380 of 417** implemented
+- Primitive coverage: **397 of 417** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

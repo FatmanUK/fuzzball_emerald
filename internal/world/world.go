@@ -2,6 +2,7 @@ package world
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
@@ -206,10 +207,39 @@ func (w *World) Rename(r ref.Ref, name string) error {
 		}
 		delete(w.players, ascii.Fold(o.Name))
 		w.players[ascii.Fold(name)] = r
+		w.recordNameHistory(o, name)
 	}
 	o.Name = name
 	w.Modified(r)
 	return nil
+}
+
+// nameHistoryDir is upstream's PNAME_HISTORY_PROPDIR: what a player has been
+// called, keyed by when they were called it.
+const nameHistoryDir = "@__sys__/name"
+
+// recordNameHistory is upstream's change_player_name bookkeeping: note the
+// new name against the current time, and drop entries older than the
+// pname_history_threshold parameter. A threshold of zero keeps them forever.
+//
+// The history is recorded whatever pname_history_reporting says — that
+// parameter only decides whether the PNAME_HISTORY primitive may read it
+// back, which is the primitive's own check, not this one's.
+func (w *World) recordNameHistory(o *Object, name string) {
+	now := w.now().Unix()
+	if threshold := w.Tune.Duration("pname_history_threshold"); threshold > 0 {
+		cutoff := now - int64(threshold.Seconds())
+		for _, key := range o.Props.Children(nameHistoryDir) {
+			t, err := strconv.ParseInt(key, 10, 64)
+			// created_as lives in this directory too and is not a
+			// timestamp; it is never expired.
+			if err != nil || t > cutoff {
+				continue
+			}
+			o.Props.Delete(nameHistoryDir + "/" + key)
+		}
+	}
+	o.Props.SetString(nameHistoryDir+"/"+strconv.FormatInt(now, 10), name)
 }
 
 // SetProp stores a property and marks the object changed.

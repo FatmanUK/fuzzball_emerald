@@ -140,7 +140,10 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		out, err := f.fmtString(format)
+		if format == "" {
+			return nil, f.Push(Str(""))
+		}
+		out, err := formatWith(f.hostOrNil(), format, f.stackDialect())
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +246,13 @@ func init() {
 		return nil, f.Push(Int(int64(rand.Uint32())))
 	})
 	register("SRAND", func(f *Frame) (*Result, error) {
-		return nil, f.Push(Int(int64(rand.Uint32())))
+		// Unlike RANDOM, this draws from the frame's own seeded state, so a
+		// program that records a seed with GETSEED replays the same run.
+		if f.rndbuf == nil {
+			f.rndbuf = newSeed()
+		}
+		// Upstream's result is a plain int, so the top bit is a sign bit.
+		return nil, f.Push(Int(int64(int32(rndFrom(f.rndbuf)))))
 	})
 
 	register("AWAKE?", func(f *Frame) (*Result, error) {
@@ -301,121 +310,6 @@ func truncate(s string, n int64) string {
 		return s
 	}
 	return s[:n]
-}
-
-// fmtString implements FMTSTRING, which takes its arguments from the stack in
-// the order the format names them.
-//
-// The directives are a subset of printf: %s, %i, %d, %f and %% , each
-// optionally with a width and a left-justifying '-'.
-func (f *Frame) fmtString(format string) (string, error) {
-	// Directives consume the stack from the top down, so the first one in
-	// the format takes the topmost value: "1 2 \"%i and %i\" fmtstring"
-	// reads as "2 and 1". Taking them together and then reversing gives the
-	// same order without popping one at a time.
-	n := countDirectives(format)
-	args, err := f.PopN(n)
-	if err != nil {
-		return "", err
-	}
-	for i, j := 0, len(args)-1; i < j; i, j = i+1, j-1 {
-		args[i], args[j] = args[j], args[i]
-	}
-
-	var b strings.Builder
-	arg := 0
-	for i := 0; i < len(format); i++ {
-		if format[i] != '%' {
-			b.WriteByte(format[i])
-			continue
-		}
-		i++
-		if i >= len(format) {
-			b.WriteByte('%')
-			break
-		}
-		if format[i] == '%' {
-			b.WriteByte('%')
-			continue
-		}
-
-		// A width, optionally left-justified, then the verb.
-		start := i
-		for i < len(format) && (format[i] == '-' || format[i] == '.' ||
-			format[i] >= '0' && format[i] <= '9') {
-			i++
-		}
-		if i >= len(format) {
-			b.WriteString(format[start-1:])
-			break
-		}
-		spec, verb := format[start:i], format[i]
-		if arg >= len(args) {
-			continue
-		}
-		out, err := formatOne(spec, verb, args[arg])
-		if err != nil {
-			return "", err
-		}
-		b.WriteString(out)
-		arg++
-	}
-	return b.String(), nil
-}
-
-// countDirectives counts the argument-consuming directives in a format.
-func countDirectives(format string) int {
-	n := 0
-	for i := 0; i < len(format); i++ {
-		if format[i] != '%' {
-			continue
-		}
-		i++
-		if i >= len(format) || format[i] == '%' {
-			continue
-		}
-		for i < len(format) && (format[i] == '-' || format[i] == '.' ||
-			format[i] >= '0' && format[i] <= '9') {
-			i++
-		}
-		if i < len(format) {
-			n++
-		}
-	}
-	return n
-}
-
-// formatOne renders a single directive.
-//
-// The directives are type-strict, as upstream's are: %s needs a string and %i
-// an integer, and anything else is an error rather than a conversion. Programs
-// rely on that to catch their own mistakes.
-func formatOne(spec string, verb byte, v Value) (string, error) {
-	switch verb {
-	case 's':
-		if v.Type != TypeString {
-			return "", errf("Format specified string argument not found.")
-		}
-		return fmt.Sprintf("%"+spec+"s", v.Str), nil
-	case 'i', 'd':
-		if v.Type != TypeInteger {
-			return "", errf("Format specified integer argument not found.")
-		}
-		return fmt.Sprintf("%"+spec+"d", v.Num), nil
-	case 'f', 'e', 'g':
-		x, ok := v.asFloat()
-		if !ok {
-			return "", errf("Format specified float argument not found.")
-		}
-		return fmt.Sprintf("%"+spec+string(verb), x), nil
-	case 'D':
-		if v.Type != TypeObject {
-			return "", errf("Format specified dbref argument not found.")
-		}
-		return fmt.Sprintf("%"+spec+"s", v.String()), nil
-	default:
-		return v.String(), nil
-	}
 }
 
 // strftime renders the subset of the C format MUF programs use.

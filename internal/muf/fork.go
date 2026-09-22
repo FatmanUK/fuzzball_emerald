@@ -35,6 +35,10 @@ func (f *Frame) fork() *Frame {
 		Descr:      f.Descr,
 		Level:      f.Level,
 		Supplicant: f.Supplicant,
+		// The child inherits the parent's seed rather than starting a new
+		// one, upstream's "tmpfr->rndbuf = init_seed(fr->rndbuf)" — the two
+		// then diverge, since each re-hashes its own copy from here on.
+		rndbuf: append([]byte(nil), f.rndbuf...),
 		// A forked frame is backgrounded from birth, upstream's
 		// tmpfr->multitask = BACKGROUND.
 		Mode: ModeBackground,

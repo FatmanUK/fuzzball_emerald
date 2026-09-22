@@ -1157,3 +1157,60 @@ func TestWatchPIDDeliversProcExitOnCompletion(t *testing.T) {
 		t.Errorf("watcher output = %q, want %q", got, want)
 	}
 }
+
+// TestTimerWakesAWaitingProgram covers the half of TIMER_START the golden
+// harness cannot: a timer that is not already due when EVENT_WAITFOR asks
+// for it, so the program genuinely suspends and a later tick delivers the
+// event. The golden case uses a zero delay instead, because the two servers
+// run their timequeues at different intervals.
+func TestTimerWakesAWaitingProgram(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.installProgram(t, "ticker", `: main
+  me @ "before" notify
+  0 "t" timer_start
+  { "TIMER.t" }list event_waitfor
+  pop pop
+  me @ "after" notify
+;`)
+	h.send("ticker")
+	if got := h.out(); !strings.Contains(got, "before") {
+		t.Fatalf("the program did not start:\n%s", got)
+	}
+	if got := h.out(); strings.Contains(got, "after") {
+		t.Fatalf("the program did not wait for its timer:\n%s", got)
+	}
+
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		h.s.Tick(w)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.out(); !strings.Contains(got, "after") {
+		t.Errorf("the timer did not wake the program:\n%s", got)
+	}
+}
+
+// TestTimerStopCancelsBeforeItFires checks that a stopped timer delivers
+// nothing, even once its deadline has passed.
+func TestTimerStopCancelsBeforeItFires(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.installProgram(t, "cancels", `: main
+  0 "t" timer_start
+  "t" timer_stop
+  0 sleep
+  "TIMER.t" event_exists intostr me @ swap notify
+;`)
+	h.send("cancels")
+	if err := h.engine.Do(context.Background(), func(w *world.World) {
+		h.s.Tick(w)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.out(); !strings.Contains(got, "0") {
+		t.Errorf("a cancelled timer still delivered its event:\n%s", got)
+	}
+}

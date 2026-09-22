@@ -2,6 +2,7 @@ package game
 
 import (
 	"strings"
+	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -75,6 +76,8 @@ func (h *mufHost) TuneSet(name, value string) (bool, error) {
 // TuneBool and TuneInt implement muf.Host's typed, server-side tune reads.
 func (h *mufHost) TuneBool(name string) bool { return h.w.Tune.Bool(name) }
 func (h *mufHost) TuneInt(name string) int64 { return h.w.Tune.Int(name) }
+
+func (h *mufHost) TuneSpan(name string) time.Duration { return h.w.Tune.Duration(name) }
 
 // TuneList implements muf.Host for SYSPARM_ARRAY, upstream's
 // tune_parms_array.
