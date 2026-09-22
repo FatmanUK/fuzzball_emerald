@@ -189,6 +189,7 @@ type mufTimer struct {
 func (s *Server) Tick(w *world.World) {
 	now := w.Now()
 	s.fireTimers(w, now)
+	s.fireMPIEvents(w, now)
 	for _, p := range s.procs.due(now) {
 		s.resume(w, p, nil)
 	}

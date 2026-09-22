@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+	"github.com/FatmanUK/fuzzball_emerald/internal/timefmt"
 )
 
 // EVENT_COUNT, EVENT_EXISTS, EXT-NAME-OK?, READ_WANTS_BLANKS,
@@ -119,7 +120,7 @@ func init() {
 		if s == "" {
 			return nil, errf("Invalid time string")
 		}
-		secs, ok := fmtTimeSeconds(s, "%T%t%D")
+		secs, ok := timefmt.Seconds(s, "%T%t%D")
 		if !ok {
 			return nil, errf("Time string does not match expected format.")
 		}
@@ -144,7 +145,7 @@ func init() {
 		if value.Type != TypeString || value.Str == "" {
 			return nil, errf("Invalid time string")
 		}
-		secs, ok := fmtTimeSeconds(value.Str, format.Str)
+		secs, ok := timefmt.Seconds(value.Str, format.Str)
 		if !ok {
 			return nil, errf("Time string does not match expected format.")
 		}

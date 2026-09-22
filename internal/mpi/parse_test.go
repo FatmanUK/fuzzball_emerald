@@ -230,3 +230,40 @@ func TestFunctionTableIsPopulated(t *testing.T) {
 	}
 	t.Logf("%d of %d MPI functions implemented", Implemented(), Count())
 }
+
+// The rest of Host is stubbed out: these tests cover the parser rather than
+// the world it reaches, so each answers the least interesting thing it can.
+func (h *stubHost) NotifyExcept(Ref, []Ref, string) {}
+func (h *stubHost) TypeName(obj Ref) string {
+	if obj == 1 {
+		return "Player"
+	}
+	return "Thing"
+}
+func (h *stubHost) FlagString(Ref) string    { return "" }
+func (h *stubHost) HasFlag(Ref, string) bool { return false }
+func (h *stubHost) Exits(Ref) []Ref          { return nil }
+func (h *stubHost) Links(Ref) []Ref          { return nil }
+func (h *stubHost) Value(Ref) int            { return 0 }
+func (h *stubHost) Timestamps(Ref) (int64, int64, int64, int) {
+	return 0, 0, 0, 0
+}
+func (h *stubHost) Controls(Ref, Ref) bool    { return false }
+func (h *stubHost) Locked(int, Ref, Ref) bool { return false }
+func (h *stubHost) TestLock(int, Ref, Ref, string) (bool, error) {
+	return false, nil
+}
+func (h *stubHost) OnlinePlayers() []Ref              { return nil }
+func (h *stubHost) Idle(Ref) int                      { return 0 }
+func (h *stubHost) OnTime(Ref) int                    { return 0 }
+func (h *stubHost) Width(Ref) int                     { return 0 }
+func (h *stubHost) Height(Ref) int                    { return 0 }
+func (h *stubHost) TuneGet(string) (string, bool)     { return "", false }
+func (h *stubHost) MuckName() string                  { return "Test" }
+func (h *stubHost) PronounSub(_ Ref, s string) string { return s }
+func (h *stubHost) Force(int, Ref, string)            {}
+func (h *stubHost) Kill(int) bool                     { return false }
+func (h *stubHost) RunMUF(int, Ref, Ref, string) (string, error) {
+	return "", nil
+}
+func (h *stubHost) Delay(int, Ref, Ref, Ref, int, string, bool) {}

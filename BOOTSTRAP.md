@@ -381,13 +381,65 @@ in Emerald's own `NOTIFY` path currently checks either. Not specific to
 `TEXTATTR`; worth its own look before assuming any primitive's ANSI output is
 byte-for-byte comparable over a real connection.
 
-The next three steps from here are:
+## Phase 5 — MPI, finished
 
-1. **Phase 5 — port the MPI functions.** ~89 of 140 `mfn_*` functions from
-   `src/mfuns.c`/`src/mfuns2.c` are still missing, mostly the list functions.
-   Add an MPI coverage test mirroring `internal/muf/coverage_test.go` first;
-   none exists yet, and it is a small addition before porting 89 of anything.
-3. **Start M8**: rate limiting/connection caps and `pprof` behind a
+**All 140 MPI functions are implemented**, from 51 when the phase started.
+`internal/mpi/coverage_test.go` tracks it, the way `internal/muf`'s own
+coverage test tracks primitives; it was written first, before any porting,
+and is what made the gap legible.
+
+The work split four ways: the list functions (`internal/mpi/list.go` plus
+`impl_list.go`), the property ones (`impl_prop.go`), the looping and
+evaluating ones (`impl_control.go`, with `macro.go` for what `{func}`
+defines), and the object, time and world ones (`impl_object.go`,
+`impl_misc.go`, with `internal/game/mpi_host.go` behind them).
+
+Golden found five real bugs, four of them pre-existing rather than newly
+written:
+
+- **`{prop}` never walked the environment.** It is `safegetprop` upstream,
+  not the strict form, so a description reading a property set on the room
+  found nothing. `{prop!}` is the form that looks only at the object named,
+  and it is the one Emerald had.
+- **`{set}` returned the empty string** instead of the value it assigned, so
+  `{set:n,5}{&n}` read `5` where upstream reads `55`.
+- **`FLAG?` matched flag names the wrong way, in MUF as well as MPI.**
+  Upstream's `str_to_flag` matches a *prefix* of a full name against a fixed
+  ordered list — so `m` is MUCKER and `d` is DARK — rather than looking up
+  exact names and hand-picked single letters, which is what
+  `internal/ref/flagnames.go` used to do. It also knows only flags: a type
+  name or mucker level is not one, so `{flag?:me,player}` is false even for
+  a player, where Emerald said true. Rewritten as a real port of
+  `has_flag`/`str_to_flag`, which both languages now share.
+- **`PRONOUN_SUB` produced nothing for an object with no gender set**, where
+  upstream substitutes the object's *name* — `%s` becomes "Igor", `%p`
+  becomes "Igor's". `%n` was missing outright. Both were part of the
+  "deliberately not reproduced" list from an earlier phase, and both turned
+  out to be the common case rather than an edge one.
+- **`{ltimestr}` counted in four units and said "0 seconds" for nothing.**
+  Upstream's `timestr_long` counts in seven, down to years, and renders a
+  zero duration as the empty string.
+
+Three shared pieces came out of the overlap rather than being duplicated:
+`internal/timefmt` (strftime and strptime, previously private to
+`internal/muf`), `internal/ansi` (the attribute tags TEXTATTR and `{attr}`
+both take), and `ascii.AlphanumCompare` (upstream's `alphanum_compare`,
+which `{lsort}` needs and whose zero-backtracking quirks are checked against
+values taken from the C rather than from what the ordering ought to be).
+
+Deliberately simplified, and worth knowing before trusting either:
+
+- **`{debug}` and `{debugif}` evaluate plainly.** Upstream runs its MPI
+  tracer for them, printing each call and its result; Emerald has no tracer,
+  so the text they produce is right and the diagnostics are absent.
+- **Match permissions are not layered.** Upstream has three matchers —
+  `mesg_dbref`, `mesg_dbref_local` and `mesg_dbref_raw` — differing in what
+  an unblessed message may resolve. Emerald has one, so a few functions will
+  resolve an object upstream would refuse.
+
+The next steps from here are:
+
+1. **Start M8**: rate limiting/connection caps and `pprof` behind a
    localhost-only port are genuinely missing. Structured audit logging is
    partial (`internal/logging` has no security-specific channel yet).
    Graceful drain and a README divergences section are likely already
@@ -693,6 +745,7 @@ enforcement — see `git log` for the exact commits):
   - `TestForceMatchesFuzzball` (`FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY`, a
     self-forcing program)
 - Primitive coverage: **397 of 417** implemented
+- MPI coverage: **140 of 140** implemented
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
 - MPI coverage: **~51 of 140** functions (no dedicated coverage test exists
   for this yet — worth adding one analogous to `TestPrimitiveCoverage`)

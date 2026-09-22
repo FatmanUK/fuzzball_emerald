@@ -1,8 +1,8 @@
-package muf
+package timefmt
 
 import "testing"
 
-func TestFmtTimeSeconds(t *testing.T) {
+func TestSeconds(t *testing.T) {
 	tests := []struct {
 		value, format string
 		want          int64
@@ -27,14 +27,14 @@ func TestFmtTimeSeconds(t *testing.T) {
 		{"2000-01-01", "%T", 0, false},
 	}
 	for _, tt := range tests {
-		got, ok := fmtTimeSeconds(tt.value, tt.format)
+		got, ok := Seconds(tt.value, tt.format)
 		if ok != tt.ok {
-			t.Errorf("fmtTimeSeconds(%q, %q) ok = %v, want %v",
+			t.Errorf("Seconds(%q, %q) ok = %v, want %v",
 				tt.value, tt.format, ok, tt.ok)
 			continue
 		}
 		if ok && got != tt.want {
-			t.Errorf("fmtTimeSeconds(%q, %q) = %d, want %d",
+			t.Errorf("Seconds(%q, %q) = %d, want %d",
 				tt.value, tt.format, got, tt.want)
 		}
 	}

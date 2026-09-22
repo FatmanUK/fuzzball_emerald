@@ -1,4 +1,4 @@
-package muf
+package timefmt
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ import (
 // reads it in the server's local zone instead; a server and its MUF programs
 // that agree on one zone are unaffected, and Emerald has no per-world zone to
 // agree on.
-func strptime(value, format string) (time.Time, bool) {
+func Parse(value, format string) (time.Time, bool) {
 	p := &timeParser{s: value}
 	year, mon, day := 1900, 1, 1
 	hour, min, sec := 0, 0, 0
@@ -214,11 +214,11 @@ var dayNames = [7]string{
 // string carrying four would read the century as the whole year. Upstream
 // looks ahead for how many digits the year actually has and swaps in an
 // equivalent format with %Y when there are four.
-func fmtTimeSeconds(value, format string) (int64, bool) {
+func Seconds(value, format string) (int64, bool) {
 	if format == "%T%t%D" && yearDigits(value) == 4 {
 		format = "%T%t%m/%d/%Y"
 	}
-	t, ok := strptime(value, format)
+	t, ok := Parse(value, format)
 	if !ok {
 		return 0, false
 	}
@@ -246,4 +246,8 @@ func yearDigits(s string) int {
 		n++
 	}
 	return n
+}
+
+func isSpaceByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'
 }

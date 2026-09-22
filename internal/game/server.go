@@ -49,6 +49,9 @@ type Server struct {
 	// upstream keeps it on the program itself. It is not persisted.
 	editLine map[ref.Ref]int
 
+	// mpiEvents holds what MPI's {delay} has scheduled, fired by the tick.
+	mpiEvents []mpiEvent
+
 	// forceDepth counts how deep @force is nested, so a command that
 	// forces something that forces back cannot recurse without end.
 	forceDepth int

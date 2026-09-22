@@ -59,6 +59,7 @@ type pronounTestHost struct {
 }
 
 func (h *pronounTestHost) TuneGet(string) (string, bool) { return "sex", true }
+func (h *pronounTestHost) Name(ref.Ref) string           { return "Igor" }
 func (h *pronounTestHost) GetProp(ref.Ref, string) (props.Value, bool) {
 	if h.gender == "" {
 		return props.Value{}, false
@@ -67,22 +68,31 @@ func (h *pronounTestHost) GetProp(ref.Ref, string) (props.Value, bool) {
 }
 
 func TestPronounSubUsesDefaultTableByGender(t *testing.T) {
-	// No gender set -> unassigned (index 0), every pronoun empty.
-	got := pronounSub(&pronounTestHost{}, testPlayer, "%s likes %p stuff.")
-	if want := " likes  stuff."; got != want {
+	// No gender set -> the object is referred to by name throughout, with
+	// "'s" for the possessive forms.
+	got := PronounSub(&pronounTestHost{}, testPlayer, "%s likes %p stuff.")
+	if want := "Igor likes Igor's stuff."; got != want {
 		t.Errorf("unassigned gender: got %q, want %q", got, want)
+	}
+
+	// %n is the name whatever the gender.
+	got = PronounSub(&pronounTestHost{gender: "female"}, testPlayer, "%N waves.")
+	if want := "Igor waves."; got != want {
+		t.Errorf("%%n: got %q, want %q", got, want)
 	}
 
 	// A capitalised directive capitalises the substitution's first letter —
 	// upstream's own "isupper(prn[1])" rule — a lowercase one leaves it be.
-	got = pronounSub(&pronounTestHost{gender: "male"}, testPlayer, "%S saw %o.")
+	got = PronounSub(&pronounTestHost{gender: "male"}, testPlayer, "%S saw %o.")
 	if want := "He saw him."; got != want {
 		t.Errorf("male gender: got %q, want %q", got, want)
 	}
 
-	// %% is a literal percent, and an unrecognised directive passes through.
-	got = pronounSub(&pronounTestHost{}, testPlayer, "100%% %q")
-	if want := "100% %q"; got != want {
+	// %% is a literal percent. An unrecognised directive loses its '%' and
+	// keeps only the letter, which is what upstream's own default case
+	// writes — not the two characters as typed.
+	got = PronounSub(&pronounTestHost{}, testPlayer, "100%% %q")
+	if want := "100% q"; got != want {
 		t.Errorf("literal/unknown directives: got %q, want %q", got, want)
 	}
 }

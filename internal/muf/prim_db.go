@@ -146,7 +146,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, f.Push(Bool(hasFlag(h.Flags(obj), name)))
+		return nil, f.Push(Bool(h.Flags(obj).HasNamed(name)))
 	})
 	register("SET", func(f *Frame) (*Result, error) {
 		name, err := f.popStr()
@@ -161,7 +161,7 @@ func init() {
 		if clear {
 			name = name[1:]
 		}
-		bit, ok := flagNamed(name)
+		bit, ok := ref.FlagNamed(name)
 		if !ok {
 			return nil, errf("unknown flag %q", name)
 		}
@@ -994,3 +994,6 @@ func validNewObjectParent(h Host, parent ref.Ref) bool {
 	t := h.ObjType(parent)
 	return !(t != ref.TypePlayer && t == ref.TypeRoom)
 }
+
+// equalFoldASCII compares two names the way property lookup does.
+func equalFoldASCII(a, b string) bool { return ascii.EqualFold(a, b) }

@@ -95,10 +95,62 @@ type Host interface {
 	Online(obj Ref) bool
 	// Match resolves a name the way a player's command would.
 	Match(who Ref, name string) Ref
-	// Notify sends a line to an object's connections.
+	// Notify sends a line to an object's connections, and NotifyExcept to
+	// everything in a room but the objects named.
 	Notify(obj Ref, msg string)
+	NotifyExcept(room Ref, except []Ref, msg string)
 	// Now is the server's clock, as a Unix time.
 	Now() int64
+
+	// TypeName is an object's type as one of upstream's own words —
+	// "Room", "Exit", "Thing", "Player", "Program", "Bad" — for {type}.
+	TypeName(obj Ref) string
+	// FlagString is the letters examine prints for an object's flags, and
+	// HasFlag tests one by name or letter.
+	FlagString(obj Ref) string
+	HasFlag(obj Ref, flag string) bool
+	// Exits and Links list what an object holds and points at: an exit's
+	// destinations, a room's drop-to, or a thing's or player's home.
+	Exits(obj Ref) []Ref
+	Links(obj Ref) []Ref
+	// Value is an object's currency, for {money}.
+	Value(obj Ref) int
+	// Timestamps is when an object was made, last changed and last used,
+	// and how often — {created}, {modified}, {lastused}, {usecount}.
+	Timestamps(obj Ref) (created, modified, used int64, count int)
+
+	// Controls reports whether who has ownership-level authority over
+	// target, and Locked whether player is locked out of thing.
+	Controls(who, target Ref) bool
+	Locked(descr int, player, thing Ref) bool
+	// TestLock evaluates a lock expression written as text.
+	TestLock(descr int, player, thing Ref, lock string) (bool, error)
+
+	// OnlinePlayers lists who is connected, and Idle and OnTime report how
+	// long one connection has been quiet and how long it has been open.
+	OnlinePlayers() []Ref
+	Idle(obj Ref) int
+	OnTime(obj Ref) int
+	// Width and Height are a connection's reported terminal size.
+	Width(obj Ref) int
+	Height(obj Ref) int
+
+	// TuneGet reads an @tune parameter as its formatted string, and
+	// MuckName is the server's name — {sysparm} and {muckname}.
+	TuneGet(name string) (string, bool)
+	MuckName() string
+	// PronounSub substitutes the pronoun directives in a string for an
+	// object's gender.
+	PronounSub(obj Ref, text string) string
+
+	// Force runs a command as another object, Kill removes a process, and
+	// RunMUF runs a program and returns what it left on its stack. All
+	// three are blessed-only, checked by the functions rather than here.
+	Force(descr int, who Ref, command string)
+	Kill(pid int) bool
+	RunMUF(descr int, player, prog Ref, arg string) (string, error)
+	// Delay schedules a message to be evaluated later, for {delay}.
+	Delay(descr int, player, what, perms Ref, seconds int, text string, blessed bool)
 }
 
 // Error is an MPI failure.

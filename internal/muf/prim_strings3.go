@@ -5,15 +5,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ansi"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
 // STOD, OTELL, PRONOUN_SUB, STRENCRYPT, STRDECRYPT, TEXTATTR and
 // POSE-SEPARATOR? are ports of the remaining src/p_strings.c primitives.
-// ARRAY_FMTSTRINGS, the one primitive left unported in this file, is a
-// dict-driven %(field)s reimplementation of FMTSTRING's own sprintf-alike
-// parser — the C's own doc comment calls it "actually very complex" — and is
-// deliberately deferred rather than rushed.
+// ARRAY_FMTSTRINGS lives in fmtstring.go instead, with the formatter it
+// shares with FMTSTRING.
 func init() {
 	register("STOD", func(f *Frame) (*Result, error) {
 		s, err := f.popStr()
@@ -59,7 +58,7 @@ func init() {
 		if !h.Valid(obj) {
 			return nil, errf("Invalid argument (1)")
 		}
-		return nil, f.Push(Str(pronounSub(h, obj, msg)))
+		return nil, f.Push(Str(PronounSub(h, obj, msg)))
 	})
 
 	register("STRENCRYPT", strCrypt(strEncrypt))
@@ -151,11 +150,14 @@ func genderIndex(sex string) int {
 	return 0
 }
 
-// pronounSub is a port of pronoun_substitute — see pronounDefaults' own doc
+// PronounSub is a port of pronoun_substitute — see pronounDefaults' own doc
 // comment for what is deliberately not reproduced. %% is a literal %, and
 // an unrecognised directive letter is passed through unchanged, both
 // matching the C.
-func pronounSub(h Host, who ref.Ref, s string) string {
+//
+// It is exported because MPI's {pronouns} is the same substitution, reached
+// through internal/game rather than through this package's own Host.
+func PronounSub(h Host, who ref.Ref, s string) string {
 	genderProp, _ := h.TuneGet("gender_prop")
 	sex, _ := h.GetProp(who, genderProp)
 	idx := genderIndex(sex.StringValue())
@@ -172,13 +174,35 @@ func pronounSub(h Host, who ref.Ref, s string) string {
 			b.WriteByte('%')
 			continue
 		}
-		table, ok := pronounDefaults[strings.ToLower(string(c))]
-		if !ok {
-			b.WriteByte('%')
+		lower := strings.ToLower(string(c))
+
+		// An object with no gender set is referred to by name throughout,
+		// so "%s smiles" reads "Igor smiles" rather than losing the
+		// subject. Nothing here is capitalised: the name carries its own
+		// case already.
+		if idx == 0 {
+			switch lower {
+			case "n", "o", "s", "r":
+				b.WriteString(h.Name(who))
+			case "a", "p":
+				b.WriteString(h.Name(who) + "'s")
+			default:
+				b.WriteByte(c)
+			}
+			continue
+		}
+
+		sub := ""
+		if lower == "n" {
+			sub = h.Name(who)
+		} else if table, ok := pronounDefaults[lower]; ok {
+			sub = table[idx]
+		} else {
+			// An unrecognised directive letter stands for itself, without
+			// the '%' that introduced it.
 			b.WriteByte(c)
 			continue
 		}
-		sub := table[idx]
 		if c >= 'A' && c <= 'Z' && sub != "" {
 			sub = strings.ToUpper(sub[:1]) + sub[1:]
 		}
@@ -308,24 +332,8 @@ func strCrypt(fn func(data, key string) string) primFunc {
 	}
 }
 
-// ansiColorCodes is TEXTATTR's own attribute-tag table, from
-// fuzzball/include/color.h.
-var ansiColorCodes = map[string]string{
-	"reset": "\x1b[0m", "normal": "\x1b[0m",
-	"bold": "\x1b[1m", "dim": "\x1b[2m", "italic": "\x1b[3m",
-	"uline": "\x1b[4m", "underline": "\x1b[4m",
-	"flash": "\x1b[5m", "reverse": "\x1b[7m",
-	"ostrike": "\x1b[9m", "overstrike": "\x1b[9m",
-	"black": "\x1b[30m", "red": "\x1b[31m", "green": "\x1b[32m",
-	"yellow": "\x1b[33m", "blue": "\x1b[34m", "magenta": "\x1b[35m",
-	"cyan": "\x1b[36m", "white": "\x1b[37m",
-	"bg_black": "\x1b[40m", "bg_red": "\x1b[41m", "bg_green": "\x1b[42m",
-	"bg_yellow": "\x1b[43m", "bg_blue": "\x1b[44m", "bg_magenta": "\x1b[45m",
-	"bg_cyan": "\x1b[46m", "bg_white": "\x1b[47m",
-}
-
 // textAttr is a port of prim_textattr: attrs is a comma-separated (spaces
-// ignored) list of tags from ansiColorCodes, each turned into its escape
+// ignored) list of tags from internal/ansi, each turned into its escape
 // sequence and prepended to text, which is always followed by a reset.
 func textAttr(text, attrs string) (string, error) {
 	var b strings.Builder
@@ -334,18 +342,13 @@ func textAttr(text, attrs string) (string, error) {
 		if tag == "" {
 			continue
 		}
-		code, ok := ansiColorCodes[strings.ToLower(tag)]
+		code, ok := ansi.Code(tag)
 		if !ok {
-			return "", errf("Unrecognized attribute tag.  Try one of reset, " +
-				"bold, dim, italic, underline, flash, reverse, " +
-				"overstrike, black, red, green, yellow, blue, " +
-				"magenta, cyan, white, bg_black, bg_red, " +
-				"bg_green, bg_yellow, bg_blue, bg_magenta, " +
-				"bg_cyan, or bg_white.")
+			return "", errf("Unrecognized attribute tag.  Try one of " + ansi.TagList)
 		}
 		b.WriteString(code)
 	}
 	b.WriteString(text)
-	b.WriteString(ansiColorCodes["reset"])
+	b.WriteString(ansi.Reset)
 	return b.String(), nil
 }

@@ -406,5 +406,7 @@ and `EVENT_WAITFOR`, the MUF editor works, so programs can be written on the
 server rather than only imported, and MCP 2.1 and MCP-GUI are negotiated with
 clients that speak them.
 
-What is left: 111 of the 417 primitives, about 89 of the 140 MPI functions,
-and all of M8.
+What is left: 20 of the 417 primitives — nine of which are a coverage-test
+false positive, since the compiler dispatches them as pseudo-ops rather than
+registering them — and all of M8. Every one of the 140 MPI functions is
+implemented.

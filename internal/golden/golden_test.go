@@ -933,6 +933,80 @@ public foo
   "{exec!:_one}" show
 ;`,
 	},
+	{
+		// MPI object introspection. Anything environment-dependent — a
+		// dbref number, a connection's idle time, the clock — is compared
+		// only for shape, the same rule the connects case follows.
+		Name: "mpi_objects2",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  "{type:me}" show
+  "{type:here}" show
+  "{type:#-1}" show
+  "{fullname:me}" show
+  "{flag?:me,player}" show
+  "{flag?:me,dark}" show
+  "{flag?:me,!dark}" show
+  "{controls:me,me}" show
+  "{controls:here,me}" show
+  "{holds:me,here}" show
+  "{holds:here,me}" show
+  "{contains:me,here}" show
+  "{contains:here,me}" show
+  "{nearby:me,me}" show
+  "{dbeq:me,me}" show
+  "{dbeq:me,here}" show
+  "{money:me}" show
+  "{money:here}" show
+  "{count:{contents:here}}" show
+  "{count:{contents:here,Player}}" show
+  "{count:{exits:me}}" show
+  "{count:{links:me}}" show
+  "{locked:me,here}" show
+  "{usecount:me}" show
+
+  ( errors and edge cases )
+  "{contents:here,Exit}" show
+  "{contents:here,nonsense}" show
+  "{online}" show
+
+  ( strings, numbers and time: all deterministic )
+  "{smatch:hello,h*}" show
+  "{smatch:hello,goodbye}" show
+  "{xor:1,0}" show
+  "{xor:1,1}" show
+  "{dist:3,4}" show
+  "{dist:0,0,3,4}" show
+  "{dice:1,0}" show
+  "{dice:0}" show
+  "{timestr:90}" show
+  "{timestr:90061}" show
+  "{stimestr:90}" show
+  "{stimestr:45}" show
+  "{stimestr:90061}" show
+  "{ltimestr:90}" show
+  "{ltimestr:0}" show
+  "{convtime:12:00:00 01/01/2000}" show
+  "{ftime:%Y-%m-%d,,946684800}" show
+  "{ftime:%H:%M:%S,,946684800}" show
+  "{default:,fallback}" show
+  "{default:given,fallback}" show
+  "{commas:{mklist:a,b,c}}" show
+  "{commas:{mklist:a}}" show
+  "{commas:{mklist:a,b}, or }" show
+  "{escape:plain text}" show
+  "{with:n,7,{v:n}}" show
+  "{muckname}" show
+  "{sysparm:penny}" show
+  "{pronouns:%s likes %p stuff.}" show
+  "{attr:bold,red,hi}" strlen 0 > t
+  "{attr:nosuchtag,hi}" show
+  "{dist:1}" show
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this
