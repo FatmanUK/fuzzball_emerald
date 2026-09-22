@@ -31,6 +31,33 @@ func (h *mpiHost) SetPropStr(obj mpi.Ref, path, val string) {
 	h.w.SetProp(ref.Ref(obj), path, props.Value{Type: props.String, Str: val})
 }
 
+func (h *mpiHost) DelProp(obj mpi.Ref, path string) {
+	if o := h.w.Get(ref.Ref(obj)); o != nil {
+		o.Props.Delete(path)
+		h.w.Modified(ref.Ref(obj))
+	}
+}
+
+func (h *mpiHost) PropChildren(obj mpi.Ref, path string) []string {
+	if o := h.w.Get(ref.Ref(obj)); o != nil {
+		return o.Props.Children(path)
+	}
+	return nil
+}
+
+func (h *mpiHost) BlessProp(obj mpi.Ref, path string, blessed bool) {
+	v, ok := h.w.GetProp(ref.Ref(obj), path)
+	if !ok {
+		return
+	}
+	v.Blessed = blessed
+	h.w.SetProp(ref.Ref(obj), path, v)
+}
+
+func (h *mpiHost) Parent(obj mpi.Ref) mpi.Ref {
+	return mpi.Ref(h.w.Parent(ref.Ref(obj)))
+}
+
 func (h *mpiHost) Location(obj mpi.Ref) mpi.Ref {
 	if o := h.w.Get(ref.Ref(obj)); o != nil {
 		return mpi.Ref(o.Location)

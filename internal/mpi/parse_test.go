@@ -20,7 +20,22 @@ func (h *stubHost) GetPropStr(obj Ref, path string) string {
 func (h *stubHost) SetPropStr(obj Ref, path, val string) {
 	h.props[itoa(int(obj))+"/"+path] = val
 }
-func (h *stubHost) Location(Ref) Ref      { return 0 }
+func (h *stubHost) DelProp(obj Ref, path string) {
+	delete(h.props, itoa(int(obj))+"/"+path)
+}
+
+func (h *stubHost) PropChildren(Ref, string) []string { return nil }
+func (h *stubHost) BlessProp(Ref, string, bool)       {}
+
+func (h *stubHost) Location(Ref) Ref { return 0 }
+func (h *stubHost) Parent(obj Ref) Ref {
+	// A flat world: everything sits directly in #0, and #0 has no parent,
+	// so an environment walk terminates after one step.
+	if obj == 0 {
+		return -1
+	}
+	return 0
+}
 func (h *stubHost) Owner(Ref) Ref         { return 1 }
 func (h *stubHost) Contents(Ref) []Ref    { return nil }
 func (h *stubHost) Valid(obj Ref) bool    { return obj >= 0 }

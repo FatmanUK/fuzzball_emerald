@@ -811,6 +811,128 @@ public foo
   0 try "x" "e" "d" event_send catch ts endcatch
 ;`,
 	},
+	{
+		// Phase 5: the MPI list functions and the looping ones built on
+		// them. A carriage return inside a result would split the line the
+		// harness compares, so a list is inspected with {count}, {lmember}
+		// and {sublist} rather than printed whole.
+		Name: "mpi_lists",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  ( build and measure )
+  "{count:{mklist:a,b,c}}" show
+  "{count:}" show
+  "{count:{mklist:a,b,c},b}" show
+
+  ( slicing, forwards, backwards and out of range )
+  "{sublist:{mklist:a,b,c,d},2}" show
+  "{count:{sublist:{mklist:a,b,c,d},2,3}}" show
+  "{sublist:{mklist:a,b,c,d},-1}" show
+  "{sublist:{mklist:a,b,c,d},2,99}" show
+  "{sublist:{mklist:a,b,c},0}" show
+  "{sublist:{mklist:a,b,c}}" show
+
+  ( set operations, and the case-sensitivity split between them )
+  "{count:{lunique:{mklist:a,b,a,A}}}" show
+  "{count:{lcommon:{mklist:a,b,c},{mklist:b,c,d}}}" show
+  "{sublist:{lcommon:{mklist:a,b,c},{mklist:b,c,d}},1}" show
+  "{count:{lunion:{mklist:a,b},{mklist:B,c}}}" show
+  "{count:{lremove:{mklist:a,b,c},{mklist:b}}}" show
+  "{count:{lremove:{mklist:a,B,c},{mklist:b}}}" show
+  "{lmember:{mklist:a,b,c},b}" show
+  "{lmember:{mklist:a,b,c},z}" show
+
+  ( sorting, default and with a comparison body )
+  "{sublist:{lsort:{mklist:item10,item2,item1}},1}" show
+  "{sublist:{lsort:{mklist:item10,item2,item1}},3}" show
+  "{sublist:{lsort:{mklist:b,a,c}},1}" show
+  "{sublist:{lsort:{mklist:1,3,2},a,b,{gt:{&a},{&b}}},1}" show
+
+  ( the looping functions: each yields only its last iteration )
+  "{for:i,1,5,1,{&i}}" show
+  "{for:i,5,1,-1,{&i}}" show
+  "{foreach:x,{mklist:a,b,c},{&x}}" show
+  "{count:{filter:x,{mklist:1,0,2},{&x}}}" show
+  "{fold:acc,x,{mklist:1,2,3},{add:{&acc},{&x}}}" show
+  "{fold:acc,x,{mklist:7},{add:{&acc},{&x}}}" show
+
+  ( variables: does a {set} inside a nested body reach a {with} binding? )
+  "{with:n,0,{&n}}" show
+  "{with:n,0,{set:n,5}{&n}}" show
+  "{with:n,0,{if:1,{set:n,5}}{&n}}" show
+
+  ( eval, and the macros built on it )
+  "{eval:{lit:{add:1,2}}}" show
+  "{func:double,n,{add:{&n},{&n}}}{double:21}" show
+  "{func:greet,a,b,{&a}-{&b}}{greet:x,y}" show
+
+  ( errors )
+  "{lsort:a,b}" show
+  "{count:{mklist:a,b},}" show
+  "{nosuchfunction:x}" show
+;`,
+	},
+	{
+		// MPI property functions. {prop} searches outwards through the
+		// environment and {prop!} does not, which is what the room-set
+		// property here distinguishes.
+		Name: "mpi_props",
+		Source: tellPrelude + `: show[ str:s -- ]
+  me @ "_/de" s @ setprop
+  me @ "_/de" "" 0 parseprop ts
+;
+: main
+  me @ location "_envtest" "fromroom" setprop
+  me @ "_own" "mine" setprop
+  "{prop:_own}" show
+  "{prop!:_own}" show
+  "{prop:_envtest}" show
+  "{prop!:_envtest}" show
+  "{prop:_nosuch}" show
+
+  me @ "_ind" "_own" setprop
+  "{index:_ind}" show
+  "{index!:_ind}" show
+  "{index:_nosuch}" show
+
+  me @ "_dir/a" "1" setprop
+  "{propdir:_dir}" show
+  "{propdir:_own}" show
+
+  me @ "_gone" "here" setprop
+  "{prop!:_gone}" show
+  "{delprop:_gone}" show
+  "{prop!:_gone}" show
+
+  ( property lists: a count and numbered items )
+  me @ "_stuff#" "3" setprop
+  me @ "_stuff#/1" "one" setprop
+  me @ "_stuff#/2" "two" setprop
+  me @ "_stuff#/3" "three" setprop
+  "{count:{list:_stuff}}" show
+  "{parse:x,{list:_stuff},{&x},,+}" show
+  "{concat:_stuff}" show
+  "{select:2,_stuff}" show
+  "{select:9,_stuff}" show
+  "{count:{list:_nosuchlist}}" show
+
+  ( a list with no count property is measured by walking it )
+  me @ "_walk#/1" "a" setprop
+  me @ "_walk#/2" "b" setprop
+  "{count:{list:_walk}}" show
+
+  ( lexec runs a property list as MPI )
+  me @ "_code#/1" "{add:1," setprop
+  me @ "_code#/2" "2}" setprop
+  "{lexec:_code}" show
+  me @ "_one" "{add:3,4}" setprop
+  "{exec:_one}" show
+  "{exec!:_one}" show
+;`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and against this

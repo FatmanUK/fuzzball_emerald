@@ -146,7 +146,9 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		return env.Host.GetPropStr(obj, args[0]), nil
+		// {prop} searches outwards through the environment; {prop!} is the
+		// form that looks only at the object named.
+		return env.getProp(obj, args[0]), nil
 	})
 	register("STORE", func(env *Env, _ *Func, args []string) (string, error) {
 		// "{store:value,property,object}"
@@ -224,10 +226,16 @@ func init() {
 	})
 
 	register("SET", func(env *Env, _ *Func, args []string) (string, error) {
+		// Only an already-bound variable may be set, and the new value is
+		// also what the call produces — so "{set:n,5}{&n}" reads "55", not
+		// "5".
+		if _, ok := env.Var(args[0]); !ok {
+			return "", errf("SET", "No such variable currently defined.")
+		}
 		if err := env.SetVar(args[0], args[1]); err != nil {
 			return "", err
 		}
-		return "", nil
+		return args[1], nil
 	})
 
 	register("TELL", func(env *Env, _ *Func, args []string) (string, error) {

@@ -48,6 +48,10 @@ type Env struct {
 	depth int
 	instr int
 
+	// funcs holds the macros {func} defines, keyed by upper-cased name.
+	// They live only as long as one evaluation.
+	funcs map[string]string
+
 	// notes collects the messages a failing call produces, which upstream
 	// sends to the player as it goes.
 	notes []string
@@ -69,12 +73,20 @@ type Host interface {
 	Name(obj Ref) string
 	// GetPropStr reads a property's string value.
 	GetPropStr(obj Ref, path string) string
-	// SetPropStr writes one.
+	// SetPropStr writes one, and DelProp removes one.
 	SetPropStr(obj Ref, path, val string)
+	DelProp(obj Ref, path string)
+	// PropChildren lists the names directly under a property path.
+	PropChildren(obj Ref, path string) []string
+	// BlessProp sets or clears a property's blessed flag.
+	BlessProp(obj Ref, path string, blessed bool)
 	// Location, Owner and Contents answer the obvious questions.
 	Location(obj Ref) Ref
 	Owner(obj Ref) Ref
 	Contents(obj Ref) []Ref
+	// Parent is one step out in the environment tree, upstream's
+	// getparent: a property search walks it until something answers.
+	Parent(obj Ref) Ref
 	// Valid reports whether a ref names a live object.
 	Valid(obj Ref) bool
 	// IsPlayer reports whether it is a player, and Online whether they are
@@ -220,9 +232,6 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 	}
 
 	fn, known := Lookup(name)
-	if !known {
-		return "", 0, errf(name, "Unrecognized function.")
-	}
 
 	// Collect the raw arguments.
 	var args []string
@@ -235,6 +244,17 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 		if err != nil {
 			return "", 0, errf(name, "%s", err.Error())
 		}
+	}
+
+	if !known {
+		// A name the built-in table does not hold may still be a macro —
+		// one {func} defined, or one stored in a property.
+		body, found := env.macro(name)
+		if !found {
+			return "", 0, errf(name, "Unrecognized function.")
+		}
+		out, err := env.expandMacro(body, args)
+		return out, end, err
 	}
 
 	if varName != "" {
