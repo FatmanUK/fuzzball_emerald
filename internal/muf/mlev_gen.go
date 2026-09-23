@@ -40,8 +40,6 @@ var primMLevel = map[string]int{
 	"NOTIFY_SECURE":        3,
 	"OTELL":                2,
 	"PARSEMPI":             3,
-	"PARSEPROP":            3,
-	"PARSEPROPEX":          3,
 	"PART_PMATCH":          3,
 	"PNAME_HISTORY":        4,
 	"PROGRAM_SETLINES":     4,
@@ -49,7 +47,6 @@ var primMLevel = map[string]int{
 	"QUEUE":                3,
 	"SETNAME":              4,
 	"SETOWN":               4,
-	"SMTP_SEND":            4,
 	"TOADPLAYER":           4,
 	"UNCOMPILE":            4,
 }

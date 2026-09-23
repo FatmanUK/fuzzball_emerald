@@ -24,37 +24,34 @@ git submodule update --init fuzzball
 
 ## Status
 
-Early, but playable. M0 (skeleton, `@tune` table, container), M1 (object model,
-properties, world goroutine, Postgres persistence), M2 (legacy importer) and M3
-(transports, login, basic commands) are done: you can import the shipped
-starter world, connect a real MUCK client over TLS, walk around, talk and
-build.
+All nine milestones are done. The server imports a legacy world, accepts real
+MUCK clients over TLS and WebSocket, runs MUF and evaluates MPI, and supports
+look, movement, speech, building and admin commands.
 
-M4 is done and M5 and M6 are partly done: MUF compiles and runs, and MPI is
-evaluated in descriptions and exit messages. Every program the starter world
-ships compiles except three that cannot compile anywhere, and the interpreter
-executes arithmetic, control flow, procedures, scoped variables, arrays and
-try/catch. Programs can now wait: `READ` suspends one until the player types a line,
-`SLEEP` until a time passes, and `@ps` and `@kill` manage what is waiting.
+Programs can suspend themselves on `READ`, `SLEEP`, `EVENT_WAITFOR` and
+timers, and `@ps` and `@kill` manage what is waiting. The MUF editor works, so
+programs can be written on the server rather than only imported: `@program`
+makes one and opens it, `@edit` reopens it, `@list` prints it. The wizard
+commands are in — `@force`, `@toad`, `@boot`, `@stats`, `@pcreate` — along
+with `@sanity`, `@sanfix` and `@sanchange` for a damaged database. MCP 2.1 and
+MCP-GUI are negotiated with clients that speak them, so a program can put a
+dialog on a client that can show one. `examine` reports what Fuzzball's does,
+in the same shape, including the property-listing form.
 
-The MUF editor works, so programs can be written on the server instead of only
-imported: `@program` makes one and opens it, `@edit` reopens it, `@list` prints
-it. The wizard commands are in — `@force`, `@toad`, `@boot`, `@stats`,
-`@pcreate` — along with `@sanity`, `@sanfix` and `@sanchange` for a damaged
-database, and MCP 2.1 and MCP-GUI are negotiated with clients that speak them,
-so a program can put a dialog on a client that can show one.
+Every MUF primitive and every MPI function is implemented: 412 of the 417
+primitive names, the other five being compiler internals no program can name,
+and all 140 MPI functions.
 
-`examine` reports what Fuzzball's does, in the same shape, including the
-property-listing form.
+One thing is deliberately not ported: `DEBUGGER_BREAK`'s interactive prompt.
+The instruction tracer behind it is — a program flagged `DARK` prints a line
+per instruction — but there is no prompt to step from, so a break turns
+tracing on rather than suspending the program.
 
-Each of those is checked against a real Fuzzball 7 line for line, not just
-against a reading of its source.
-
-397 of 417 MUF primitives are implemented — nine of the twenty reported
-missing are a counting artefact, since the compiler dispatches them as
-pseudo-ops rather than registering them — and all 140 MPI functions are.
-What is genuinely absent is the MUF single-step debugger, `SMTP_SEND` and
-`PARSEPROPEX`.
+**None of that is taken on trust.** Every primitive, every MPI function and
+every command above is checked against a real Fuzzball 7 line for line, not
+against a reading of its source — see "Checking against real Fuzzball" below.
+That harness has repeatedly found this server wrong where careful reading of
+the C had said otherwise.
 
 ## Building
 

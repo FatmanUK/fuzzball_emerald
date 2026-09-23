@@ -261,3 +261,147 @@ func statsArg(f *Frame) (ref.Ref, Host, error) {
 	}
 	return owner, h, nil
 }
+
+// SMTP_SEND sends an email. It is the one primitive that reaches outside the
+// server entirely, and is wizard-only for that reason.
+func init() {
+	register("SMTP_SEND", func(f *Frame) (*Result, error) {
+		// "Permission Denied." with a capital D here, unlike most of the
+		// server — upstream's own, so it is checked inline rather than
+		// left to the generated table.
+		if f.MLevel() < 4 {
+			return nil, errf("Permission Denied.")
+		}
+		bodyV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		subjectV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		toNameV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		toEmailV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+
+		// A server with no relay configured reports so rather than
+		// failing, so a program can offer mail when it is available and
+		// do without when it is not.
+		if !h.SMTPConfigured() {
+			return nil, f.Push(Int(-1))
+		}
+		if tlsOK, authOK := h.SMTPModesValid(); !tlsOK {
+			return nil, errf("Server has SMTP enabled, but smtp_ssl_type is " +
+				"less than 0 or greater than 2.")
+		} else if !authOK {
+			return nil, errf("Server has SMTP enabled, but smtp_auth_type is " +
+				"less than 0 or greater than 3.")
+		}
+
+		if bodyV.Type != TypeArray {
+			return nil, errf("Argument not an array.(4)")
+		}
+		if bodyV.Array.Len() == 0 {
+			return nil, errf("Cannot send empty body.(4)")
+		}
+		if subjectV.Type != TypeString {
+			return nil, errf("Argument not a string.(3)")
+		}
+		if subjectV.Str == "" {
+			return nil, errf("Subject must be a non-empty string.(3)")
+		}
+		if toNameV.Type != TypeString {
+			return nil, errf("Argument not a string.(2)")
+		}
+		if toEmailV.Type != TypeString {
+			return nil, errf("Argument not a string.(1)")
+		}
+		if toEmailV.Str == "" {
+			return nil, errf("To email must be a non-empty string.(1)")
+		}
+
+		lines := make([]string, 0, bodyV.Array.Len())
+		for _, v := range bodyV.Array.Values() {
+			lines = append(lines, v.String())
+		}
+		h.SendMail(toEmailV.Str, toNameV.Str, subjectV.Str,
+			strings.Join(lines, "\r\n"), f.Caller)
+		return nil, f.Push(Int(0))
+	})
+}
+
+// The MUF debugger's four primitives.
+//
+// Upstream's debugger has two halves: an instruction tracer, and an
+// interactive prompt a breakpoint drops the player into. The tracer is what
+// DEBUG_ON, DEBUG_OFF and DEBUG_LINE drive, and it is ported — a program
+// flagged DARK prints a line per instruction to whoever controls it. The
+// prompt is not: see DEBUGGER_BREAK.
+func init() {
+	register("DEBUG_ON", debugFlag(true))
+	register("DEBUG_OFF", debugFlag(false))
+
+	// DEBUG_LINE prints a single trace line, for a program that is tracing
+	// only the part it cares about rather than all of itself. It is
+	// deliberately silent when the program *is* flagged for tracing, since
+	// the line would be printed twice.
+	register("DEBUG_LINE", func(f *Frame) (*Result, error) {
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		if h.Flags(f.Prog.Ref).Has(ref.Dark) || !h.Controls(f.Caller, f.Prog.Ref) {
+			return nil, nil
+		}
+		if f.PC >= 0 && f.PC < len(f.Prog.Code) {
+			f.trace(f.Prog.Code[f.PC])
+		}
+		return nil, nil
+	})
+
+	// DEBUGGER_BREAK asks upstream to stop and hand the player a debugger
+	// prompt, where they could step, inspect and continue. Emerald has no
+	// such prompt — it would mean taking over a connection's input, which
+	// nothing else in this server does — so the nearest honest thing is
+	// done instead: tracing is forced on for the rest of this program's
+	// run, so the player sees what a break would have let them step
+	// through. A program that breaks is therefore not suspended, which is
+	// the difference that matters.
+	register("DEBUGGER_BREAK", func(f *Frame) (*Result, error) {
+		f.ForceTrace = true
+		f.Traced = true
+		return nil, nil
+	})
+}
+
+// debugFlag builds DEBUG_ON and DEBUG_OFF, which set and clear the running
+// program's DARK flag — which is what "this program is being debugged" means.
+func debugFlag(on bool) primFunc {
+	return func(f *Frame) (*Result, error) {
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		flags := h.Flags(f.Prog.Ref)
+		if on {
+			flags |= ref.Dark
+		} else {
+			flags &^= ref.Dark
+		}
+		h.SetFlags(f.Prog.Ref, flags)
+		// Taking effect at once rather than when the frame next resumes
+		// is what makes "debug_on ... debug_off" trace the part between
+		// them and nothing else.
+		f.Traced = on || f.ForceTrace
+		return nil, nil
+	}
+}

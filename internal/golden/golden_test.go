@@ -934,6 +934,36 @@ public foo
 ;`,
 	},
 	{
+		// PARSEPROPEX: MPI with a MUF dictionary in scope, handed back
+		// with whatever the MPI left in each variable.
+		Name: "parsepropex",
+		Source: tellPrelude + `: main
+  me @ "_px" "{&greeting}, {&name}!{set:name,changed}" setprop
+  me @ "_px" { "greeting" "Hello" "name" "world" }dict 0 parsepropex
+  ts
+  dup "name" [] ts
+  "greeting" [] ts
+
+  ( a property that is not set evaluates to nothing and changes nothing )
+  me @ "_nosuchprop" { "a" "1" }dict 0 parsepropex
+  ts
+  "a" [] ts
+
+  ( every value type becomes the text an MPI variable holds )
+  me @ "_types" "{&i}/{&d}/{&s}" setprop
+  me @ "_types" { "i" 42 "d" me @ "s" "txt" }dict 0 parsepropex
+  ts pop
+
+  ( argument checking )
+  0 try me @ "_px" { 1 2 }dict 0 parsepropex catch ts endcatch
+  0 try me @ "_px" { "a" "b" }list 0 parsepropex catch ts endcatch
+  0 try me @ "_px" { "a" "b" }dict 2 parsepropex catch ts endcatch
+  0 try #-1 "_px" { "a" "b" }dict 0 parsepropex catch ts endcatch
+  0 try me @ 3 { "a" "b" }dict 0 parsepropex catch ts endcatch
+;`,
+	},
+
+	{
 		// MPI object introspection. Anything environment-dependent — a
 		// dbref number, a connection's idle time, the clock — is compared
 		// only for shape, the same rule the connects case follows.

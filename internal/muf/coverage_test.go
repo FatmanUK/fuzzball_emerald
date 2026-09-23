@@ -16,7 +16,11 @@ func TestPrimitiveCoverage(t *testing.T) {
 		if strings.HasPrefix(name, " ") {
 			continue // internal, emitted by the compiler
 		}
-		if _, ok := prims[i]; !ok {
+		// A primitive the compiler emits as an instruction is answered by
+		// Frame.primitive rather than from the prims map. Counting those
+		// as missing is what made every previous survey of this file
+		// report nine gaps that were not there.
+		if _, ok := prims[i]; !ok && !Dispatched(i) {
 			missing = append(missing, name)
 		}
 	}

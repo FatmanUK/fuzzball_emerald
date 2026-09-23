@@ -150,6 +150,14 @@ type Host interface {
 	// is a host method because MUF and MPI are separate languages that the
 	// server joins, not layers of one another.
 	ParseProp(obj ref.Ref, path, arg string, private bool) (string, error)
+	// ParsePropEx is ParseProp with named variables in scope —
+	// PARSEPROPEX. Each of vars is bound before the property is evaluated
+	// and read back afterwards, so the MPI can hand values out as well as
+	// take them in; the returned slice is in the same order it was given.
+	// A property that is unset or empty evaluates to nothing and leaves
+	// the variables as they were.
+	ParsePropEx(obj ref.Ref, path string, vars []MPIVar, private bool) (string, []MPIVar, error)
+
 	// ParseMPI evaluates source as MPI directly — PARSEMPI/PARSEMPIBLESSED,
 	// as opposed to ParseProp's own "read a property, then evaluate it".
 	// who is both the audience and the permissions object, upstream's own
@@ -257,6 +265,15 @@ type Host interface {
 	CopyObject(src ref.Ref, copyHidden bool) (ref.Ref, error)
 	// DumpNow asks the persister to write what is pending — DUMP.
 	DumpNow()
+
+	// SMTPConfigured reports whether the server has a mail relay set at
+	// all, and SMTPModesValid whether its two mode parameters hold values
+	// the server knows — both SMTP_SEND's own checks, made before anything
+	// is queued. SendMail hands a message off to be delivered; see the
+	// implementation for why it cannot report a delivery failure.
+	SMTPConfigured() bool
+	SMTPModesValid() (tlsOK, authOK bool)
+	SendMail(toEmail, toName, subject, body string, by ref.Ref)
 
 	// TimerCount, TimerStart and TimerStop are TIMER_START/TIMER_STOP's own
 	// bookkeeping against one process's pending timers. A timer that comes
@@ -436,6 +453,13 @@ type Host interface {
 	WatchPID(callerPID, targetPID int) bool
 }
 
+// MPIVar is one named variable PARSEPROPEX puts in scope, and reads back
+// once the property has been evaluated.
+type MPIVar struct {
+	Name  string
+	Value string
+}
+
 // TuneEntry is one row of SYSPARM_ARRAY's result, upstream's own
 // tune_parms_array dictionary.
 type TuneEntry struct {
@@ -588,6 +612,16 @@ type Frame struct {
 	// this run has made. Below mucker level 3 it caps a program at one, so
 	// a low-level program cannot fill the database in a loop.
 	alreadyCreated int
+
+	// Traced is whether this frame is currently printing a trace line per
+	// instruction. It is recomputed whenever the frame resumes, and
+	// DEBUG_ON/DEBUG_OFF set it directly so they take effect immediately.
+	Traced bool
+
+	// ForceTrace makes this frame print a trace line per instruction even
+	// when its program is not flagged DARK — DEBUGGER_BREAK's own effect,
+	// since Emerald has no interactive debugger to break into.
+	ForceTrace bool
 
 	// rndbuf is upstream's fr->rndbuf: the 16-byte state SRAND draws from,
 	// seeded on first use and readable and replaceable through

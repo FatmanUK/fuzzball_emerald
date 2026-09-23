@@ -608,6 +608,13 @@ func init() {
 
 	register("PARSEPROP", func(f *Frame) (*Result, error) {
 		// "object propname arg flags parseprop"
+		//
+		// The floor is checked here rather than left to the generated
+		// table because the wording is its own: upstream spells the
+		// requirement out instead of saying "Permission denied."
+		if f.MLevel() < 3 {
+			return nil, errf("Mucker level 3 or greater required.")
+		}
 		flags, err := f.popInt()
 		if err != nil {
 			return nil, err

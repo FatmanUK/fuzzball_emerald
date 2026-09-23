@@ -406,9 +406,43 @@ and `EVENT_WAITFOR`, the MUF editor works, so programs can be written on the
 server rather than only imported, and MCP 2.1 and MCP-GUI are negotiated with
 clients that speak them.
 
-What is left: 20 of the 417 primitives — nine of which are a coverage-test
-false positive, since the compiler dispatches them as pseudo-ops rather than
-registering them. Every one of the 140 MPI functions is implemented.
+**Every primitive and every MPI function is implemented**: 412 of the 417
+names, the other five being compiler internals (`" FOR"`, `" FOREACH"` and
+the rest) that no program can name, and all 140 `mfn_*` functions.
+
+Nine primitives are dispatched by `Frame.primitive` rather than registered in
+the `prims` map, because the compiler emits them as instructions — `JMP`,
+`READ`, `SLEEP`, `CALL`, `EXECUTE`, `EXIT`, `EVENT_WAITFOR`, `CATCH`,
+`CATCH_DETAILED`. `registry.go`'s `dispatched` table names them so a survey
+counts them as present; before it existed, every reading of this codebase
+reported nine gaps that were not there.
+
+## The MUF debugger
+
+A program flagged `DARK` is being traced: the interpreter prints a line per
+instruction to whoever controls it, which is what `DEBUG_ON` and `DEBUG_OFF`
+switch. `internal/muf/debug.go` renders those lines, and upstream builds them
+*backwards*, which is why the stack comes before the instruction:
+
+    Debug> Pid 7: #58 6 ("", 3) DEBUG_OFF
+
+The stack reads bottom to top, cut to its last eight with a leading `...`.
+
+**The trace cannot be compared instruction for instruction against upstream,
+and the golden case does not try.** The two compilers emit different code for
+the same source: upstream fuses a variable reference with the `!` or `@` that
+follows it, and a procedure address with the call that consumes it, where
+Emerald emits each separately. Every *rendering* agrees — source line, stack,
+strings cut at thirty characters with a trailing `_`, `SV0:name`,
+`INIT FUNC: name (1 arg)`, `EXIT` — so `debugtrace_test.go` compares the
+sequence of source lines walked, plus the untraced output either side.
+
+`DEBUGGER_BREAK` is the one piece not ported. Upstream drops the player into
+an interactive prompt to step and inspect; that would mean taking over a
+connection's input, which nothing else in this server does. It forces tracing
+on for the rest of the run instead, so the player sees what they would have
+stepped through — but the program is not suspended, which is the difference
+that matters.
 
 ## Limits
 

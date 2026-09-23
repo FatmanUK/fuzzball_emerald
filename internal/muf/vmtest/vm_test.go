@@ -125,6 +125,14 @@ func (h *fakeHost) CopyObject(ref.Ref, bool) (ref.Ref, error) {
 	return ref.Nothing, nil
 }
 
+func (h *fakeHost) SMTPConfigured() bool                             { return false }
+func (h *fakeHost) SMTPModesValid() (bool, bool)                     { return true, true }
+func (h *fakeHost) SendMail(string, string, string, string, ref.Ref) {}
+
+func (h *fakeHost) ParsePropEx(ref.Ref, string, []muf.MPIVar, bool) (string, []muf.MPIVar, error) {
+	return "", nil, nil
+}
+
 func (h *fakeHost) Interp(int, int, ref.Ref, ref.Ref, string) (muf.Value, bool) {
 	return muf.Value{}, false
 }

@@ -18,14 +18,12 @@ replacing four things that have aged worst in the C original:
 | Flat-file dump, world freezes to save | **Postgres**, continuous write-behind |
 | autotools + hand-rolled Dockerfile | Rootless **Podman** container |
 
-Milestones **M0 through M8 are complete**, and so is the primitive and MPI
-surface bar a handful of deliberate deferrals: 397 of 417 primitives (nine of
-the twenty reported missing are a counting artefact — the compiler dispatches
-them as pseudo-ops rather than registering them) and all 140 MPI functions.
+**Milestones M0 through M8 are complete, and so is the primitive and MPI
+surface.** 412 of 417 primitive names — the other five are compiler internals
+(`" FOR"` and friends) that no program can name — and all 140 MPI functions.
 
-What is genuinely unported: the MUF single-step debugger
-(`DEBUGGER_BREAK`/`DEBUG_LINE`/`DEBUG_ON`/`DEBUG_OFF`), `SMTP_SEND`, and
-`PARSEPROPEX`. See §2 for why each was left.
+One behaviour is deliberately not ported, and only one: `DEBUGGER_BREAK`'s
+interactive prompt. See §2.
 
 ## 2. Next Three Steps
 
@@ -505,6 +503,58 @@ pprof reachable on loopback and not on the host's own address, the per-host
 cap refusing before the handshake, and `SIGTERM` delivering
 `## The server is shutting down. ##` to held connections before exiting
 cleanly.
+
+## The deferrals, closed
+
+The three things every earlier phase left behind are now done, taking the
+count to **412 of 417 primitive names** — the other five are compiler
+internals (`" FOR"`, `" FOREACH"`, `" FORITER"`, `" FORPOP"`, `" TRYPOP"`)
+that no program can name — with **nothing missing**.
+
+- **The coverage test was lying, and now is not.** Nine primitives are emitted
+  by the compiler as instructions and answered by `Frame.primitive` rather
+  than registered in the `prims` map: `JMP`, `READ`, `SLEEP`, `CALL`,
+  `EXECUTE`, `EXIT`, `EVENT_WAITFOR`, `CATCH`, `CATCH_DETAILED`. Every survey
+  of this codebase — including several in this file's own history — reported
+  them as gaps. `registry.go` now names them in a `dispatched` table that
+  `Implemented()` and the coverage test both consult, so the number means what
+  it says.
+- **`PARSEPROPEX`** was straightforward once the MPI package was finished:
+  bind the caller's dictionary as MPI variables, evaluate, hand the variables
+  back with whatever the MPI left in them. Golden-verified first try.
+- **`SMTP_SEND`** sends real mail through `net/smtp`, with one deliberate
+  divergence: the send runs off the world goroutine, so the primitive reports
+  "accepted" rather than "delivered". Upstream blocks its whole server for the
+  round trip, and a relay that has stopped answering would freeze every player
+  for a TCP timeout. The other thing worth knowing is that a subject and a
+  recipient name are both chosen by a MUF program, so `headerValue` strips
+  CRLF from each — without it, `SMTP_SEND` is a header-injection primitive.
+- **The debugger** is ported except its prompt. `DEBUG_ON`/`DEBUG_OFF` set the
+  program's `DARK` flag and the interpreter then prints a line per
+  instruction; `DEBUG_LINE` prints one on demand. `DEBUGGER_BREAK` forces
+  tracing on instead of suspending, because an interactive prompt would mean
+  taking over a connection's input and nothing else in this server does that.
+
+Two findings from that last one are worth keeping:
+
+- **Upstream builds its trace line backwards.** `debug_inst` writes the
+  instruction first and then *prepends* the stack, so the line reads
+  `Debug> Pid 7: #58 6 ("", 3) DEBUG_OFF` — stack in the parentheses, then
+  the instruction, and the stack bottom-to-top because prepending reverses it.
+  Reading the code forwards gives exactly the wrong answer, and golden said so
+  immediately.
+- **The two compilers do not emit the same instructions.** Upstream fuses a
+  variable reference with the `!` or `@` that follows, and a procedure address
+  with the call that consumes it; Emerald emits each separately. So a
+  per-instruction trace cannot match line for line even when every rendering
+  is identical — which it now is. `debugtrace_test.go` compares the sequence
+  of *source lines* walked instead, plus the untraced output either side.
+
+Also fixed along the way: `PARSEPROP` and `SMTP_SEND` both had their mlev
+refusal wording wrong, coming from the generated table's generic "Permission
+denied." where upstream says "Mucker level 3 or greater required." and
+"Permission Denied." respectively. The golden harness runs at mucker level 3
+and cannot reach either abort, so these came from reading the C.
 
 ## 3. Project State
 

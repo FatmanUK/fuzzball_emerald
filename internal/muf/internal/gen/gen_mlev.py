@@ -94,6 +94,14 @@ CUSTOM_ABORT_MESSAGE = {
     # src/p_misc.c: EVENT_SEND's own "Requires Mucker level 3 or better."
     # — lowercase "level", and no "Permission denied." at all.
     "EVENT_SEND",
+    # src/p_props.c: both spell the requirement out as "Mucker level 3 or
+    # greater required." rather than the generic "Permission denied." The
+    # golden harness runs at mucker level 3 and so cannot reach either
+    # abort; these two came from reading the C.
+    "PARSEPROP", "PARSEPROPEX",
+    # src/p_misc.c: SMTP_SEND's own "Permission Denied." — a capital D, and
+    # no mention of the wizard bit.
+    "SMTP_SEND",
 }
 
 

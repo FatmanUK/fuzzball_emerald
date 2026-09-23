@@ -200,3 +200,112 @@ func parseMPI(blessed bool) primFunc {
 		return nil, f.Push(Str(out))
 	}
 }
+
+// PARSEPROPEX is PARSEPROP with a dictionary of variables handed in and
+// handed back: the MPI in the property can read them, and whatever it leaves
+// in them comes out the other side. It is how a MUF program and a property's
+// MPI exchange more than one value.
+func init() {
+	register("PARSEPROPEX", func(f *Frame) (*Result, error) {
+		// The floor's wording is its own, so it is checked here rather
+		// than left to the generated table — see PARSEPROP.
+		if f.MLevel() < 3 {
+			return nil, errf("Mucker level 3 or greater required.")
+		}
+		privateV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		varsV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		pathV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		objV, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if objV.Type != TypeObject {
+			return nil, errf("Non-object argument. (1)")
+		}
+		if pathV.Type != TypeString {
+			return nil, errf("Non-string argument. (2)")
+		}
+		if varsV.Type != TypeArray {
+			return nil, errf("Non-array argument. (3)")
+		}
+		if varsV.Array.IsList() {
+			return nil, errf("Dictionary array expected. (3)")
+		}
+		if privateV.Type != TypeInteger {
+			return nil, errf("Non-integer argument. (4)")
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(objV.Ref) {
+			return nil, errf("Invalid object. (1)")
+		}
+		if privateV.Num != 0 && privateV.Num != 1 {
+			return nil, errf("Integer of 0 or 1 expected. (4)")
+		}
+
+		keys, vals := varsV.Array.Keys(), varsV.Array.Values()
+		vars := make([]MPIVar, 0, len(keys))
+		for i, k := range keys {
+			if k.Type != TypeString {
+				return nil, errf("Only string keys supported. (3)")
+			}
+			if k.Str == "" {
+				return nil, errf("Empty string keys not supported. (3)")
+			}
+			if len(k.Str) > maxMPINameLen {
+				return nil, errf("Key too long to be an MPI variable. (3)")
+			}
+			// Every value becomes text, because that is all an MPI
+			// variable can hold — a dbref as "#123", a float in %g.
+			switch vals[i].Type {
+			case TypeInteger, TypeFloat, TypeObject, TypeString, TypeLock:
+			default:
+				return nil, errf("Only integer, float, dbref, string and " +
+					"lock values supported. (3)")
+			}
+			vars = append(vars, MPIVar{Name: k.Str, Value: mpiValue(vals[i])})
+		}
+
+		out, after, err := h.ParsePropEx(objV.Ref, trimPropDelim(pathV.Str),
+			vars, privateV.Num != 0)
+		if err != nil {
+			return nil, errf("%s", err.Error())
+		}
+
+		// The same dictionary comes back, its values replaced by what the
+		// MPI left in each variable — always strings, whatever went in.
+		d := NewDict()
+		for _, kv := range after {
+			d.Set(Str(kv.Name), Str(kv.Value))
+		}
+		if err := f.Push(Arr(d)); err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Str(out))
+	})
+}
+
+// maxMPINameLen is upstream's MAX_MFUN_NAME_LEN, which bounds a variable's
+// name as well as a function's.
+const maxMPINameLen = 16
+
+// mpiValue renders a MUF value as the text an MPI variable holds. A dbref
+// keeps its '#', unlike INTOSTR's own rendering, because MPI's own object
+// functions expect to read one back.
+func mpiValue(v Value) string {
+	if v.Type == TypeObject {
+		return v.Ref.String()
+	}
+	return v.String()
+}

@@ -22,7 +22,13 @@ func register(name string, fn primFunc) {
 
 // Implemented reports how many primitives have implementations, which the
 // server logs at startup so the gap is visible.
-func Implemented() int { return len(prims) }
+func Implemented() int { return len(prims) + len(dispatched) }
+
+// Dispatched reports whether a primitive is one the compiler emits as an
+// instruction rather than registering — see registry.go's own dispatched
+// table. Such a primitive works, but is answered by Frame.primitive instead
+// of appearing in prims.
+func Dispatched(n int) bool { return dispatched[n] }
 
 // primitive runs one primitive by number.
 func (f *Frame) primitive(n int) (*Result, error) {

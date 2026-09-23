@@ -69,6 +69,18 @@ var (
 	InCatch         = mustPrim("CATCH")
 	InCatchDetailed = mustPrim("CATCH_DETAILED")
 
+	// dispatched lists those same nine, so a caller counting what is
+	// implemented does not report them as gaps. They are real primitives a
+	// program may name, but the compiler emits them as instructions and
+	// Frame.primitive answers them directly, so they never appear in the
+	// prims map — which has read as "missing" to every survey of this
+	// codebase so far.
+	dispatched = map[int]bool{
+		InJmp: true, InRead: true, InSleep: true, InCall: true,
+		InExecute: true, InExit: true, InEventWaitFor: true,
+		InCatch: true, InCatchDetailed: true,
+	}
+
 	// The internal loop and try primitives, which a program cannot name.
 	InFor     = mustInternalPrim(" FOR")
 	InForeach = mustInternalPrim(" FOREACH")

@@ -359,6 +359,46 @@ func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string
 	return mpi.Eval(env, v.StringValue()), nil
 }
 
+// ParsePropEx implements muf.Host for PARSEPROPEX: ParseProp with a caller's
+// own variables in scope, handed back with whatever the MPI left in them.
+func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, private bool) (string, []muf.MPIVar, error) {
+	o := h.w.Get(obj)
+	if o == nil {
+		return "", vars, errMsg("no such object")
+	}
+	v, ok := o.Props.Get(path)
+	if !ok || v.StringValue() == "" {
+		// Nothing to evaluate, so the variables come back untouched —
+		// upstream skips the whole block when the property is empty.
+		return "", vars, nil
+	}
+
+	env := &mpi.Env{
+		Who:     mpi.Ref(h.caller),
+		What:    mpi.Ref(obj),
+		Perms:   mpi.Ref(obj),
+		Blessed: v.Blessed,
+		Host:    &mpiHost{s: h.s, w: h.w},
+	}
+	for _, kv := range vars {
+		if err := env.SetVar(kv.Name, kv.Value); err != nil {
+			return "", vars, err
+		}
+	}
+
+	out := mpi.Eval(env, v.StringValue())
+
+	// The variables are read back in the order they were given, so the
+	// primitive can put them into the same dictionary keys it took them
+	// from.
+	result := make([]muf.MPIVar, len(vars))
+	for i, kv := range vars {
+		final, _ := env.Var(kv.Name)
+		result[i] = muf.MPIVar{Name: kv.Name, Value: final}
+	}
+	return out, result, nil
+}
+
 // ParseMPI implements muf.Host for PARSEMPI/PARSEMPIBLESSED: evaluates
 // source directly as MPI, rather than reading it from a property first.
 func (h *mufHost) ParseMPI(who ref.Ref, source, arg string, blessed bool) (string, error) {

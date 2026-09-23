@@ -51,6 +51,14 @@ func (l Limits) total() int {
 func (f *Frame) Run(lim Limits) (Result, error) {
 	budget := lim.slice()
 
+	// Whether this program is being traced is settled here rather than per
+	// instruction: it depends on a flag and a control check, and asking the
+	// host for both on every instruction would cost more than the tracing
+	// does. DEBUG_ON and DEBUG_OFF set Traced directly, so a program that
+	// turns tracing on part-way through takes effect at once; an @set from
+	// outside is picked up when this frame next resumes.
+	f.Traced = f.tracing()
+
 	for {
 		if f.PC < 0 || f.PC >= len(f.Prog.Code) {
 			return Done, nil
@@ -65,6 +73,9 @@ func (f *Frame) Run(lim Limits) (Result, error) {
 		f.Instructions++
 
 		in := f.Prog.Code[f.PC]
+		if f.Traced {
+			f.trace(in)
+		}
 		res, err := f.step(in)
 		if err != nil {
 			// errSilentAbort is upstream's ERROR_DIE_NOW: KILLing the
