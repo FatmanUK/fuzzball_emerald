@@ -100,14 +100,33 @@ func (s *Server) cmdShutdown(c *ctx) {
 		return
 	}
 	name := c.w.Get(c.who).Name
-	s.statusLog().Warn("shutdown requested",
+	s.securityLog().Warn("shutdown requested",
 		"player", c.who.String(), "name", name)
 
-	for _, d := range s.hub.All() {
-		d.Send("## The server is shutting down. ##")
-	}
+	s.tellEveryoneShutdown()
 	if s.shutdown != nil {
 		s.shutdown()
+	}
+}
+
+// AnnounceShutdown tells everyone still connected that the server is going
+// away. It is what a signal-driven shutdown needs and @shutdown gets for
+// free: cancelling the world's context drains and flushes, but says nothing
+// to anyone, and by the time the drain is over there is no way left to send.
+//
+// The transports call this from their own goroutine, so it goes through the
+// engine like any other outside caller. A failure to enqueue means the world
+// has already stopped, which is exactly the case where there is nothing left
+// to say.
+func (s *Server) AnnounceShutdown() {
+	_ = s.engine.Do(context.Background(), func(*world.World) {
+		s.tellEveryoneShutdown()
+	})
+}
+
+func (s *Server) tellEveryoneShutdown() {
+	for _, d := range s.hub.All() {
+		d.Send("## The server is shutting down. ##")
 	}
 }
 

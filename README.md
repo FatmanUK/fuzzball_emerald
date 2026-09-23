@@ -50,8 +50,11 @@ property-listing form.
 Each of those is checked against a real Fuzzball 7 line for line, not just
 against a reading of its source.
 
-301 of 417 MUF primitives and 51 of 140 MPI functions are implemented, so a
-real program may still stop at one it needs.
+397 of 417 MUF primitives are implemented — nine of the twenty reported
+missing are a counting artefact, since the compiler dispatches them as
+pseudo-ops rather than registering them — and all 140 MPI functions are.
+What is genuinely absent is the MUF single-step debugger, `SMTP_SEND` and
+`PARSEPROPEX`.
 
 ## Building
 
@@ -144,11 +147,56 @@ yet. This is why Fuzzball's `ssl_*` `@tune` parameters have no equivalent.
 | `FBE_LINE_ADDR` | `:4202` | TLS listener for MUCK clients |
 | `FBE_WSS_ADDR` | `:4203` | WebSocket-over-TLS listener |
 | `FBE_FLUSH_INTERVAL` | `1s` | Bounds how much a crash can lose |
+| `FBE_MAX_CONNECTIONS` | `1024` | Concurrent connections in total; `0` disables |
+| `FBE_MAX_PER_HOST` | `16` | Concurrent connections from one address; `0` disables |
+| `FBE_CONNECT_RATE` | `30` | New connections one address may open per window; `0` disables |
+| `FBE_CONNECT_WINDOW` | `1m` | The window `FBE_CONNECT_RATE` counts over |
+| `FBE_PPROF_ADDR` | — | Serve `net/http/pprof` here; must be a loopback address |
 
 Everything else is an `@tune` parameter, as upstream. Inspect the table with:
 
 ```bash
 fbemerald tune
+```
+
+### Limits
+
+Two layers sit in front of the game, and they answer different threats.
+
+The connection limits above are refused at **accept time**, before the TLS
+handshake and before the world goroutine hears about the connection. They
+exist because Fuzzball's own limits all sit *after* authentication, which is
+too late to help against a peer that never authenticates. They are
+environment settings rather than `@tune` parameters for the same reason TLS
+is: a server under a flood has to keep refusing while the database is
+unreachable. The per-host defaults are generous for a real player with
+several clients and stingy for a script — raise `FBE_MAX_PER_HOST` if your
+players share an address behind NAT.
+
+Once someone is connected, Fuzzball's own spam limiter applies, and it is an
+`@tune` matter: `command_burst_size` commands in hand, `commands_per_time`
+more every `command_time_msec`. Spending the allowance neither disconnects
+anyone nor loses what they typed — the connection simply waits. A player in
+the MUF editor or answering a `READ` is refilled eight times as fast, since
+typing program text is not the traffic the limiter is for.
+
+`playermax`, `playermax_limit` and the two messages beside them cap how many
+players may be *logged in*, and are `@tune` parameters as upstream. A true
+wizard is exempt, so an admin can always get in to deal with whatever filled
+the server up.
+
+### Profiling
+
+`FBE_PPROF_ADDR` serves the standard Go profiling endpoints. It is refused
+unless it binds to loopback — the handlers hand out goroutine stacks and heap
+contents, so reach them through an SSH tunnel rather than exposing the port:
+
+```bash
+ssh -N -L 6060:127.0.0.1:6060 your-server
+```
+
+```bash
+go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
 ```
 
 ## Importing a legacy world
@@ -205,6 +253,81 @@ their order, and each object also records its own location. That redundancy is
 the recovery path: on load the chains are checked against what the objects
 claim, and any that disagree are rebuilt rather than silently orphaning
 everything past the break.
+
+## Logs
+
+Fuzzball wrote a dozen files under `logs/`, chosen by the `file_log_*`
+parameters. Emerald writes one structured stream to stderr and tags each
+record with the channel the old server would have used, so you can split it
+back apart with whatever you already run. `FBE_LOG_FORMAT=json` makes that
+mechanical.
+
+| Channel | What it carries |
+|---|---|
+| `status` | Server lifecycle: boot, listeners, flushes, `@tune` changes |
+| `security` | Authentication, password changes, privileged commands |
+| `command` | Player commands |
+| `program` | Compiles and edits |
+| `muferror` | MUF runtime errors |
+| `muf` | MUF diagnostics, written by `USERLOG` |
+| `gripe` | Player gripes |
+| `sanity` | Database consistency |
+
+`security` is the one channel with no Fuzzball ancestor. Upstream scattered
+these records through its status log, where a failed login sat between a flush
+report and a compile warning; collecting them gives you something to alert on:
+
+```bash
+fbemerald serve 2>&1 | jq -c 'select(.channel == "security")'
+```
+
+What lands there is anything an intruder would have to do, or anything that
+changes who may do what — connections and failed logins, `@password` and
+`SETPASSWORD`, `@toad`, `@boot`, `@force`, `@shutdown`, the `@san*` family,
+and every refusal of a wizard command.
+
+## Backing up and restoring
+
+The world lives in Postgres, so it backs up the way any other database does —
+there is no dump file to copy, and no need to stop the game to take one.
+`pg_dump` runs against a consistent snapshot, so a backup taken while players
+are connected is a coherent world rather than a torn one.
+
+```bash
+pg_dump --format=custom --file=world-$(date +%F).dump \
+  "postgres://fbemerald@localhost:55432/fbemerald"
+```
+
+Restoring goes into an **empty** database. `--clean` against a live one would
+drop the world out from under a running server, so stop it first:
+
+```bash
+createdb -h localhost -p 55432 -U fbemerald fbemerald_restored
+pg_restore --dbname="postgres://fbemerald@localhost:55432/fbemerald_restored" \
+  world-2026-01-01.dump
+```
+
+Then point the server at it with `FBE_DATABASE_URL` and start it. The schema
+is migrated automatically on boot, so a dump taken from an older build
+restores into a newer one without a separate step.
+
+Two things are worth knowing when planning a schedule. A crash loses at most
+`FBE_FLUSH_INTERVAL` of play, so a backup is about recovering from a mistake —
+a bad `@sanfix`, a toading nobody meant — rather than from a crash. And
+because the in-memory graph is authoritative, a backup restored under a
+*running* server would be ignored until it restarts: always stop, restore,
+then start.
+
+## Shutting down
+
+`@shutdown` and `SIGTERM` take the same path. Everyone connected is told
+`## The server is shutting down. ##` first, then the world goroutine drains
+whatever work is queued and makes a final flush, with a 30-second budget for
+the write. Nothing already accepted is lost.
+
+The container is configured with a 30-second stop grace period to match. A
+second signal aborts immediately, so an operator is never stuck waiting on a
+shutdown that has wedged.
 
 ## Checking against real Fuzzball
 

@@ -397,7 +397,7 @@ Worth knowing before "fixing" something that looks wrong:
 
 ## Status
 
-M0–M7 are done.
+M0–M8 are done.
 
 The server imports the starter world, accepts real MUCK clients over TLS and
 WebSocket, runs MUF and evaluates MPI, and supports look, movement, speech,
@@ -408,5 +408,35 @@ clients that speak them.
 
 What is left: 20 of the 417 primitives — nine of which are a coverage-test
 false positive, since the compiler dispatches them as pseudo-ops rather than
-registering them — and all of M8. Every one of the 140 MPI functions is
-implemented.
+registering them. Every one of the 140 MPI functions is implemented.
+
+## Limits
+
+Two layers, answering different threats, and they are configured in different
+places for a reason.
+
+`internal/admit` refuses connections at **accept time**, before the TLS
+handshake and before the world goroutine hears about them: a total cap, a
+per-host cap and a per-host connection rate. Upstream has no equivalent —
+Fuzzball's own limits all sit after authentication, which is too late against
+a peer that never authenticates. These are `FBE_*` environment settings rather
+than `@tune` parameters, for the same reason TLS is: a server under a flood
+has to keep refusing while the database is unreachable.
+
+Everything after login is upstream's and lives in `@tune`. The command spam
+limiter is `session.Quota`, upstream's `d->quota`: `command_burst_size`
+commands in hand, `commands_per_time` more every `command_time_msec`, refilled
+by `Server.refillQuotas` on the tick. Spending it neither disconnects anyone
+nor drops input — `Server.Input` waits on the transport's own goroutine, which
+is where it must happen, since blocking the world goroutine would stall
+everyone. A player in the editor or answering a `READ` is refilled eight times
+as fast, which is upstream's `INTERACTIVE` case.
+
+`playermax`/`playermax_limit` cap logged-in connections, checked after the
+password is verified and exempting a true wizard, both upstream's. The count
+is of connections that finished logging in, not of distinct players and not of
+sockets — upstream's `con_players_curr`.
+
+**`FBE_PPROF_ADDR` is refused unless it binds to loopback.** The handlers hand
+out goroutine stacks and heap contents; `config.isLoopback` rejects a bare
+port, which would bind every interface.

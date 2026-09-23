@@ -47,7 +47,7 @@ func (s *Server) cmdSanfix(c *ctx) {
 	// The repair log goes to the server's log as well as to the screen: a
 	// database that needed repairing is something an operator will want to
 	// look at again afterwards.
-	s.statusLog().Warn("database repaired",
+	s.securityLog().Warn("database repaired",
 		"changes", len(log), "unfixed", len(unfixed),
 		"by", c.who.String(), "byName", nameOf(c.w, c.who))
 	for _, line := range log {
@@ -121,7 +121,7 @@ func (s *Server) cmdSanchange(c *ctx) {
 	*field = value
 	c.w.Modified(target)
 
-	s.statusLog().Warn("sanchange",
+	s.securityLog().Warn("sanchange",
 		"object", target.String(), "field", name,
 		"from", was.String(), "to", value.String(),
 		"by", c.who.String(), "byName", nameOf(c.w, c.who))
@@ -190,7 +190,7 @@ func (s *Server) requireGod(c *ctx, cmd string) bool {
 	if c.who == ref.God {
 		return true
 	}
-	s.statusLog().Warn("refused a God-only command",
+	s.securityLog().Warn("refused a God-only command",
 		"command", cmd, "by", c.who.String(), "byName", nameOf(c.w, c.who))
 	c.tell("You are not allowed to %s.", cmd)
 	return false

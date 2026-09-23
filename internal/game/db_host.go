@@ -22,7 +22,7 @@ func (h *mufHost) NewPlayer(name, pass string) (ref.Ref, error) {
 	if err != nil {
 		return ref.Nothing, err
 	}
-	h.s.statusLog().Info("player created by a program",
+	h.s.securityLog().Info("player created by a program",
 		"player", o.Ref.String(), "name", name,
 		"by", h.caller.String(), "byName", nameOf(h.w, h.caller))
 	return o.Ref, nil
@@ -66,7 +66,7 @@ func (h *mufHost) CopyPlayer(src ref.Ref, name, pass string) (ref.Ref, error) {
 // makes is its own; this is only the deletion, the same split cmdToad uses.
 func (h *mufHost) ToadPlayer(victim, recipient ref.Ref) {
 	c := &ctx{w: h.w, who: h.caller, out: func(string) {}}
-	h.s.statusLog().Warn("toaded by a program",
+	h.s.securityLog().Warn("toaded by a program",
 		"player", victim.String(), "name", nameOf(h.w, victim),
 		"by", h.caller.String(), "byName", nameOf(h.w, h.caller),
 		"recipient", recipient.String())

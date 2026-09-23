@@ -95,7 +95,7 @@ func startServer(t *testing.T) *testServer {
 
 	cfg := selfSignedTLS(t)
 
-	ln, err := tlsline.New("127.0.0.1:0", cfg, gs, nil)
+	ln, err := tlsline.New("127.0.0.1:0", cfg, gs, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

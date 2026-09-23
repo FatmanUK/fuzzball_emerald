@@ -65,3 +65,51 @@ func TestValidate(t *testing.T) {
 		}
 	}
 }
+
+func TestPprofAddrMustBeLoopback(t *testing.T) {
+	base := Default()
+	base.DatabaseURL = "postgres://x"
+	base.TLS.CertFile = "cert.pem"
+	base.TLS.KeyFile = "key.pem"
+
+	for _, addr := range []string{"127.0.0.1:6060", "localhost:6060", "[::1]:6060"} {
+		c := base
+		c.PprofAddr = addr
+		if err := c.Validate(); err != nil {
+			t.Errorf("Validate() rejected the loopback address %q: %v", addr, err)
+		}
+	}
+
+	// A bare port binds every interface, which is the case that matters:
+	// the pprof handlers hand out goroutine stacks and heap dumps.
+	for _, addr := range []string{":6060", "0.0.0.0:6060", "192.168.1.5:6060", "nonsense"} {
+		c := base
+		c.PprofAddr = addr
+		if err := c.Validate(); err == nil {
+			t.Errorf("Validate() accepted the non-loopback address %q", addr)
+		}
+	}
+}
+
+func TestLimitsFromEnv(t *testing.T) {
+	t.Setenv("FBE_MAX_CONNECTIONS", "10")
+	t.Setenv("FBE_MAX_PER_HOST", "2")
+	t.Setenv("FBE_CONNECT_RATE", "5")
+	t.Setenv("FBE_CONNECT_WINDOW", "30s")
+
+	c, err := FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Limits{MaxConnections: 10, MaxPerHost: 2, ConnectRate: 5, ConnectWindow: 30 * time.Second}
+	if c.Limits != want {
+		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	}
+}
+
+func TestNegativeLimitIsRejected(t *testing.T) {
+	t.Setenv("FBE_MAX_PER_HOST", "-1")
+	if _, err := FromEnv(); err == nil {
+		t.Error("a negative limit should be an error")
+	}
+}

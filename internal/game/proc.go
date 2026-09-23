@@ -188,6 +188,7 @@ type mufTimer struct {
 // which is also how often a sleeping program can wake or a timer fire.
 func (s *Server) Tick(w *world.World) {
 	now := w.Now()
+	s.refillQuotas(w, now)
 	s.fireTimers(w, now)
 	s.fireMPIEvents(w, now)
 	for _, p := range s.procs.due(now) {
@@ -398,5 +399,43 @@ func (s *Server) killProcessesFor(w *world.World, player ref.Ref) {
 func (s *Server) killProcessesOf(w *world.World, program ref.Ref) {
 	for _, p := range s.procs.forProgram(program) {
 		s.finishProcess(w, p)
+	}
+}
+
+// refillQuotas is upstream's update_quotas: every command_time_msec, each
+// connection is granted commands_per_time more commands, never accumulating
+// past command_burst_size.
+//
+// A player whose input is going somewhere other than the command parser — the
+// MUF editor, or a program waiting on a READ — gets eight times the rate,
+// because typing program text is not the kind of traffic the limiter exists
+// to stop.
+//
+// Only whole slices count, and the clock is advanced by exactly the slices
+// consumed rather than to now, so a tick that arrives late does not forfeit
+// the remainder.
+func (s *Server) refillQuotas(w *world.World, now time.Time) {
+	period := time.Duration(w.Tune.Int("command_time_msec")) * time.Millisecond
+	if period <= 0 {
+		return
+	}
+	if s.lastQuotaRefill.IsZero() {
+		s.lastQuotaRefill = now
+		return
+	}
+	slices := int(now.Sub(s.lastQuotaRefill) / period)
+	if slices <= 0 {
+		return
+	}
+	s.lastQuotaRefill = s.lastQuotaRefill.Add(time.Duration(slices) * period)
+
+	perTime := int(w.Tune.Int("commands_per_time"))
+	burst := int(w.Tune.Int("command_burst_size"))
+	for _, d := range s.hub.All() {
+		rate := perTime
+		if d.Connected && hasFlag(w, d.Player, ref.Interactive) {
+			rate = perTime * 8
+		}
+		d.Quota.Add(rate*slices, burst)
 	}
 }

@@ -92,7 +92,7 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 	if o.PasswordHash == password.NoPassword {
 		d.Send("That character has no password set and cannot be connected to.")
 		d.Send("A wizard must set one with @password before it can be used.")
-		log.Warn("refused login to a player with no password",
+		s.securityLog().Warn("refused login to a player with no password",
 			"player", player.String(), "name", o.Name, "host", d.Hostname)
 		return
 	}
@@ -100,6 +100,18 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 	res := password.Verify(o.PasswordHash, pass)
 	if !res.OK {
 		s.failConnect(w, d, user, "bad password")
+		return
+	}
+
+	// The password was right; the server may still be full. A true wizard
+	// is exempt, so an admin can always get in to deal with whatever filled
+	// it up.
+	if s.serverFull(w) && !o.Flags.IsTrueWizard() {
+		d.Send(w.Tune.String("playermax_bootmesg"))
+		s.securityLog().Warn("refused login: server full",
+			"player", player.String(), "name", o.Name,
+			"host", d.Hostname, "limit", w.Tune.Int("playermax_limit"))
+		d.Close()
 		return
 	}
 
@@ -120,10 +132,23 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 	s.finishLogin(w, d, player)
 }
 
+// serverFull reports whether the playermax cap has been reached, upstream's
+// "tp_playermax && con_players_curr >= tp_playermax_limit".
+//
+// The count is of logged-in connections, not of distinct players: two
+// windows open as the same character cost two places, which is upstream's
+// own con_players_curr.
+func (s *Server) serverFull(w *world.World) bool {
+	if !w.Tune.Bool("playermax") {
+		return false
+	}
+	return int64(len(s.hub.Connected())) >= w.Tune.Int("playermax_limit")
+}
+
 // failConnect reports a failed login without saying which half was wrong.
 func (s *Server) failConnect(w *world.World, d *session.Descriptor, user, why string) {
 	d.Send(w.Tune.String("connect_fail_mesg"))
-	s.statusLog().Warn("failed login",
+	s.securityLog().Warn("failed login",
 		"user", user, "reason", why, "descriptor", d.ID, "host", d.Hostname)
 }
 
@@ -133,6 +158,13 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 		// Registration on means characters are made out of band, not
 		// from the login screen.
 		d.Send(w.Tune.String("register_mesg"))
+		return
+	}
+	// A brand-new character has no wizard bit to be exempt by, so the cap
+	// simply applies.
+	if s.serverFull(w) {
+		d.Send(w.Tune.String("playermax_bootmesg"))
+		d.Close()
 		return
 	}
 	if err := validPlayerName(w, user); err != nil {
@@ -150,7 +182,7 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 		return
 	}
 
-	s.statusLog().Info("created player",
+	s.securityLog().Info("created player",
 		"player", o.Ref.String(), "name", user, "host", d.Hostname)
 	s.finishLogin(w, d, o.Ref)
 }
@@ -228,7 +260,7 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 	s.hub.Bind(d, player, w.Now())
 	w.Used(player)
 
-	s.statusLog().Info("connected",
+	s.securityLog().Info("connected",
 		"descriptor", d.ID,
 		"player", player.String(),
 		"name", nameOf(w, player),

@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/admit"
 	"github.com/FatmanUK/fuzzball_emerald/internal/game"
 	"github.com/FatmanUK/fuzzball_emerald/internal/importer"
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
@@ -107,6 +112,23 @@ func cmdServe(args []string) error {
 		return err
 	}
 
+	if c.PprofAddr != "" {
+		servePprof(ctx, c.PprofAddr, log)
+	}
+
+	gate := admit.New(admit.Limits{
+		Total:   c.Limits.MaxConnections,
+		PerHost: c.Limits.MaxPerHost,
+		Rate:    c.Limits.ConnectRate,
+		Window:  c.Limits.ConnectWindow,
+	})
+	log.Info("connection limits",
+		"max_connections", c.Limits.MaxConnections,
+		"max_per_host", c.Limits.MaxPerHost,
+		"connect_rate", c.Limits.ConnectRate,
+		"connect_window", c.Limits.ConnectWindow.String(),
+	)
+
 	game.Version = version
 	gs := game.New(engine, game.Options{Logger: base})
 
@@ -115,7 +137,12 @@ func cmdServe(args []string) error {
 
 	// Run the world first: the listeners enqueue work onto it from their
 	// own goroutines, so it has to be draining before they accept anyone.
-	runCtx, stopWorld := context.WithCancel(ctx)
+	//
+	// The world's context is deliberately *not* derived from the signal
+	// context. A signal has to reach the world in two steps — say goodbye,
+	// then stop — and deriving it would cancel both at once, racing the
+	// farewell against the drain that makes sending impossible.
+	runCtx, stopWorld := context.WithCancel(context.Background())
 	defer stopWorld()
 	gs.OnShutdown(stopWorld)
 
@@ -124,7 +151,7 @@ func cmdServe(args []string) error {
 
 	var listeners []listener
 	if c.LineAddr != "" {
-		ls, err := tlsline.New(c.LineAddr, tlsConfig, gs, base)
+		ls, err := tlsline.New(c.LineAddr, tlsConfig, gs, base, gate)
 		if err != nil {
 			stopWorld()
 			<-worldDone
@@ -137,6 +164,7 @@ func cmdServe(args []string) error {
 		ls, err := wss.New(c.WSSAddr, tlsConfig, gs, wss.Options{
 			Path:   c.WSSPath,
 			Logger: base,
+			Gate:   gate,
 		})
 		if err != nil {
 			stopWorld()
@@ -156,6 +184,18 @@ func cmdServe(args []string) error {
 		}(ls)
 	}
 
+	// On a signal, tell everyone still connected before stopping the world:
+	// AnnounceShutdown waits for the message to be queued, and only then is
+	// the drain allowed to begin. @shutdown reaches the same two steps from
+	// the other direction, having already announced before calling
+	// stopWorld itself.
+	go func() {
+		<-ctx.Done()
+		log.Info("signal received, shutting down")
+		gs.AnnounceShutdown()
+		stopWorld()
+	}()
+
 	// The world goroutine returning is what ends the server: it happens on
 	// a signal, or when a wizard types @shutdown.
 	err = <-worldDone
@@ -167,6 +207,39 @@ func cmdServe(args []string) error {
 	}
 	log.Info("stopped cleanly")
 	return nil
+}
+
+// servePprof runs the profiling endpoints on a loopback address.
+//
+// Config.Validate has already refused anything that is not loopback. There is
+// no authentication beyond that: the handlers are a debugging aid for someone
+// who is already on the host, reached through an SSH tunnel rather than
+// exposed.
+func servePprof(ctx context.Context, addr string, log *slog.Logger) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutCtx)
+	}()
+	go func() {
+		log.Info("pprof listening", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("pprof listener stopped", "error", err)
+		}
+	}()
 }
 
 // listener is what both transports provide.

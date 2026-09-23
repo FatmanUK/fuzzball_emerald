@@ -28,6 +28,11 @@ func (s *Server) requireWizard(c *ctx) bool {
 		return true
 	}
 	c.tell("Permission denied.")
+	// Audited rather than merely refused: one of these is a typo, and a
+	// run of them from one player is someone trying the doors.
+	s.securityLog().Warn("refused a wizard command",
+		"player", c.who.String(), "name", nameOf(c.w, c.who),
+		"command", c.verb)
 	return false
 }
 
@@ -512,7 +517,7 @@ func (s *Server) cmdPassword(c *ctx) {
 	o := c.w.Get(c.who)
 	if !password.Verify(o.PasswordHash, oldPass).OK {
 		c.tell("Your old password is incorrect.")
-		s.statusLog().Warn("failed password change",
+		s.securityLog().Warn("failed password change",
 			"player", c.who.String(), "name", o.Name)
 		return
 	}
@@ -528,7 +533,7 @@ func (s *Server) cmdPassword(c *ctx) {
 	o.PasswordHash = hashed
 	c.w.Modified(c.who)
 	c.tell("Password changed.")
-	s.statusLog().Info("password changed",
+	s.securityLog().Info("password changed",
 		"player", c.who.String(), "name", o.Name)
 }
 

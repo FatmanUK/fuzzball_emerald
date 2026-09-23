@@ -52,6 +52,10 @@ type Server struct {
 	// mpiEvents holds what MPI's {delay} has scheduled, fired by the tick.
 	mpiEvents []mpiEvent
 
+	// lastQuotaRefill is where the spam limiter's clock stands, advanced a
+	// whole time slice at a time.
+	lastQuotaRefill time.Time
+
 	// forceDepth counts how deep @force is nested, so a command that
 	// forces something that forces back cannot recurse without end.
 	forceDepth int
@@ -134,6 +138,7 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 	done := make(chan struct{})
 	err := s.engine.Go(func(w *world.World) {
 		d = s.hub.Add(tr, host, w.Now())
+		d.Quota.Set(int(w.Tune.Int("command_burst_size")))
 		close(done)
 
 		// MCP is offered before the banner, so a client that speaks it
@@ -144,6 +149,14 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 		for _, line := range s.welcome {
 			d.Send(line)
 		}
+		// Someone arriving at a full server is told so now rather than
+		// after they have typed a password, which is upstream's own
+		// welcome_user behaviour.
+		if s.serverFull(w) {
+			if msg := w.Tune.String("playermax_warnmesg"); msg != "" {
+				d.Send(msg)
+			}
+		}
 	})
 	if err != nil {
 		return nil, err
@@ -153,9 +166,21 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 }
 
 // Input handles one line from a client.
+//
+// This runs on the transport's own goroutine, which is where the spam limiter
+// lives: a connection that has spent its allowance waits here for the next
+// one rather than queueing work the world would have to throttle later.
+// Nothing is dropped, and only that one connection is held up.
 func (s *Server) Input(d *session.Descriptor, line string) {
 	if len(line) > maxInputLen {
 		line = line[:maxInputLen]
+	}
+	// An out-of-band message is a client talking to the server, not a
+	// player typing, so it costs nothing — upstream excludes it too.
+	if !strings.HasPrefix(line, mcp.Prefix) {
+		if !d.Quota.Take(d.Done()) {
+			return
+		}
 	}
 	_ = s.engine.Go(func(w *world.World) {
 		d.LastActive = w.Now()
@@ -379,6 +404,10 @@ func unparse(w *world.World, viewer, target ref.Ref) string {
 
 // statusLog returns the logger for server-lifecycle messages.
 func (s *Server) statusLog() *slog.Logger { return logging.On(s.log, logging.Status) }
+
+// securityLog returns the logger for the audit trail: who tried to
+// authenticate, whose password changed, and who ran a privileged command.
+func (s *Server) securityLog() *slog.Logger { return logging.On(s.log, logging.Security) }
 
 // mufLog returns the logger for MUF diagnostics.
 func (s *Server) mufLog() *slog.Logger { return logging.On(s.log, logging.MUFError) }

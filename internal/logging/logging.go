@@ -25,6 +25,16 @@ const (
 	Gripe    Channel = "gripe"    // player gripes
 	Sanity   Channel = "sanity"   // database consistency
 	Muf      Channel = "muf"      // MUF diagnostics
+
+	// Security is the one channel with no file_log_* ancestor. Fuzzball
+	// scattered these records through its status log, where a failed login
+	// sat between a flush report and a compile warning; collecting them
+	// gives an operator something to alert on.
+	//
+	// What belongs here is anything an intruder would have to do, or anything
+	// that changes who may do what: authentication attempts, password
+	// changes, and the commands only a wizard or God may run.
+	Security Channel = "security"
 )
 
 // New builds a logger writing to w.

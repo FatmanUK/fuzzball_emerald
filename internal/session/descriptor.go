@@ -68,7 +68,15 @@ type Descriptor struct {
 	// nil: a client that never negotiates simply leaves it disabled, and
 	// every line then passes through untouched.
 	MCP *mcp.Frame
+
+	// Quota is how many more commands this connection may send before it
+	// has to wait, upstream's spam limiter. It is never nil.
+	Quota *Quota
 }
+
+// defaultBurst stands in for command_burst_size until the world supplies the
+// real one, which it does as the connection is welcomed.
+const defaultBurst = 500
 
 // newDescriptor builds a descriptor. Transports get one from a Hub.
 func newDescriptor(id int, tr Transport, host string, now time.Time, packages []mcp.Package) *Descriptor {
@@ -82,6 +90,9 @@ func newDescriptor(id int, tr Transport, host string, now time.Time, packages []
 		Height:     24,
 		out:        make(chan string, outputDepth),
 		done:       make(chan struct{}),
+		// A connection starts with a nominal allowance so input works
+		// before the world has told it what this world's burst size is.
+		Quota: newQuota(defaultBurst),
 	}
 	d.MCP = mcp.NewFrame(d.sendRaw, packages)
 	return d

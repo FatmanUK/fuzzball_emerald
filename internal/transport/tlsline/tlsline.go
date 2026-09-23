@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/admit"
 	"github.com/FatmanUK/fuzzball_emerald/internal/game"
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 )
@@ -33,10 +34,13 @@ type Server struct {
 	game *game.Server
 	log  *slog.Logger
 	ln   net.Listener
+	// gate refuses connections before the handshake. It may be nil, which
+	// admits everything.
+	gate *admit.Gate
 }
 
-// New returns a listener bound to addr.
-func New(addr string, cfg *tls.Config, g *game.Server, log *slog.Logger) (*Server, error) {
+// New returns a listener bound to addr. gate may be nil.
+func New(addr string, cfg *tls.Config, g *game.Server, log *slog.Logger, gate *admit.Gate) (*Server, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -44,7 +48,7 @@ func New(addr string, cfg *tls.Config, g *game.Server, log *slog.Logger) (*Serve
 	if err != nil {
 		return nil, err
 	}
-	return &Server{game: g, log: log, ln: ln}, nil
+	return &Server{game: g, log: log, ln: ln, gate: gate}, nil
 }
 
 // Addr reports where the listener is bound, which a test needs when it asked
@@ -81,6 +85,15 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 
 	host := hostOf(conn.RemoteAddr())
+
+	// Refused before the handshake: a peer opening connections faster than
+	// it should must not be able to make the server do the expensive part
+	// of accepting them.
+	if v := s.gate.Admit(host); v != admit.Allowed {
+		s.log.Warn("refused a connection", "host", host, "reason", string(v))
+		return
+	}
+	defer s.gate.Release(host)
 
 	// Complete the handshake before doing anything else, so a connection
 	// that never negotiates cannot occupy a descriptor.

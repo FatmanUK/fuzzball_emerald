@@ -326,6 +326,9 @@ func (h *mufHost) SetPassword(player ref.Ref, pass string) error {
 	}
 	o.PasswordHash = hashed
 	h.w.Modified(player)
+	h.s.securityLog().Warn("password changed by a program",
+		"player", player.String(), "name", o.Name,
+		"by", h.caller.String(), "byName", nameOf(h.w, h.caller))
 	return nil
 }
 

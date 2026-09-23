@@ -18,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/admit"
 	"github.com/FatmanUK/fuzzball_emerald/internal/game"
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 )
@@ -34,6 +35,8 @@ type Server struct {
 	// origins lists the Host values a browser may connect from. Empty means
 	// same-origin only, which is what the library enforces by default.
 	origins []string
+	// gate refuses connections before the upgrade. It may be nil.
+	gate *admit.Gate
 }
 
 // Options configure the listener.
@@ -43,6 +46,9 @@ type Options struct {
 	// Origins lists additional allowed origins for browser clients.
 	Origins []string
 	Logger  *slog.Logger
+	// Gate refuses connections before the upgrade. It may be nil, which
+	// admits everything.
+	Gate *admit.Gate
 }
 
 // New returns a listener bound to addr. tlsConfig must be the same one the
@@ -62,7 +68,7 @@ func New(addr string, tlsConfig *tls.Config, g *game.Server, opts Options) (*Ser
 		return nil, err
 	}
 
-	s := &Server{game: g, log: log, ln: ln, origins: opts.Origins}
+	s := &Server{game: g, log: log, ln: ln, origins: opts.Origins, gate: opts.Gate}
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, s.handle)
 	// A health endpoint that says nothing about the world, so it can be
@@ -108,6 +114,16 @@ func (s *Server) Close() error { return s.http.Close() }
 
 // handle upgrades one request and runs the session on it.
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	// Refused before the upgrade, so a flood costs a 503 rather than a
+	// websocket.
+	host := clientHost(r)
+	if v := s.gate.Admit(host); v != admit.Allowed {
+		s.log.Warn("refused a connection", "host", host, "reason", string(v))
+		http.Error(w, "too many connections", http.StatusServiceUnavailable)
+		return
+	}
+	defer s.gate.Release(host)
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: s.origins,
 	})
@@ -119,7 +135,6 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 	conn.SetReadLimit(readLimit)
 
-	host := clientHost(r)
 	d, err := s.game.Connect(session.TransportWSS, host)
 	if err != nil {
 		return

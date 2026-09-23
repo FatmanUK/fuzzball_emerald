@@ -18,8 +18,14 @@ replacing four things that have aged worst in the C original:
 | Flat-file dump, world freezes to save | **Postgres**, continuous write-behind |
 | autotools + hand-rolled Dockerfile | Rootless **Podman** container |
 
-Milestones **M0 through M7 are complete**. What remains is filling out the
-primitive/MPI surface and M8 (hardening + deploy). See §2.
+Milestones **M0 through M8 are complete**, and so is the primitive and MPI
+surface bar a handful of deliberate deferrals: 397 of 417 primitives (nine of
+the twenty reported missing are a counting artefact — the compiler dispatches
+them as pseudo-ops rather than registering them) and all 140 MPI functions.
+
+What is genuinely unported: the MUF single-step debugger
+(`DEBUGGER_BREAK`/`DEBUG_LINE`/`DEBUG_ON`/`DEBUG_OFF`), `SMTP_SEND`, and
+`PARSEPROPEX`. See §2 for why each was left.
 
 ## 2. Next Three Steps
 
@@ -439,13 +445,66 @@ Deliberately simplified, and worth knowing before trusting either:
 
 The next steps from here are:
 
-1. **Start M8**: rate limiting/connection caps and `pprof` behind a
-   localhost-only port are genuinely missing. Structured audit logging is
-   partial (`internal/logging` has no security-specific channel yet).
-   Graceful drain and a README divergences section are likely already
-   adequate — `cmd/fbemerald` already wires `SIGTERM` to a cancellable
-   context, and `README.md`'s "Compatibility notes" section already covers
-   divergences — verify before assuming either needs new work.
+## Phase 6 — M8, finished
+
+**M0 through M8 are complete.** What each item turned out to need:
+
+- **Connection limits** are `internal/admit`, refusing at accept time — before
+  the TLS handshake, before a descriptor exists, before the world goroutine
+  hears about it. A total cap, a per-host cap and a per-host connection rate,
+  all `FBE_*` environment settings rather than `@tune` parameters for the same
+  reason TLS is: a server under a flood has to keep refusing while the
+  database is unreachable. Upstream has no equivalent at all — every Fuzzball
+  limit sits after authentication, which is too late against a peer that never
+  authenticates. The one trap worth knowing is in the rate limiter: a refused
+  attempt must *not* be recorded, or a peer that keeps retrying holds its own
+  window open and stays shut out forever. `TestRefusalDoesNotExtendTheWindow`
+  pins that.
+- **The command spam limiter turned out to be upstream's, already specified.**
+  `command_burst_size`, `commands_per_time` and `command_time_msec` were
+  already in the generated `@tune` table, unused. `session.Quota` is
+  `d->quota`, refilled by `Server.refillQuotas` on the tick, exactly
+  `update_quotas`. The architectural point: spending the allowance must block
+  the **transport's** goroutine, not the world's — `Server.Input` waits before
+  enqueuing, so one noisy connection is held up and nobody else is. Nothing is
+  dropped, which is what upstream achieves by leaving the line on its input
+  queue. MCP messages are exempt, and a player in the editor or on a `READ` is
+  refilled eight times as fast (upstream's `INTERACTIVE` case).
+- **`playermax`/`playermax_limit` were likewise already in the table** and
+  unused. Checked after the password verifies, exempting a true wizard, with
+  the warning shown at the welcome screen — all upstream's. The count is of
+  connections that *finished logging in*, which is `con_players_curr`, not of
+  sockets and not of distinct players; a test pins that, because it is the
+  kind of thing that looks like an off-by-one later.
+- **`pprof`** is `FBE_PPROF_ADDR`, and `Config.Validate` refuses anything that
+  is not loopback. A bare `:6060` binds every interface, which is exactly the
+  mistake worth failing at startup rather than shipping — the handlers hand
+  out goroutine stacks and heap contents.
+- **The audit trail** is `logging.Security`, the one channel with no
+  `file_log_*` ancestor. Upstream scattered these through its status log,
+  where a failed login sat between a flush report and a compile warning.
+  Authentication, password changes, and every privileged command or refusal of
+  one now land there.
+- **Graceful drain was half-adequate, as the plan guessed — but only half.**
+  The world side was fine: `Engine.shutdown` already drained the op queue and
+  made a final flush with a 30-second budget. What was missing is that nobody
+  connected was *told*. Fixing it needed a real change of shape: the world's
+  context is no longer derived from the signal context, because deriving it
+  cancels both at once and races the farewell against the drain that makes
+  sending impossible. A signal now announces, then stops, in that order.
+  Verified by hand against a running server with connections held open.
+- **Backup and restore** were genuinely undocumented; `README.md` now covers
+  `pg_dump`/`pg_restore`, and the two things that decide a schedule: a crash
+  loses at most `FBE_FLUSH_INTERVAL` so backups are for mistakes rather than
+  crashes, and a backup restored under a running server is ignored until it
+  restarts, because the in-memory graph is authoritative.
+- **The README divergences section** was already done, as the plan said.
+
+Everything here was checked against a running server as well as by test:
+pprof reachable on loopback and not on the host's own address, the per-host
+cap refusing before the handshake, and `SIGTERM` delivering
+`## The server is shutting down. ##` to held connections before exiting
+cleanly.
 
 ## 3. Project State
 

@@ -130,7 +130,7 @@ func (s *Server) cmdBoot(c *ctx) {
 		return
 	}
 	ds[len(ds)-1].Close()
-	s.statusLog().Warn("booted",
+	s.securityLog().Warn("booted",
 		"player", victim.String(), "name", o.Name,
 		"by", c.who.String(), "byName", nameOf(c.w, c.who))
 	if victim != c.who {
@@ -153,7 +153,7 @@ func (s *Server) cmdToad(c *ctx) {
 	if victim == ref.God {
 		c.tell("You cannot @toad God.")
 		if c.who != ref.God {
-			s.statusLog().Warn("toad attempt on God",
+			s.securityLog().Warn("toad attempt on God",
 				"by", c.who.String(), "byName", nameOf(c.w, c.who))
 		}
 		return
@@ -195,7 +195,7 @@ func (s *Server) cmdToad(c *ctx) {
 
 	s.notify(c.w, victim, "You have been turned into a toad.")
 	c.tell("You turned %s into a toad!", o.Name)
-	s.statusLog().Warn("toaded",
+	s.securityLog().Warn("toaded",
 		"player", victim.String(), "name", o.Name,
 		"by", c.who.String(), "byName", nameOf(c.w, c.who),
 		"recipient", recipient.String())
@@ -343,7 +343,7 @@ func (s *Server) cmdForce(c *ctx) {
 		}
 	}
 
-	s.statusLog().Warn("forced",
+	s.securityLog().Warn("forced",
 		"target", victim.String(), "name", o.Name,
 		"by", c.who.String(), "byName", nameOf(c.w, c.who),
 		"command", command)
@@ -422,7 +422,7 @@ func (s *Server) cmdPcreate(c *ctx) {
 		c.send(err.Error())
 		return
 	}
-	s.statusLog().Info("created player",
+	s.securityLog().Info("created player",
 		"player", o.Ref.String(), "name", name,
 		"by", c.who.String(), "byName", nameOf(c.w, c.who))
 	c.tell("Player %s created as object #%d.", name, int32(o.Ref))
