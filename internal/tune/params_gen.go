@@ -386,6 +386,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_credits",
@@ -396,6 +397,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_editor_help",
@@ -406,6 +408,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_help",
@@ -416,6 +419,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_help_dir",
@@ -426,6 +430,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_info_dir",
@@ -436,6 +441,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_log_cmd_times",
@@ -567,6 +573,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_man_dir",
@@ -577,6 +584,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_motd",
@@ -587,6 +595,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_mpihelp",
@@ -597,6 +606,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_mpihelp_dir",
@@ -607,6 +617,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_news",
@@ -617,6 +628,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_news_dir",
@@ -627,6 +639,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "file_welcome_screen",
@@ -637,6 +650,7 @@ var params = []Param{
 		ReadMLev:  4,
 		WriteMLev: 4,
 		GodOnly:   true,
+		Inert:     "help texts live in Postgres, not files",
 	},
 	{
 		Name:      "force_mlev1_name_notify",

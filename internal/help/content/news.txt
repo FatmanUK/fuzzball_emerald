@@ -1,0 +1,6 @@
+There is no news yet.
+
+A wizard sets this text with the configurator, or with
+"@help #set news <topic>". The first block -- this one -- is what a
+bare "news" shows; each block after it is a topic "news <name>"
+reaches.

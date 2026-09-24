@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -103,6 +104,9 @@ func (s *Store) Flush(ctx context.Context, snap world.Snapshot) error {
 			return err
 		}
 		if err := writeMacros(tx, snap.Macros); err != nil {
+			return err
+		}
+		if err := writeHelp(tx, snap.Help); err != nil {
 			return err
 		}
 		return writeMeta(tx, metaTop, fmt.Sprint(int32(snap.Top)))
@@ -241,6 +245,49 @@ func writeMacros(tx *gorm.DB, macros []world.Macro) error {
 	}
 	if err := tx.CreateInBatches(rows, 200).Error; err != nil {
 		return fmt.Errorf("writing macros: %w", err)
+	}
+	return nil
+}
+
+// writeHelp replaces each changed corpus. A corpus is written whole
+// for the reason the macro table is: a deleted topic has to
+// disappear, and there is no per-row deletion to track. Corpora that
+// did not change are not touched, so a motd append leaves the rest
+// alone.
+func writeHelp(tx *gorm.DB, help map[string][]world.HelpTopic) error {
+	for corpus, topics := range help {
+		err := writeHelpCorpus(tx, corpus, topics)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeHelpCorpus(tx *gorm.DB, corpus string,
+	topics []world.HelpTopic) error {
+
+	err := tx.Where("corpus = ?", corpus).
+		Delete(&HelpTopic{}).Error
+	if err != nil {
+		return fmt.Errorf("clearing help %s: %w", corpus, err)
+	}
+	if len(topics) == 0 {
+		return nil
+	}
+	rows := make([]HelpTopic, 0, len(topics))
+	for _, t := range topics {
+		rows = append(rows, HelpTopic{
+			Corpus:   corpus,
+			Name:     t.Name,
+			Aliases:  strings.Join(t.Aliases, "|"),
+			Ord:      int32(t.Ord),
+			Body:     t.Body,
+			Modified: t.Modified,
+		})
+	}
+	if err := tx.CreateInBatches(rows, 200).Error; err != nil {
+		return fmt.Errorf("writing help %s: %w", corpus, err)
 	}
 	return nil
 }

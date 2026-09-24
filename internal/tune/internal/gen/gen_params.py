@@ -57,6 +57,9 @@ RENAMED = {"smtp_ssl_type": "smtp_tls_mode"}
 
 # Inert: kept so MUF `sysparm` lookups keep working, but no longer steering
 # anything, because write-behind persistence replaced dump-and-pause.
+# Why every file_* parameter the help system replaces is inert.
+HELP_INERT = "help texts live in Postgres, not files"
+
 INERT = {
     "dump_interval":     "superseded by continuous write-behind; see flush_interval",
     "dump_warntime":     "no dump pause to warn about",
@@ -66,6 +69,25 @@ INERT = {
     "dumpdone_warning":  "saving never blocks the world",
     "dbdump_warning":    "saving never blocks the world",
     "diskbase_propvals": "DISKBASE is gone; properties live in Postgres",
+
+    # The help system's texts live in Postgres, not in a game
+    # directory, so every one of these names a file that does not
+    # exist. They keep reading and writing so SYSPARM and SETSYSPARM
+    # still work; edit the texts with @help or the configurator.
+    "file_connection_help": HELP_INERT,
+    "file_credits":         HELP_INERT,
+    "file_editor_help":     HELP_INERT,
+    "file_help":            HELP_INERT,
+    "file_help_dir":        HELP_INERT,
+    "file_info_dir":        HELP_INERT,
+    "file_man":             HELP_INERT,
+    "file_man_dir":         HELP_INERT,
+    "file_motd":            HELP_INERT,
+    "file_mpihelp":         HELP_INERT,
+    "file_mpihelp_dir":     HELP_INERT,
+    "file_news":            HELP_INERT,
+    "file_news_dir":        HELP_INERT,
+    "file_welcome_screen":  HELP_INERT,
 }
 
 UPSTREAM_COUNT = 169

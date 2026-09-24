@@ -16,6 +16,7 @@ import (
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/admit"
 	"github.com/FatmanUK/fuzzball_emerald/internal/game"
+	"github.com/FatmanUK/fuzzball_emerald/internal/help"
 	"github.com/FatmanUK/fuzzball_emerald/internal/importer"
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -90,7 +91,30 @@ func cmdServe(args []string) error {
 	}
 	w.SetMacros(table)
 
+	topics, err := st.LoadHelp(ctx, w)
+	if err != nil {
+		return fmt.Errorf("loading help: %w", err)
+	}
+	// A world that has never been seeded, or that predates this
+	// release's content, is brought up to date before anyone can
+	// connect: the help system is useless empty, and there is no
+	// game directory to drop files into.
+	seeded, err := seedHelp(ctx, st, w, false)
+	if err != nil {
+		return err
+	}
+	if len(seeded) > 0 {
+		log.Info("help seeded",
+			"corpora", strings.Join(seeded, " "),
+			"version", help.Version)
+		topics, err = st.LoadHelp(ctx, w)
+		if err != nil {
+			return fmt.Errorf("loading help: %w", err)
+		}
+	}
+
 	log.Info("world loaded",
+		"help_topics", topics,
 		"programs", progs,
 		"macros", len(macros),
 		"objects", rep.Objects,
@@ -283,6 +307,92 @@ func cmdMigrate(args []string) error {
 	}
 	logging.On(base, logging.Status).Info("schema is up to date")
 	return nil
+}
+
+// cmdHelpSeed writes the built-in help texts into an existing
+// database, which is how a world picks up a release's new content
+// without restarting the server -- and, with -force, how a wizard who
+// has made a mess of the manual gets it back.
+func cmdHelpSeed(args []string) error {
+	fs := flag.NewFlagSet("help-seed", flag.ContinueOnError)
+	force := fs.Bool("force", false,
+		"replace every topic, including ones edited here")
+	c, err := loadConfig(fs, args)
+	if err != nil {
+		return err
+	}
+	if c.DatabaseURL == "" {
+		return fmt.Errorf(
+			"no database URL (set FBE_DATABASE_URL)")
+	}
+	base, err := newLogger(c)
+	if err != nil {
+		return err
+	}
+	log := logging.On(base, logging.Status)
+
+	ctx, stop := notifyContext()
+	defer stop()
+
+	st, err := store.Open(ctx, c.DatabaseURL, base)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := st.Migrate(ctx); err != nil {
+		return err
+	}
+
+	w := world.New()
+	if _, err := st.LoadHelp(ctx, w); err != nil {
+		return err
+	}
+	changed, err := seedHelp(ctx, st, w, *force)
+	if err != nil {
+		return err
+	}
+	if len(changed) == 0 {
+		log.Info("help is already up to date")
+		return nil
+	}
+	log.Info("help seeded", "corpora", strings.Join(changed, " "),
+		"version", help.Version)
+	return nil
+}
+
+// seedHelp applies the built-in content and writes what changed.
+//
+// It is shared by the serve path and the help-seed subcommand, and
+// writes through the store directly rather than through the engine:
+// at boot there is no engine yet, and the subcommand has no server at
+// all.
+func seedHelp(ctx context.Context, st *store.Store, w *world.World,
+	force bool) ([]string, error) {
+
+	seeded, err := st.HelpSeedVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	changed := help.Apply(w, seeded, force)
+	if len(changed) == 0 {
+		// The version still has to be recorded, or every boot
+		// re-runs the merge to reach the same answer.
+		if seeded == help.Version {
+			return nil, nil
+		}
+		return nil, st.SetHelpSeedVersion(ctx, help.Version)
+	}
+
+	snap := w.TakeSnapshot()
+	if err := st.Flush(ctx, snap); err != nil {
+		return nil, fmt.Errorf("writing seeded help: %w", err)
+	}
+	err = st.SetHelpSeedVersion(ctx, help.Version)
+	if err != nil {
+		return nil, err
+	}
+	return changed, nil
 }
 
 func cmdImport(args []string) error {

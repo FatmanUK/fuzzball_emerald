@@ -1,0 +1,176 @@
+MUF -- the Multi-User Forth the server runs
+
+Type "man <topic>" for any of these.
+
+  Language      stack  types  variables  control  procedures
+  Writing one   editor  directives  libraries  debugging
+  Reference     primitives  errors
+
+Every primitive Fuzzball 7 defines is implemented here, and each was
+checked against the original rather than against its documentation.
+"man primitives" says how to find out about one.
+~
+stack
+MUF is stack-based and postfix: a word takes its arguments off the
+stack and leaves its results there.
+
+  2 3 +          leaves 5
+  "a" "b" strcat leaves "ab"
+
+A program starts with one value already on the stack: the text typed
+after the command that ran it. "depth" counts it, so a program that
+expects an empty stack is already wrong.
+
+  dup  swap  over  rot  pop      the usual shuffling words
+  depth                          how many items there are
+~
+types
+  integer   whole numbers
+  float     64-bit; "1.0", not "1"
+  string    "in quotes"; \r is a line break and \[ is ESC
+  dbref     #123, and the specials #-1 #-2 #-3 #-4
+  address   'procname, a procedure to call later
+  lock      a compiled boolean expression
+  array     a list or a dictionary
+
+"int?", "float?", "string?", "dbref?", "address?", "lock?" and
+"array?" each test the top of the stack.
+
+An unset variable reads as integer 0, not as #-1.
+~
+variables
+  var name           declare a global, outside any procedure
+  lvar name          declare one local to this program's run
+  name @             read it
+  value name !       write it
+
+Inside a procedure, "name" between the brackets of the signature
+declares a scoped variable:
+
+  : greet[ str:who -- ] who @ me @ swap notify ;
+
+Four variables are always declared: me, loc, trigger and command.
+~
+control
+  <test> if ... else ... then
+  begin ... <test> until
+  begin ... <test> while ... repeat
+  <n> <m> <var> for ... repeat
+  <array> foreach ... repeat
+
+  break     leave the innermost loop
+  continue  start its next pass
+
+TRY takes a count off the stack: how many items the guarded block
+consumes. Catching unwinds to exactly the depth below them, so the
+idiom is
+
+  0 try ... catch ... endcatch
+
+and never a bare "try".
+~
+procedures
+  : name  ... ;                        a procedure
+  : name[ a b -- c ] ... ;             with scoped variables
+  public name                          callable from other programs
+  'name                                its address, not a call
+
+A program starts at the last procedure it defines, unless
+"$entrypoint <name>" says otherwise.
+
+Another program's public procedure is reached with
+
+  #123 "procname" call
+~
+editor
+"@program <name>" makes a program and puts you in the editor;
+"@edit <program>" reopens one.
+
+The parse is unusual: the arguments come first and the command
+last, and only the first character of the last word is looked at.
+
+  i          start inserting; a line with just "." stops
+  3 5 d      delete lines three to five
+  l          list
+  1 n        turn line numbers on
+  c          compile
+  q          save and leave
+  x          leave without saving
+  h          the full summary
+
+Nothing is written until "q".
+~
+directives|compiler
+Directives run at compile time.
+
+  $define name ... $enddef     a substitution
+  $def name ...                the one-line form
+  $undef name                  forget one
+  $cleardefs                   forget all but the built-ins
+  $ifdef name ... $else ... $endif
+  $ifndef  $iflib  $ifnlib     other conditionals
+  $include $lib/name           take in what a library exports
+  $echo    $abort              talk to, or stop, the compiler
+  $author  $note  $version  $lib-version  $doccmd
+                               documentation, stored as properties
+  $pubdef name <text>          export a definition
+  $libdef name                 export a caller for a public procedure
+  $pragma comment_strict       comments do not nest
+  $pragma comment_recurse      they nest, and a bad one is an error
+  $pragma comment_loose        nest if you can, otherwise do not
+  $entrypoint name             start here
+  $language "muf"              say what this is
+
+$ifver, $ifnver, $iflibver, $ifnlibver, $ifcancall and $ifncancall
+are recognised and treated as false: they need more of a live
+database than the compiler is given. A program using one takes its
+$else branch and the compiler says so.
+~
+libraries
+A library is a program whose useful procedures are "public". Two
+directives export them:
+
+  $libdef greet      writes _defs/greet as: #<this> "greet" call
+  $pubdef NAME text  writes _defs/NAME as whatever you give it
+
+Both write under the _defs propdir on the program, which is exactly
+what "$include" reads back. Put "\" in front of the name to write it
+only if nothing is there already, and "$pubdef :" clears the lot.
+
+Register the program with a name and other programs can say
+
+  $include $lib/yours
+~
+debugging
+Setting a program DARK traces it: the interpreter prints a line for
+each instruction to whoever controls the program.
+
+  Debug> Pid 7: #58 6 ("", 3) DEBUG_OFF
+
+The stack is shown first and reads bottom to top, cut to its last
+eight. DEBUG_ON and DEBUG_OFF switch tracing from inside a program.
+
+DEBUGGER_BREAK does not open an interactive prompt here as it does
+upstream; it turns tracing on for the rest of the run instead.
+~
+primitives|prims
+Every primitive Fuzzball 7 defines is implemented, and the names and
+arguments are upstream's. The full reference is the MUF manual:
+
+  https://fuzzball-muck.github.io/fuzzball/mufman.html
+
+From inside the game, a program can ask the server directly. There
+is no per-primitive entry here to go stale against the code.
+~
+errors
+A failing program prints a block, not a line: a header, the program
+and line, then a backtrace with the failing source under each level,
+ending "*done*". The backtrace shows only to someone who controls
+the program.
+
+Error messages are matched on by programs, so they are worded
+exactly as upstream words them -- "Invalid argument type.",
+"Non-string argument.", "Variable number out of range."
+
+Integer division by zero does not abort. The result is 0 and an
+error flag the program reads with "is_set?".

@@ -1,0 +1,87 @@
+This block has no alias line, so it is not a topic. Upstream's info
+is a directory of files with no index page, and a bare "info" lists
+the file names rather than showing a header. Everything below is one
+file.
+~
+server
+Fuzzball Emerald
+
+A reimplementation of Fuzzball MUCK 7 in Go. Existing MUF programs,
+MPI descriptions and .db worlds are meant to work unchanged.
+
+Four things are deliberately different:
+
+  Go rather than C
+  TLS only -- there is no cleartext port and no STARTTLS
+  Postgres rather than flat-file dumps
+  a rootless container rather than autotools
+
+Because there are no dumps, there is no dump pause: the world is
+written continuously in the background and "@dump" only brings the
+next write forward.
+
+Type "@version" for the build, and "@credits" for who to thank.
+~
+newbie
+If you have just arrived:
+
+  look                  see where you are
+  WHO                   see who else is here
+  say hello             talk
+  :waves                do something
+  <exit name>           go through an exit; just type its name
+  help                  the command list
+  QUIT                  leave
+
+WHO and QUIT are typed in capitals. Everything else is not
+case-sensitive.
+
+Your home is where "home" takes you. Ask a wizard to set one if you
+have not got a useful one yet.
+~
+building
+Making things costs pennies, so start small.
+
+  @dig Workshop                  a room
+  @open out=#0                   an exit out of it, pointing somewhere
+  @create hammer                 a thing, in your hands
+  @describe hammer=It is heavy.  what look shows
+  @name hammer=big hammer        rename it
+  @set hammer=STICKY             it goes home when dropped
+
+"examine <thing>" shows everything you may see about something you
+control, and "@find" lists what you own.
+
+Put "@dig Workshop=<parent>" if the world has an environment room
+you are meant to build under -- a wizard will tell you which.
+~
+programming
+Programs are written in MUF, a stack language, and in MPI, which
+lives inside property values.
+
+  @program tools                 make one and start editing
+  @edit tools                    reopen it
+  @list tools                    read it
+  man                            the language
+  mpi                            the macro language
+
+You need a mucker bit before you can write one. Programs run at the
+lower of their own mucker level and their owner's, so a wizard with
+no mucker bits owns programs that run at level zero.
+~
+privacy
+What the server records:
+
+  Connections are logged with the host they came from.
+  Commands are logged; anything that could carry a password is
+  logged with its argument redacted.
+  Passwords are stored as Argon2id hashes, never in the clear.
+
+What other players can see:
+
+  Anything you say, pose, or leave in a description.
+  Your presence, unless a wizard has set you DARK.
+  Any property that is not hidden -- see "help properties" for which
+  characters make a property private.
+
+A wizard can see everything. That is what being a wizard is.

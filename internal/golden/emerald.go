@@ -46,6 +46,7 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 		})
 	}
 	w.SetMacros(macros)
+	loadHelpData(w)
 
 	// A short interval, because the tick is what wakes a sleeping
 	// program.

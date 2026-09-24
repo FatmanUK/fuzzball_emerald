@@ -327,4 +327,7 @@ func (w *World) requeue(s Snapshot) {
 	if s.Macros != nil {
 		w.macrosDirty = true
 	}
+	for key := range s.Help {
+		w.markHelpDirty(key)
+	}
 }

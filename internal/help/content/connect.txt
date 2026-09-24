@@ -1,0 +1,13 @@
+Connecting
+
+  connect <name> <password>     enter as an existing character
+  create <name> <password>      make a new character
+  WHO                           see who is connected
+  QUIT                          disconnect
+  help                          this text
+
+If your name or password has a space in it, it cannot be typed here:
+ask a wizard to change it.
+
+Passwords are sent over an encrypted connection, but they are still
+sent -- do not reuse one that matters elsewhere.

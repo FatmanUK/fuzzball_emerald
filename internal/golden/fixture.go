@@ -171,6 +171,11 @@ func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 	if err := writeDump(dump, objs); err != nil {
 		return nil, err
 	}
+	// The help system's texts, which the C reads as files from
+	// here and this server reads from its world.
+	if err := writeHelpData(dataDir); err != nil {
+		return nil, err
+	}
 	for i, prog := range programs {
 		srcPath := filepath.Join(mufDir, fmt.Sprintf("%d.m", firstProg+i))
 		if err := os.WriteFile(srcPath, []byte(prog.Source), 0o644); err != nil {

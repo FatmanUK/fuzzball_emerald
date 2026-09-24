@@ -23,6 +23,12 @@ type Snapshot struct {
 	// Macros carries the whole editor macro table when it
 	// changed, for the same reason Tune does.
 	Macros []Macro
+	// Help carries every help corpus that changed, keyed by
+	// folded corpus name and written whole. It is keyed per
+	// corpus rather than sent as one list so that appending a
+	// line to the motd does not rewrite the manual — which a
+	// wizard may be part-way through editing.
+	Help map[string][]HelpTopic
 	// Top is the world's ref ceiling at the time of the snapshot.
 	Top ref.Ref
 }
@@ -30,7 +36,8 @@ type Snapshot struct {
 // Empty reports whether there is nothing to write.
 func (s Snapshot) Empty() bool {
 	return len(s.Objects) == 0 && len(s.Deleted) == 0 && s.Tune == nil &&
-		len(s.Programs) == 0 && s.Macros == nil
+		len(s.Programs) == 0 && s.Macros == nil &&
+		s.Help == nil
 }
 
 // TakeSnapshot copies out everything changed since the last call and
@@ -69,6 +76,15 @@ func (w *World) TakeSnapshot() Snapshot {
 		w.macrosDirty = false
 	}
 
+	if len(w.helpDirty) > 0 {
+		s.Help = make(map[string][]HelpTopic,
+			len(w.helpDirty))
+		for key := range w.helpDirty {
+			s.Help[key] = w.HelpTopics(key)
+		}
+		clear(w.helpDirty)
+	}
+
 	if w.tuneDirty {
 		s.Tune = make(map[string]string)
 		for _, p := range w.Tune.Params() {
@@ -95,4 +111,7 @@ func (w *World) MarkAllDirty() {
 	}
 	w.tuneDirty = true
 	w.macrosDirty = true
+	for key := range w.help {
+		w.markHelpDirty(key)
+	}
 }

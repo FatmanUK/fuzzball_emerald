@@ -39,6 +39,7 @@ commands:
   import    load a legacy Fuzzball database dump into Postgres
   migrate   create or update the Postgres schema, then exit
   tune      print the @tune parameter table
+  help-seed write the built-in help texts into the database
   version   print the version
 
 Run "fbemerald <command> -h" for a command's flags.
@@ -59,6 +60,8 @@ func run(args []string) error {
 		return cmdImport(rest)
 	case "migrate":
 		return cmdMigrate(rest)
+	case "help-seed":
+		return cmdHelpSeed(rest)
 	case "tune":
 		return cmdTune(rest)
 	case "version":

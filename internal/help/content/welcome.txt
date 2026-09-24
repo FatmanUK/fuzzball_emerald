@@ -1,0 +1,9 @@
+
+  Fuzzball Emerald
+
+  connect <name> <password>   to enter
+  create <name> <password>    to make a new character
+  QUIT                        to disconnect
+
+  Type "help" for more.
+

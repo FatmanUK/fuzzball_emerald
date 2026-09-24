@@ -45,10 +45,11 @@ func (s *Server) login(w *world.World, d *session.Descriptor, line string) {
 	case ascii.EqualFold(cmd, "who"):
 		s.loginWho(w, d)
 
-	case ascii.EqualFold(cmd, "help"):
-		for _, l := range s.welcome {
-			d.Send(l)
-		}
+	// Upstream matches "help" by its first four characters here,
+	// and answers with the connection help rather than the banner
+	// the connection has already been shown.
+	case ascii.HasPrefix(cmd, "help"):
+		s.connectHelp(w, d)
 
 	default:
 		d.Send("Type \"connect <name> <password>\" to enter, or \"help\" for more.")
@@ -282,6 +283,7 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 		d.Send("You are already connected elsewhere; both connections are now active.")
 	}
 
+	s.showMOTD(w, d)
 	s.announceConnect(w, d, alreadyOn)
 	s.lookHere(w, player)
 	s.warnInteractive(d)

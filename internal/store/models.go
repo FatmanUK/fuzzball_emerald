@@ -113,6 +113,31 @@ type Macro struct {
 
 func (Macro) TableName() string { return "macros" }
 
+// HelpTopic is one entry in one help corpus: a block of an index
+// file, a file in the info directory, or the whole of a single text
+// such as the motd.
+//
+// Upstream keeps these as files under the game directory. Emerald has
+// no game directory, so they live here — which is also what lets a
+// wizard edit them from inside the game and what the configurator
+// reads.
+type HelpTopic struct {
+	Corpus string `gorm:"primaryKey;size:16"`
+	// Name is the topic's first alias, and is empty for the
+	// header block a corpus shows when no topic is asked for.
+	Name string `gorm:"primaryKey;size:64"`
+	// Aliases are the topic's other names, "|"-separated exactly
+	// as upstream's index line writes them.
+	Aliases string
+	Ord     int32  `gorm:"not null"`
+	Body    string `gorm:"not null"`
+	// Modified is Unix seconds, and zero for a topic written by
+	// seeding and never edited since.
+	Modified int64 `gorm:"not null"`
+}
+
+func (HelpTopic) TableName() string { return "help_topics" }
+
 // Meta holds small scalars about the database itself, such as the ref
 // ceiling.
 type Meta struct {
@@ -122,11 +147,16 @@ type Meta struct {
 
 func (Meta) TableName() string { return "meta" }
 
-// metaTop is the key under which the ref ceiling is stored.
-const metaTop = "db_top"
+// metaTop is the key under which the ref ceiling is stored, and
+// metaHelpSeed the version of the built-in help content last seeded
+// into the database.
+const (
+	metaTop      = "db_top"
+	metaHelpSeed = "help_seed_version"
+)
 
 // allModels is what Migrate creates.
 var allModels = []any{
 	&Object{}, &Property{}, &ExitDest{}, &Program{},
-	&TuneParam{}, &Macro{}, &Meta{},
+	&TuneParam{}, &Macro{}, &HelpTopic{}, &Meta{},
 }

@@ -30,9 +30,6 @@ type Server struct {
 	hub    *session.Hub
 	log    *slog.Logger
 
-	// welcome is the banner shown before login.
-	welcome []string
-
 	// shutdown asks the process to stop, set by the server
 	// binary.
 	shutdown func()
@@ -94,8 +91,6 @@ func (s *Server) OnShutdown(fn func()) { s.shutdown = fn }
 // Options configure a Server.
 type Options struct {
 	Logger *slog.Logger
-	// Welcome replaces the built-in banner.
-	Welcome []string
 }
 
 // New returns a Server driving engine.
@@ -103,15 +98,10 @@ func New(engine *world.Engine, opts Options) *Server {
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
-	welcome := opts.Welcome
-	if len(welcome) == 0 {
-		welcome = defaultWelcome()
-	}
 	s := &Server{
 		engine:   engine,
 		hub:      session.NewHub(),
 		log:      opts.Logger,
-		welcome:  welcome,
 		started:  time.Now(),
 		programs: map[ref.Ref]compiled{},
 		procs:    newProcQueue(),
@@ -155,7 +145,7 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 		// it ignores.
 		d.MCP.StartNegotiation()
 
-		for _, line := range s.welcome {
+		for _, line := range s.welcomeLines(w, d) {
 			d.Send(line)
 		}
 		// Someone arriving at a full server is told so now

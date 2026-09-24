@@ -1,0 +1,14 @@
+Fuzzball Emerald
+
+A from-scratch reimplementation of Fuzzball MUCK 7 in Go, aiming for
+behaviour compatibility: existing MUF programs, MPI descriptions and
+.db worlds should work unchanged.
+
+Fuzzball MUCK is the work of the Fuzzball development team and of
+everyone who worked on TinyMUCK before it. Emerald owes all of its
+behaviour to theirs; where the two disagree, theirs is the original.
+
+  Fuzzball     https://www.fuzzball.org/
+  Emerald      https://github.com/FatmanUK/fuzzball_emerald
+
+Type "@version" for what this server was built from.

@@ -1,0 +1,97 @@
+MPI -- the macro language inside property values
+
+Type "mpi <topic>" for any of these.
+
+  Basics        syntax  variables  limits
+  Groups        text  numbers  logic  lists  objects  props  time
+
+Every function Fuzzball 7 defines is implemented here.
+~
+syntax
+MPI is evaluated when a property is read, if the property is set to
+be parsed. A function call is written in braces:
+
+  {func:arg,arg,...}
+
+Arguments are separated by commas; a comma inside one is written
+"\,". Calls nest, and the inner one is evaluated first:
+
+  You see {name:{owner:this}}'s handiwork.
+
+A failure is reported to whoever triggered the read and yields empty
+text. It does not abort the command or the program that was reading
+the property.
+~
+variables
+  {store:value,name}      set one
+  {&name}                 read it
+  {null:...}              evaluate and discard
+
+Some are set for you:
+
+  {&how}    the property being evaluated
+  {&cmd}    the command that triggered it
+  {&arg}    the rest of that command line
+  {&this}   the object the property is on
+
+Thirty-two variables may exist at once.
+~
+limits
+  recursion       26 levels
+  variables       32
+  function name   16 characters
+  loop iterations 512
+
+The published MPI manual says 256 iterations; upstream's own source
+says 512, and Emerald follows the source.
+~
+text
+  {subst:...}  {strip:...}  {lit:...}  {eval:...}
+  {toupper:..} {tolower:..} {midstr:..} {instr:..}
+  {smatch:s,pattern}          shell-style matching
+  {ansi:...}   {attr:...}     colour and attributes
+  {center:..}  {ljust:..}  {rjust:..}
+~
+numbers
+  {add:..} {sub:..} {mult:..} {div:..} {mod:..}
+  {abs:..} {sign:..} {min:..} {max:..} {inc:..} {dec:..}
+  {dist:x,y} or {dist:x1,y1,x2,y2}
+  {dice:count,sides[,bonus]}   {rand:...}
+  {commas:<list>}              join a list with commas
+~
+logic
+  {if:test,then[,else]}  {or:..}  {and:..}  {not:..}  {xor:..}
+  {eq:..} {ne:..} {gt:..} {ge:..} {lt:..} {le:..}
+  {default:value,fallback}
+
+{and}, {or} and {if} do not evaluate the branch they will not use.
+That is visible, because MPI has side effects.
+~
+lists
+  {list:propname}     {lexec:..}  {mklist:a,b,c}
+  {nth:n,<list>}      {lcommon:..} {lunion:..} {lremove:..}
+  {sort:..}           {foreach:var,<list>,...}
+  {count:<list>}      {lrand:..}
+~
+objects
+  {name:obj} {fullname:obj} {owner:obj} {loc:obj} {type:obj}
+  {contents:obj[,type]}  {exits:obj}  {links:obj}
+  {controls:obj,who}  {holds:..}  {contains:..}  {nearby:..}
+  {flag?:obj,flag}    {dbeq:a,b}   {money:obj}   {usecount:obj}
+  {locked:obj,who}    {online}     {awake:obj}
+~
+props
+  {prop:name[,obj]}      read, walking the environment
+  {propdir:..}           does it have children
+  {store:value,name[,obj]}
+  {delprop:..}  {exec:..}  {parse:..}  {select:..}
+  {otell:..}  {tell:..}  {ontell:..}
+
+{prop} is the forgiving form: it walks up the environment, and
+returns nothing rather than failing when the property is unset.
+~
+time
+  {time}  {date}  {ftime:format[,obj,when]}
+  {timestr:seconds}   {stimestr:..}   {ltimestr:..}
+  {convtime:HH:MM:SS MM/DD/YYYY}
+  {delay:seconds,command}   {lastused:obj}  {created:obj}

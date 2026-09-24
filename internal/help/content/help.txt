@@ -1,0 +1,317 @@
+Fuzzball Emerald -- player command help
+
+Type "help <topic>" for detail on any of these.
+
+  Getting around    look  go  home  exits
+  Talking           say  pose  page  whisper
+  Things            inventory  get  drop  give
+  Finding out       examine  WHO  @version  @stats
+  Building          @create  @dig  @open  @link  @name  @describe  @set
+  Locks             @lock  @flock  @conlock  @linklock  @readlock
+  Programs          @program  @edit  @list  man  mpi
+  Wizards           @tune  @teleport  @toad  @boot  @force  @sanity
+  Other reading     news  info  motd  @credits
+
+Two commands are typed in capitals and mean the same thing wherever
+you are: WHO lists who is connected, and QUIT disconnects you.
+~
+look|l|read
+look                    look at the room you are in
+look <thing>            look at something here, or something you carry
+look <thing>=<prop>     read one property off it, if you may
+
+Looking at a room gives its name, its description and what is in it.
+It does not list the exits: a world that wants an "obvious exits"
+line prints one from its own programs.
+~
+go|move|goto
+go <exit>               leave through an exit
+go home                 go to your home
+
+You rarely need the word: typing an exit's name on its own is the
+usual way to use it. "go" exists for the case where an exit shares
+its name with a command.
+~
+home
+home                    go straight to your home
+
+Your home is where "home" sends you and where your possessions
+return to if they are dropped somewhere that will not keep them. A
+wizard sets it with "@link me=<room>".
+~
+say|"
+say <message>           speak out loud
+" <message>             the same, in one character
+
+  say hello        ->  You say, "hello"
+                       everyone else sees: Igor says, "hello"
+~
+pose|:
+pose <action>           describe yourself doing something
+: <action>              the same, in one character
+
+  :waves           ->  Igor waves
+
+Your name and a space are put in front of whatever you type, so
+start with a verb.
+~
+page
+page <player>           send them a "who is looking for you" notice
+page <player>=<message> send them a message
+
+Paging reaches someone anywhere in the world. Use whisper for
+someone in the room with you.
+~
+whisper
+whisper <player>=<message>
+
+Speak to one person in the room. Others see that you whispered,
+but not what you said.
+~
+inventory|i
+inventory               list what you are carrying
+
+  i                     the same, in one character
+~
+get|take
+get <thing>             pick something up
+
+You can only take something that is in the room with you, or in a
+container here that you are allowed to reach into.
+~
+drop|throw
+drop <thing>            put something down
+
+Where it lands depends on the room. A room with a drop-to sends
+what is dropped in it somewhere else, and a thing that is locked to
+its owner goes home instead.
+~
+examine|ex
+examine <thing>         show everything you may see about it
+examine <thing>=<pattern>
+                        list its properties instead
+
+  examine here=/         the properties at the root
+  examine me=**          every property, recursively
+
+You may examine anything you control. The listing gives the flags,
+the messages and locks that are set, the timestamps, the use count
+and the contents.
+~
+@create
+@create <name>[=<cost>] make a new thing, in your hands
+
+Creating costs pennies. What you pay above the minimum is given to
+the thing as its value, which is (cost-5)/5.
+~
+@dig
+@dig <room>[=<parent>]  make a new room
+
+Without a parent the room is placed under the environment room the
+world uses by default.
+~
+@open|@action
+@open <exit>[=<dest>]   make an exit in this room
+@open <exit>;<alias>    give it more than one name
+
+An exit with no destination is unlinked: it exists, but it goes
+nowhere until someone links it.
+~
+@link
+@link <exit>=<dest>     point an exit at somewhere
+@link me=<room>         set your home
+@link <thing>=<room>    set a thing's home
+
+Linking costs pennies, and you have to be allowed to link to the
+destination -- see @linklock.
+~
+@unlink
+@unlink <exit>          make an exit go nowhere again
+
+You must control the exit, or the room it is in.
+~
+@name
+@name <thing>=<name>    rename something
+@name me=<name> <password>
+                        rename yourself
+
+Renaming yourself needs your password, because your name is how you
+log in.
+~
+@describe|@desc
+@describe <thing>=<text>
+                        set what look shows
+
+With no text the description is removed.
+~
+@set
+@set <thing>=<flag>     set a flag
+@set <thing>=!<flag>    clear it
+@set <thing>=<prop>:<value>
+                        set a property
+@set <thing>=<prop>:    remove a property
+
+Flags may be abbreviated. The common ones are LINK_OK, JUMP_OK,
+DARK, STICKY, HAVEN, ABODE, CHOWN_OK, BUILDER and the mucker
+levels.
+~
+@lock|@unlock
+@lock <thing>=<key>     set the lock that says who may use it
+@lock <thing>           show the lock
+
+  @flock       who may @force it
+  @chlock      who may @chown it
+  @conlock     who may put things in it
+  @linklock    who may link to it
+  @ownlock     who may pick it up
+  @readlock    who may read its properties
+
+Locks are boolean expressions over names, dbrefs and properties.
+~
+@find
+@find [<name>]          list what you own whose name matches
+~
+@recycle
+@recycle <thing>        destroy something and get some pennies back
+
+What was inside it goes to its home, or to yours.
+~
+@password
+@password <old>=<new>   change your password
+~
+@program|@prog
+@program <name>         make a program and start editing it
+
+You need a mucker bit. See "man" for the language itself.
+~
+@edit
+@edit <program>         edit a program you control
+
+Inside the editor, type "h" for its own command summary. The
+argument comes first and the command last, so "3 5 d" deletes lines
+three to five.
+~
+@list
+@list <program>[=<range>]
+                        show a program's source
+
+  @list foo=10-20       just those lines
+~
+@version
+@version                what server this is, and what it was built from
+~
+@stats
+@stats                  how many objects of each kind the world holds
+~
+@tune
+@tune                   list every parameter
+@tune <name>            show one
+@tune <name>=<value>    set one
+
+Parameters are a runtime interface as well as a setting: MUF reads
+them by name with SYSPARM, so renaming one breaks programs.
+~
+@teleport|@tel
+@teleport <thing>=<dest>
+                        move something somewhere
+
+You need to control the thing, and the destination has to accept it.
+~
+@boot
+@boot <player>          disconnect them
+~
+@toad
+@toad <player>[=<heir>] turn a player into a thing
+
+What they owned goes to the heir, or to you.
+~
+@force
+@force <thing>=<command>
+                        make something run a command as itself
+
+Refused unless you control it and its force lock passes.
+~
+@ps
+@ps                     list the programs currently running or waiting
+~
+@kill
+@kill <pid>             stop one of them
+~
+@dump
+@dump                   write everything outstanding to the database
+
+Emerald saves continuously, so this only forces the next write
+early. It does not pause the world.
+~
+@shutdown
+@shutdown               stop the server
+
+Everything outstanding is written first.
+~
+@sanity|@sanfix|@sanchange
+@sanity                 check the object graph for inconsistency
+@sanfix                 repair what it found
+@sanchange <thing>=<field>:<value>
+                        change one reference by hand
+
+All three are God-only and cannot be abbreviated.
+~
+WHO
+WHO                     list who is connected
+
+Typed in capitals, and answered by the server itself, so it works
+from the login screen and while a program has your input.
+~
+QUIT
+QUIT                    disconnect
+
+Typed in capitals, so that an ordinary word cannot disconnect you by
+accident.
+~
+@Q
+@Q                      stop the program that is reading your input
+
+A line you type while a program is waiting goes to that program and
+not to the command parser. @Q is how you get out.
+~
+flags
+Flags are set with "@set <thing>=<flag>" and cleared with a "!" in
+front of the name.
+
+  ABODE      others may set their home here
+  BUILDER    may build; "B" on a program means it is a builder tool
+  CHOWN_OK   others may @chown it
+  DARK       hidden from listings; on a program, traced
+  HAVEN      refuses to be entered, or to be @forced
+  JUMP_OK    may be teleported into
+  LINK_OK    others may link to it
+  QUELL      a wizard giving up wizard powers for now
+  STICKY     goes home when dropped; on a program, runs as its owner
+  VEHICLE    may be entered
+  WIZARD     full powers
+  ZOMBIE     a thing that relays what it sees to its owner
+
+  M1 M2 M3   mucker levels: may write and run programs
+~
+properties|props
+A property is a named value on an object. Paths look like
+directories, and a leading character sets who may reach it:
+
+  _name      readable by anyone, writable only by the owner
+  @name      hidden: only a wizard sees it
+  ~name      readable by anyone, set only by a wizard
+  .name      private to the object's owner
+
+Set them with "@set <thing>=<path>:<value>" and list them with
+"examine <thing>=<pattern>".
+~
+pennies|money|cost
+Building costs pennies. The prices are @tune parameters:
+
+  object_cost   what @create costs
+  room_cost     what @dig costs
+  exit_cost     what @open costs
+  link_cost     what @link costs
+
+A created thing is endowed with (cost-5)/5, which is why a plain
+@create leaves a thing worth one penny. Wizards pay for nothing.

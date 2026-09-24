@@ -53,6 +53,9 @@ make pod-stop         # stop it
 make golden-build     # build Fuzzball 7 from the C, once
 make golden           # diff this server against it
 
+./fbemerald help-seed          # write the built-in help into the database
+./fbemerald help-seed -force   # ...replacing topics edited in-game
+
 make width-check                      # no new line over 70 columns
 make width-check RANGE=HEAD~1..HEAD   # ...in a commit range
 ```
@@ -159,6 +162,7 @@ sequences would rewrite every container on every boot.
 - `internal/match` — resolving typed names to objects
 - `internal/session` — descriptors, the connection hub, telnet negotiation
 - `internal/game` — login, command dispatch, the commands
+- `internal/help` — the built-in help texts, seeded into the database
 - `internal/transport/{tlsline,wss}` — the two listeners, terminating into one
   descriptor abstraction so session logic is written once
 
@@ -247,6 +251,75 @@ editor resumes where the last one left off (`Server.editLine`, not persisted).
 
 `h` is the one deliberate divergence: upstream reads `data/edit-help.txt` and
 this has no game directory, so the summary is built in.
+
+## The help system
+
+`internal/game/help.go` is `src/help.c`. Upstream reads its texts out of files
+under the game directory; Emerald has no game directory, so a corpus is rows in
+Postgres (`internal/store`.`HelpTopic`) and a topic is a row. That is also what
+makes them editable from inside the game, with `@help`, and what the
+configurator reads.
+
+There are nine corpora, named in `internal/world/help.go`. Four are upstream's
+**index files** — `help`, `news`, `man`, `mpi` — where a topic is matched
+against its `|`-separated aliases **exactly**. One is upstream's **directory**,
+`info`, which **prefix-matches** and whose bare form lists its topics in
+twenty-column fields rather than showing a header. The rest — `motd`,
+`credits`, `welcome`, `connect` — hold a single text, stored as one topic with
+no name so there is only ever one mechanism to load, write and edit.
+
+**A topic with no name is the header**: the block before the first `~`, which
+is what a bare `help` shows. It is indexed under the empty string like any
+other name. Skipping that indexing is what made `SetHelpText` append a second
+header rather than replace the first.
+
+Two things upstream does that look wrong and are not:
+
+- **`help <topic>=<segment>` ignores the segment.** `index_file` never sees
+  one; only `show_subfile` does, and that is the per-file form. So `info` cuts
+  a text to a line range and `help` does not.
+- **A blank line prints as two spaces.** Both `index_file` and
+  `spit_file_segment` do it, and the golden case compares it.
+
+**The command is `mpi`, not `mpihelp`** — only the `@tune` parameters are named
+`file_mpihelp*`. `mpihelp` is registered as an alias anyway.
+
+**`@credits` is in `exactOnlyCommands`.** Without that, `@cr` and `@cre` become
+ambiguous, and `lookupAtCommand` answers an ambiguous prefix with nothing — so
+adding the command naively stops `@create` from being abbreviated.
+
+All fourteen `file_*` parameters that name a help text are inert: they read and
+write so `SYSPARM` still works, and nothing acts on them. The `file_log_*`
+family is a separate question and is left alone.
+
+### Seeding
+
+`internal/help` holds the built-in texts, embedded with `//go:embed`, written
+fresh for Emerald rather than taken from upstream's GPLv3 `.raw` files —
+Emerald declares no licence, and upstream's help documents about fifty commands
+this server does not have.
+
+`help.Apply` fills an empty corpus outright, and otherwise refreshes only
+topics nobody has edited, which it tells apart by `Modified` being zero.
+`World.ReplaceHelp` is the seeding path and keeps that field; `SetHelpTopic` is
+the editing path and stamps it. The seeded release is recorded in `meta` under
+`help_seed_version`. `fbemerald help-seed [-force]` re-runs it by hand.
+
+### The welcome banner
+
+`internal/game/welcome.go` is `welcome_user`. Three sources in upstream's
+order: the `welcome` **property list on #0** (`welcome#` for the count, then
+`welcome#/1`...), then the `welcome` corpus — where upstream reads
+`file_welcome_screen` — then the compiled-in default. MPI runs over whichever
+won when `do_mpi_parsing` and `do_welcome_parsing` are both set, as
+`welcome_mpi_who`/`welcome_mpi_what`, with the descriptor number in `{&cmd}`
+and the hostname in `{&arg}`.
+
+**Pre-login `help` is a different text from the banner** — the `connect`
+corpus, upstream's `file_connection_help`. An earlier version re-sent the
+banner, which is the one thing somebody typing `help` at a login screen has
+already read. **The motd is shown on a successful connect**, not only on
+demand.
 
 ## MCP
 

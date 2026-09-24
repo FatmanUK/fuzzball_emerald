@@ -46,6 +46,15 @@ type World struct {
 	// each entry.
 	macrosDirty bool
 
+	// help is the help system's corpora, keyed by folded corpus
+	// name. Like macros, they belong to the world rather than to
+	// any object.
+	help map[string]*helpCorpus
+	// helpDirty names the corpora changed since the last flush.
+	// It is per corpus rather than a single flag, so appending to
+	// the motd does not rewrite the manual.
+	helpDirty map[string]struct{}
+
 	Tune *tune.Set
 	// tuneDirty records that the parameter table changed.
 	tuneDirty bool
@@ -64,6 +73,8 @@ func New() *World {
 
 		progDirty: make(map[ref.Ref]struct{}),
 		macros:    make(map[string]Macro),
+		help:      make(map[string]*helpCorpus),
+		helpDirty: make(map[string]struct{}),
 
 		Tune: tune.NewSet(),
 		now:  time.Now,
