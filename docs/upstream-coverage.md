@@ -138,6 +138,16 @@ behind `NO_MEMORY_COMMAND` / `NO_USAGE_COMMAND`.
 from the environment, because a TLS-only server cannot read its
 listener configuration out of a database it has not opened.
 
+`@tops` reports per-program profiling totals, and this server does
+not profile programs — the same reason `examine` reports a
+cumulative runtime of zero.
+
+All four still **resolve**: they are rows in the dispatch table with
+no handler, so the abbreviations around them stay upstream's, and
+typing one says which of the four reasons applies. The list lives in
+`declined` in `internal/game/dispatch.go`, and a test checks every
+name in it is a real command and is not secretly implemented.
+
 ### Abbreviations
 
 **Emerald's abbreviation rule is not upstream's**, and the two already

@@ -196,3 +196,31 @@ func TestGuardsComeFromTheTable(t *testing.T) {
 			got)
 	}
 }
+
+// TestDeclinedCommandsSayWhy separates a decision from a gap. "Not
+// yet" is a promise, and these are not going to be implemented.
+func TestDeclinedCommandsSayWhy(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	h.send("@memory")
+	got := h.out()
+	if !strings.Contains(got, "not available on this server") {
+		t.Errorf("@memory said:\n%s", got)
+	}
+	if strings.Contains(got, "yet") {
+		t.Errorf("@memory reads as a promise:\n%s", got)
+	}
+
+	// And every declined name is one the table actually carries,
+	// so a rename upstream cannot leave a dangling excuse.
+	for name := range declined {
+		if !knownCommand(name) {
+			t.Errorf("%q is declined and not in the table", name)
+		}
+		if _, ok := handlers[name]; ok {
+			t.Errorf("%q is declined and implemented",
+				name)
+		}
+	}
+}

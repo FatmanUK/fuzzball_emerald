@@ -192,6 +192,24 @@ func isMucker(w *world.World, who ref.Ref) bool {
 	return o != nil && o.Flags.MLevel() > 0
 }
 
+// declined are the commands this server will not implement, and why.
+//
+// They stay in the table for the same reason every other unported
+// name does — dropping one widens the abbreviations around it —
+// but "not yet" would be a promise, and these are decisions. Each is
+// recorded in docs/upstream-coverage.md too.
+var declined = map[string]string{
+	"@memory": "it reports the C allocator's own mallinfo " +
+		"counters, which Go has no equivalent of",
+	"@usage": "it reports getrusage counters, which Go has no " +
+		"equivalent of",
+	"@reconfiguressl": "TLS is configured from the environment, " +
+		"because a TLS-only server cannot read its listener " +
+		"settings from a database it has not opened",
+	"@tops": "this server does not profile programs, which is " +
+		"also why examine reports no cumulative runtime",
+}
+
 // dispatch runs one resolved command, or reports that this server
 // does not implement it.
 //
@@ -209,6 +227,11 @@ func (s *Server) dispatch(c *ctx, cmd command) {
 	}
 	h, ok := handlers[cmd.n]
 	if !ok {
+		if why, no := declined[cmd.n]; no {
+			c.tell("%s is not available on this server: %s.",
+				cmd.n, why)
+			return
+		}
 		c.tell("%s is a Fuzzball command this server does not "+
 			"implement yet.", cmd.n)
 		return
