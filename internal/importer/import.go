@@ -65,6 +65,16 @@ func Load(src Source) (*Result, error) {
 
 	res := &Result{World: w, Report: rep}
 
+	// An imported world has never been written, so everything is pending.
+	//
+	// This has to happen here rather than at the end: a dump with no muf/
+	// directory beside it returns early below, and marking only on the way
+	// out meant such a world was parsed, reported as imported, and then
+	// written as nothing at all. Nothing after this point adds to the world
+	// — program source and macros are carried on the Result and stored
+	// separately — so marking now covers every path out.
+	w.MarkAllDirty()
+
 	mufDir := src.MufDir
 	if mufDir == "" {
 		mufDir = guessMufDir(src.DumpPath)
@@ -130,8 +140,6 @@ func Load(src Source) (*Result, error) {
 		rep.Macros = len(res.Macros)
 	}
 
-	// An imported world has never been written, so everything is pending.
-	w.MarkAllDirty()
 	return res, nil
 }
 

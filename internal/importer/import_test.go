@@ -78,6 +78,16 @@ func TestLoadWithoutProgramDirectory(t *testing.T) {
 	if !found {
 		t.Error("the missing program directory should have been reported")
 	}
+
+	// The world must be entirely pending, exactly as one loaded *with* a
+	// program directory is. This is the case that regressed: Load returned
+	// early on the missing directory, before marking anything dirty, so the
+	// dump parsed and reported fine and then wrote nothing at all. A dump
+	// with no muf/ beside it imported as an empty world.
+	if res.World.DirtyCount() != res.World.Len() {
+		t.Errorf("%d of %d objects are pending; a fresh import should be entirely pending",
+			res.World.DirtyCount(), res.World.Len())
+	}
 }
 
 func TestLoadRejectsMissingDump(t *testing.T) {
