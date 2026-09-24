@@ -61,8 +61,10 @@ doing.
    `@relink`, `@clone`, `@attach`, `@trace`; then the wizard set (`@bless`,
    `@unbless`, `@examine`, `@memory`, `@uncompile`, `@usage`, `@doing`,
    `@wall`, `@restrict`); then the basics (`put`, `give`, `score`, `gripe`,
-   `uptime`, `leave`, `disembark`, `hand`, `goal`). `throw`, `goto` and
-   `read` are one-line aliases of `drop`, `go` and `look`.
+   `uptime`, `leave`, `disembark`, `hand`). `throw`, `goto` and `read` are
+   upstream's alternate spellings of `drop`, `go` and `look` — dispatch
+   entries rather than one-line aliases, because upstream prefix-matches
+   bare commands and Emerald does not.
 
 3. **The six compiler conditionals that are always false** — `$ifver`,
    `$ifnver`, `$iflibver`, `$ifnlibver`, `$ifcancall`, `$ifncancall`

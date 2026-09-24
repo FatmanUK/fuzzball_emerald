@@ -299,9 +299,11 @@ family is a separate question and is left alone.
 ### Seeding
 
 `internal/help` holds the built-in texts, embedded with `//go:embed`, written
-fresh for Emerald rather than taken from upstream's GPLv3 `.raw` files —
-Emerald declares no licence, and upstream's help documents about fifty commands
-this server does not have.
+fresh for Emerald rather than taken from upstream's `.raw` files. The original
+reason was that Emerald declared no licence; it is GPL-3.0 now, so vendoring
+them would be *permitted* — and is still the wrong thing, because upstream's
+help documents about fifty commands this server does not have. Write fresh
+content, not an import that has to be pruned.
 
 `help.Apply` fills an empty corpus outright, and otherwise refreshes only
 topics nobody has edited, which it tells apart by `Modified` being zero.
@@ -474,11 +476,13 @@ compiling it — compiling to find out would make the answer always yes.
 endowed with `(cost-5)/5`. That is where an object's value comes from, and why
 a fresh `@create` shows `Value: 1`. Wizards pay for nothing.
 
-**Locks are stored, not evaluated.** `internal/boolexp` is planned and not
-built, so `lockPasses` treats any lock that is actually set as failing —
-failing closed, because erring the other way would hand out access a lock was
-put there to refuse. Only the unset case, which is nearly every case, is
-answered properly.
+**Locks are evaluated.** `internal/boolexp` is a direct port of `boolexp.c`
+— parse, evaluate, unparse — and `lockPasses` (`internal/game/examine.go`)
+really runs it. A stored lock holds its *unparsed string*, not a cached tree,
+so it is re-parsed on each use through the disk-loader path (`dbload=true`,
+trusting `#123` refs, no name matching); that is valid because `Unparse` with
+`fullname=false` is the only thing that ever writes one. Name matching happens
+once, when a lock is set from player input.
 
 ## The liveness lease
 

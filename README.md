@@ -425,4 +425,18 @@ string via `SYSPARM` — so they are preserved verbatim. The exceptions:
 `DESCRSECURE?` now always returns 1, and the insecure branch of `NOTIFY_SECURE`
 and `ARRAY_NOTIFY_SECURE` is unreachable.
 
+## Licence
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+Emerald is a port, not a clean-room reimplementation: it was written by reading
+Fuzzball 7's C line by line, and `CLAUDE.md` makes doing so mandatory before
+implementing anything that claims to match upstream. Fuzzball is GPLv3, so this
+is too.
+
+Upstream's licence carries an additional exception permitting linking against
+OpenSSL. Emerald does not carry it, which that exception's own terms allow:
+there is nothing here to link — TLS is Go's `crypto/tls`, and the C sources at
+`fuzzball/` are read-only reference that no Go package imports.
+
 [fb]: https://www.fuzzball.org/

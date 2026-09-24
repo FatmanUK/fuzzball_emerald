@@ -112,12 +112,54 @@ that drive it over MCP are missing.
 
 ### Basics
 
-    put  give  goal  score  gripe  disembark  leave  hand  uptime
+    put  give  score  gripe  disembark  leave  hand  uptime
     throw  goto  read
 
 `throw`, `goto` and `read` are upstream's alternate spellings of
-`drop`, `go` and `look`, so those three are one-line aliases rather
-than missing behaviour.
+`drop`, `go` and `look`. They are not one-line aliases, though: they
+are dispatch entries, because upstream prefix-matches bare commands
+and Emerald's table does not — see "Abbreviations" below.
+
+An earlier version of this list included `goal`. **There is no such
+command in Fuzzball 7** — no `do_goal`, no dispatch entry, nothing in
+the shipped help. It was an error in the list, not a gap in Emerald.
+
+### Deliberately absent
+
+`@memory` and `@usage` report C allocator and `getrusage` internals —
+`mallinfo()` fields and sixteen `rusage` counters. Go has no
+equivalent with the same shape, and inventing one would report
+numbers that look like upstream's and mean something different. Same
+judgement as `examine`'s "Memory used" line, which is masked in the
+golden case for exactly that reason. Upstream itself guards both
+behind `NO_MEMORY_COMMAND` / `NO_USAGE_COMMAND`.
+
+`@reconfiguressl` is absent for the older reason: TLS is configured
+from the environment, because a TLS-only server cannot read its
+listener configuration out of a database it has not opened.
+
+### Abbreviations
+
+**Emerald's abbreviation rule is not upstream's**, and the two already
+disagree before any new command is added. `lookupAtCommand` takes any
+unique prefix over the whole table and answers nothing when a prefix
+is ambiguous. Upstream's `process_command` is a hand-written character
+trie with a different tie-break at each node — `string_prefix`,
+`strcmp` (case-sensitive), `strcasecmp`, `strlen(command) < 7`, and
+one node with the `string_prefix` arguments reversed.
+
+Verified divergences today:
+
+| Typed | Emerald | Fuzzball 7 |
+|---|---|---|
+| `@to` | `@toad` | Huh — `@toad` is `strcmp` (`game.c:1458`) |
+| `@co` | `@conlock` | Huh — `game.c:829` requires `command[3] == 'n'` |
+| `e` | Huh | `examine` — `Matched("examine")`, `game.c:1587` |
+| `i` | `inventory` | `inventory` (agrees by luck) |
+
+Bare commands are prefix-matched upstream and exact-matched here,
+which is the `e` case. This is being fixed by porting the dispatch
+table rather than by adjusting the resolver.
 
 ### What the audit found by accident
 
