@@ -24,6 +24,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -58,6 +59,10 @@ type Server struct {
 	log   *slog.Logger
 	tmpl  *template.Template
 
+	// now is the clock, replaceable so a test can pin the
+	// timestamps an edit writes.
+	now func() time.Time
+
 	sessions *sessions
 	throttle *throttle
 	ttl      time.Duration
@@ -83,6 +88,7 @@ func New(opts Options) (*Server, error) {
 		store:    opts.Store,
 		log:      opts.Logger,
 		tmpl:     tmpl,
+		now:      time.Now,
 		sessions: newSessions(opts.SessionTTL),
 		throttle: newThrottle(),
 		ttl:      opts.SessionTTL,
@@ -97,6 +103,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login", s.postLogin)
 	mux.HandleFunc("POST /logout", s.required(s.postLogout))
 	mux.HandleFunc("GET /{$}", s.required(s.getStatus))
+	mux.HandleFunc("GET /tune", s.required(s.getTune))
+	mux.HandleFunc("POST /tune", s.required(s.postTune))
+	mux.HandleFunc("GET /help", s.required(s.getHelp))
+	mux.HandleFunc("POST /help", s.required(s.postHelp))
+	mux.HandleFunc("GET /players", s.required(s.getPlayers))
+	mux.HandleFunc("POST /players", s.required(s.postPlayers))
+	mux.HandleFunc("GET /objects", s.required(s.getObject))
 
 	// Anything not matched above is a 404 rather than a redirect
 	// to the login page: telling somebody who is not logged in
@@ -258,4 +271,62 @@ func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"dbref": func(r int32) string { return ref.Ref(r).String() },
 	}
+}
+
+// fail re-renders a page with an error rather than replacing it with
+// a bare status line, so somebody who mistyped a value is still
+// looking at the form they mistyped it in.
+func (s *Server) fail(w http.ResponseWriter, r *http.Request,
+	name, msg string) {
+
+	p := s.newPage(r, "")
+	p.Error = msg
+	switch name {
+	case "tune.html":
+		p.Title = "Parameters"
+		if d, err := s.tuneData(r); err == nil {
+			p.Data = d
+		}
+	case "help.html":
+		p.Title = "Manual"
+		if d, err := s.helpData(r); err == nil {
+			p.Data = d
+		}
+	case "players.html":
+		p.Title = "Players"
+		if d, err := s.playerData(r); err == nil {
+			p.Data = d
+		}
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	s.render(w, name, p)
+}
+
+// redirectNotice sends the browser back to a page with a message,
+// which is the post-redirect-get that stops a refresh from repeating
+// a write.
+func (s *Server) redirectNotice(w http.ResponseWriter,
+	r *http.Request, path, changed, notice string) {
+
+	u := url.URL{Path: path}
+	q := u.Query()
+	q.Set("notice", notice)
+	if changed != "" {
+		q.Set("changed", changed)
+	}
+	u.RawQuery = q.Encode()
+	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+}
+
+// audit records a change with who made it.
+//
+// Everything this interface writes bypasses the game, so the log is
+// the only record that it happened at all: a wizard editing a
+// password here leaves no trace in the MUCK's own logs.
+func (s *Server) audit(r *http.Request, what string, args ...any) {
+	who, _ := sessionFrom(r)
+	head := []any{"who", who.Name, "player", who.Player.String(),
+		"host", hostOf(r)}
+	all := append(head, args...)
+	s.log.Info(what, all...)
 }

@@ -1,0 +1,55 @@
+{{template "head" .}}
+{{template "lease" .}}
+{{with .Data}}
+<form method="get" action="/help" class="row">
+  <label><span>Corpus</span>
+    <select name="corpus">
+      {{$cur := .Corpus}}
+      {{range .Corpora}}
+      <option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>
+      {{end}}
+    </select>
+  </label>
+  <button>Show</button>
+</form>
+
+<div class="grid">
+<div>
+{{if $.ReadOnly}}
+  <pre>{{.Text}}</pre>
+{{else}}
+<form method="post" action="/help">
+  <input type="hidden" name="corpus" value="{{.Corpus}}">
+  <textarea name="text" spellcheck="false">{{.Text}}</textarea>
+  <p><button>Save {{.Corpus}}</button></p>
+</form>
+{{end}}
+</div>
+
+<div>
+<h3>Topics</h3>
+<table>
+  {{range .Topics}}
+  <tr><td>{{.Names}}</td>
+      <td class="muted">{{.Bytes}}</td>
+      <td>{{if .Edited}}<span class="tag">edited</span>{{end}}</td></tr>
+  {{else}}
+  <tr><td class="muted">empty</td></tr>
+  {{end}}
+</table>
+{{if .Index}}
+<p class="muted">Blocks are separated by a line starting with
+<code>~</code>. The first line of each block is its names, separated
+by <code>|</code>. The text before the first <code>~</code>
+{{if eq .Corpus "info"}}is not a topic: <code>info</code> lists its
+topics rather than showing a header.{{else}}is what a bare command
+shows.{{end}}</p>
+{{else}}
+<p class="muted">This corpus holds one text.</p>
+{{end}}
+<p class="muted">A topic saved here is marked as edited, so a later
+release's built-in content leaves it alone.</p>
+</div>
+</div>
+{{end}}
+{{template "foot" .}}

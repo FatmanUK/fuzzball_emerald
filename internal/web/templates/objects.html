@@ -1,0 +1,56 @@
+{{template "head" .}}
+{{with .Data}}
+<form method="get" action="/objects" class="row">
+  <label><span>Dbref</span>
+    <input type="text" name="ref" value="{{.Query}}"
+           placeholder="#123" autofocus></label>
+  <button>Show</button>
+</form>
+
+{{if .Found}}
+<h2><code>{{.Ref}}</code> {{.Name}}</h2>
+<table>
+  <tr><th>Type</th><td>{{.Type}}</td></tr>
+  <tr><th>Flags</th><td><code>{{.Flags}}</code></td></tr>
+  {{range .Links}}
+  <tr><th>{{.Label}}</th>
+      <td><a href="/objects?ref={{.Ref}}"><code>{{.Ref}}</code></a>
+        {{if .Missing}}<span class="missing">no such object</span>
+        {{else}}{{.Name}}{{end}}</td></tr>
+  {{end}}
+  <tr><th>Use count</th><td>{{.UseCount}}</td></tr>
+</table>
+
+{{if .Dests}}
+<h3>Destinations</h3>
+<table>
+  {{range .Dests}}
+  <tr><td><a href="/objects?ref={{.Ref}}"><code>{{.Ref}}</code></a>
+      {{if .Missing}}<span class="missing">no such object</span>
+      {{else}}{{.Name}}{{end}}</td></tr>
+  {{end}}
+</table>
+{{end}}
+
+<h3>Properties</h3>
+<table>
+  {{range .Props}}
+  <tr><th><code>{{.Path}}</code></th>
+      <td class="muted">{{.Type}}</td>
+      <td>{{.Value}}
+        {{if .Blessed}}<span class="tag">blessed</span>{{end}}</td></tr>
+  {{else}}
+  <tr><td class="muted">none</td></tr>
+  {{end}}
+</table>
+
+{{if .HasSource}}
+<h3>Source</h3>
+<pre>{{.Source}}</pre>
+{{end}}
+{{end}}
+{{end}}
+<p class="muted">The inspector is read-only. Changing an object means
+threading chains, checking owners and applying flag rules that depend
+on the type, and those rules live in the game.</p>
+{{template "foot" .}}

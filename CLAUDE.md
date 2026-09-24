@@ -547,6 +547,35 @@ Names are matched with `lower()` in SQL to narrow and `ascii.EqualFold` in Go to
 confirm, so the locale Postgres runs under cannot fold two distinct player names
 together.
 
+### The pages
+
+`/tune` shows every parameter that exists, grouped as `tune.Groups` has them,
+not only the ones somebody has set — names are a runtime API that MUF reads by
+string. A value is put through the parameter's **own** `Parse` and written back
+through its `Format`, so what lands in the database is canonical and anything
+that would not load is refused here rather than at the next boot.
+
+`/help` edits a corpus as **one text in upstream's index format** rather than a
+topic at a time: that is the format the seed files are written in and the one a
+wizard already knows, and it makes reordering or deleting a topic an edit
+rather than a sequence of operations. Everything saved there is stamped as
+edited, so a later release's seeding leaves it alone.
+
+`/players` does two things — set a password, and toggle WIZARD, BUILDER and
+QUELL. There is no old-password field, because this is the interface somebody
+reaches for when the old one is lost; what guards it is that only a wizard is
+here and the server has to be stopped. Nothing else about a player is writable:
+the rest of the flag word means different things by type, and **the flag word
+carries the type**, which is why `TestPlayersTogglesFlags` checks the type bits
+survive a whole-word write.
+
+`/objects` is **read-only even when the world is free**. Changing an object
+means threading containment chains, checking that an owner exists, and applying
+flag rules that depend on the type — rules that live in the game. What the
+inspector is for is looking at a world the server will not boot on, which is
+why it flags a reference to an object that is not there rather than rendering a
+blank.
+
 `ValidateWeb` is separate from `Validate` rather than an extension of it:
 `Validate` hard-requires the MUCK listener's TLS material and at least one MUCK
 listener, and the configurator has neither. Its TLS material falls back to the

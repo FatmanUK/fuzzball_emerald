@@ -1,0 +1,54 @@
+{{template "head" .}}
+{{template "lease" .}}
+{{with .Data}}
+<table>
+  <tr><th>Dbref</th><th>Name</th><th>Flags</th><th>Password</th>
+      {{if not $.ReadOnly}}<th>Change</th>{{end}}</tr>
+  {{range .Players}}
+  <tr {{if eq .Ref $.Data.Changed}}class="changed"{{end}}>
+    <td><a href="/objects?ref={{.Ref}}"><code>{{.Ref}}</code></a></td>
+    <td>{{.Name}}</td>
+    <td>
+      {{if .Wizard}}<span class="tag">wizard</span>{{end}}
+      {{if .Builder}}<span class="tag">builder</span>{{end}}
+      {{if .Quell}}<span class="tag">quell</span>{{end}}
+    </td>
+    <td>
+      {{if not .HasPass}}<span class="missing">none</span>
+      {{else if .Legacy}}<span class="muted">legacy</span>
+      {{else}}<span class="muted">set</span>{{end}}
+    </td>
+    {{if not $.ReadOnly}}
+    <td>
+      <form method="post" action="/players" class="row">
+        <input type="hidden" name="ref" value="{{.RefNum}}">
+        <input type="hidden" name="action" value="password">
+        <input type="password" name="password"
+               autocomplete="new-password" placeholder="new password">
+        <button>Set</button>
+      </form>
+      <form method="post" action="/players" class="row">
+        <input type="hidden" name="ref" value="{{.RefNum}}">
+        <input type="hidden" name="action" value="flags">
+        <label class="row"><input type="checkbox" name="wizard"
+          value="1" {{if .Wizard}}checked{{end}}> wizard</label>
+        <label class="row"><input type="checkbox" name="builder"
+          value="1" {{if .Builder}}checked{{end}}> builder</label>
+        <label class="row"><input type="checkbox" name="quell"
+          value="1" {{if .Quell}}checked{{end}}> quell</label>
+        <button>Apply</button>
+      </form>
+    </td>
+    {{end}}
+  </tr>
+  {{else}}
+  <tr><td class="muted" colspan="5">no players</td></tr>
+  {{end}}
+</table>
+{{if not $.ReadOnly}}
+<p class="muted">A password set here is hashed with Argon2id. It is
+not checked against the old one: this is the interface for when the
+old one is lost.</p>
+{{end}}
+{{end}}
+{{template "foot" .}}

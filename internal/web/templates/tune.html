@@ -1,0 +1,37 @@
+{{template "head" .}}
+{{template "lease" .}}
+{{with .Data}}
+<p>Parameter names are a runtime interface as well as a setting: MUF
+reads them by name with <code>SYSPARM</code>. A value is checked the
+way the server checks it at boot, so anything saved here will load.</p>
+{{range .Groups}}
+<h2>{{.Name}}</h2>
+<table>
+  {{range .Params}}
+  <tr {{if eq .Name $.Data.Changed}}class="changed"{{end}}>
+    <th><code>{{.Name}}</code>
+      {{if .Inert}}<span class="tag" title="{{.Inert}}">inert</span>{{end}}
+      {{if .GodOnly}}<span class="tag">god</span>{{end}}
+      <br><span class="muted">{{.Label}}</span></th>
+    <td>
+      {{if $.ReadOnly}}
+        <code>{{.Value}}</code>
+        {{if not .Overridden}}<span class="muted">(default)</span>{{end}}
+      {{else}}
+      <form method="post" action="/tune" class="row">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <input type="text" name="value" value="{{.Value}}">
+        <button>Save</button>
+        {{if .Overridden}}
+          <button name="reset" value="1">Reset</button>
+        {{else}}<span class="muted">default</span>{{end}}
+      </form>
+      {{end}}
+      <span class="muted">{{.Type}}, default <code>{{.Default}}</code></span>
+    </td>
+  </tr>
+  {{end}}
+</table>
+{{end}}
+{{end}}
+{{template "foot" .}}

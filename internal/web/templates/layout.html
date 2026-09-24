@@ -32,13 +32,35 @@
   input[type=text], input[type=password] { font: inherit;
     padding: .35rem; width: 18rem; max-width: 100%; }
   button { font: inherit; padding: .35rem .9rem; }
-  code { font-family: ui-monospace, monospace; }
+  code, pre, textarea { font-family: ui-monospace, monospace; }
+  pre { overflow-x: auto; border: 1px solid #8884; padding: .6rem;
+        border-radius: .3rem; }
+  textarea { width: 100%; box-sizing: border-box; font-size: .9rem;
+             padding: .5rem; min-height: 28rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; }
+  h3 { font-size: .95rem; margin-top: 1.5rem; }
+  .grid { display: grid; grid-template-columns: 1fr auto;
+          gap: 1.5rem; align-items: start; }
+  .muted { color: #8889; }
+  .missing { color: #c0392b; }
+  tr.changed { background: #2e8b5718; }
+  .row { display: flex; gap: .5rem; align-items: center;
+         flex-wrap: wrap; }
+  .row input[type=text] { width: 12rem; }
+  .tag { font-size: .75rem; border: 1px solid #8886;
+         border-radius: .25rem; padding: 0 .3rem; }
+  form.inline { display: inline; }
 </style>
 </head>
 <body>
 <header>
   <h1>Fuzzball Emerald</h1>
   {{if .Who}}<nav>
+    <a href="/">Status</a>
+    <a href="/tune">Parameters</a>
+    <a href="/help">Manual</a>
+    <a href="/players">Players</a>
+    <a href="/objects">Objects</a>
     <span>{{.Who}}</span>
     <form method="post" action="/logout"><button>Sign out</button></form>
   </nav>{{end}}
