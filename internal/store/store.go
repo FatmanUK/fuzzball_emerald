@@ -46,8 +46,10 @@ func Open(ctx context.Context, dsn string, log *slog.Logger) (*Store, error) {
 		return nil, err
 	}
 	// One writer goroutine plus the occasional load means a small
-	// pool is plenty.
-	sqlDB.SetMaxOpenConns(8)
+	// pool is plenty. The ninth is for the liveness lease, which
+	// pins a connection for the life of the process and would
+	// otherwise be taking a slot the writer needs.
+	sqlDB.SetMaxOpenConns(9)
 	sqlDB.SetMaxIdleConns(4)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 

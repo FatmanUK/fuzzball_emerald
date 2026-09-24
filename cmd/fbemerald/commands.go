@@ -63,6 +63,22 @@ func cmdServe(args []string) error {
 		return err
 	}
 
+	// Nothing else may be using this world. Two servers on one
+	// database would each hold an authoritative in-memory graph
+	// and write over each other every flush interval, so this is
+	// a refusal rather than a warning. It is a Postgres advisory
+	// lock, which means a crashed server leaves nothing behind to
+	// clear up.
+	lease, err := st.AcquireLease(ctx)
+	if err != nil {
+		if errors.Is(err, store.ErrLeaseHeld) {
+			return fmt.Errorf("%w: refusing to start a "+
+				"second server against it", err)
+		}
+		return err
+	}
+	defer lease.Release()
+
 	w := world.New()
 	loadStart := time.Now()
 	rep, err := st.Load(ctx, w)

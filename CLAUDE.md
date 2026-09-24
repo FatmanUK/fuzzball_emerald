@@ -476,6 +476,36 @@ failing closed, because erring the other way would hand out access a lock was
 put there to refuse. Only the unset case, which is nearly every case, is
 answered properly.
 
+## The liveness lease
+
+`internal/store/lease.go` answers one question: is a server running against
+this world? Nothing in the database said so before, and two servers sharing one
+world would each hold an authoritative in-memory graph and write over each
+other every flush interval. `cmdServe` takes the lease straight after `Migrate`
+and **refuses to start** if it is held.
+
+It is a Postgres **session-level advisory lock**, chosen because it is the only
+marker that is still correct after a crash: a process that dies drops it with
+its connection, so there is nothing to time out and nothing to clean up.
+
+Two things about it are easy to get wrong.
+
+**The connection has to be pinned outside GORM's pool** — `db.DB()` then
+`sqlDB.Conn(ctx)`. A lock taken through the pool is released the moment that
+connection goes back, silently, leaving a running server looking offline.
+`SetMaxOpenConns` is 9 rather than 8 because the lease keeps one for good.
+
+**`Release` must unlock explicitly.** Closing an `*sql.Conn` hands the session
+back to the pool *alive*, so the lock would outlive the lease and travel to
+whoever drew that connection next. Only the process actually dying drops it by
+itself — which is what `TestLeaseClearsOnACrash` simulates, with
+`pg_terminate_backend` rather than a `Close`.
+
+The lock is scoped to the **schema**, not the database, because a schema is
+what holds a world and the store tests each make their own. `LeaseHeld` reads
+`pg_locks` rather than taking the lock and letting go, so a probe cannot make a
+server starting at the same moment fail for no reason.
+
 ## Sanity checking
 
 `@sanity` reports inconsistency, `@sanfix` repairs it, `@sanchange` edits one
