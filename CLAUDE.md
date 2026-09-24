@@ -442,6 +442,33 @@ description and the contents and stops; a world that wants an "obvious exits"
 line supplies it from its own programs, as the starter world does. An earlier
 version of this printed one, which made every look diverge.
 
+**Command resolution is upstream's dispatcher, ported.**
+`internal/game/dispatch_table.go` is every command Fuzzball 7 dispatches, in
+the order its nested switch visits them; `dispatch.go` resolves by taking the
+first entry that accepts the typed word. The table is derived from
+`game.c`'s trie, so `min` is how deep the switch commits before a name is
+reachable — which is why `@co` reaches nothing (`game.c:829` demands
+`command[3] == 'n'`, then a fifth character).
+
+Emerald used to take any unique prefix over its own map, which is a *different
+algorithm* and diverged both ways. Four tie-breaks are not prefix matching at
+all: `strcmp` (so `@SHUTDOWN` is not `@shutdown`), `strcasecmp`,
+`strlen(command) < 7` (which splits `@chown` from `@chown_lock`), and one node
+with `string_prefix`'s arguments reversed (so `@unb` is the shortest
+`@unbless`). One command, `move`, has no `Matched()` at all and accepts
+trailing text — `movex` runs it.
+
+**Names Emerald does not implement stay in the table**, with no handler, and
+say so when typed. Dropping one silently widens every abbreviation it
+constrained: that is how `@chown` came to mean `@chown_lock`. `register`
+panics on a name the table lacks, so a typo is a startup failure rather than a
+dead command.
+
+**The permission macros live on the table**, not in the handlers, because
+upstream applies them at the dispatch site — including for commands this
+server has not implemented. `internal/game/build.go`'s `requireWizard` and
+friends are now shadowed for anything dispatched.
+
 **Command precedence is load-bearing.** `QUIT` and `WHO` are compared
 case-sensitively before anything else, and exits are matched before built-in
 commands including `@`-commands. The starter world depends on both: it ships a

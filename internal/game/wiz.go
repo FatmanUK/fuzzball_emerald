@@ -293,8 +293,8 @@ func tuneRefersTo(w *world.World, r ref.Ref) (string, bool) {
 // declaration: it dispatches commands, so naming it there would make
 // the table refer to itself.
 func init() {
-	atCommands["@force"] = (*Server).cmdForce
-	atCommands["@pcreate"] = (*Server).cmdPcreate
+	register("@force", (*Server).cmdForce)
+	register("@pcreate", (*Server).cmdPcreate)
 }
 
 // cmdForce makes another object run a command as though it had typed

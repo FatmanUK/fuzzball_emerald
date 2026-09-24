@@ -9,7 +9,7 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-func init() { atCommands["@chown"] = (*Server).cmdChown }
+func init() { register("@chown", (*Server).cmdChown) }
 
 // cmdChown is do_chown: change who owns an object.
 //

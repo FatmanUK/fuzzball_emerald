@@ -384,8 +384,11 @@ func TestEditHelpNeedsAWizard(t *testing.T) {
 	}
 	h.out()
 
+	// The refusal is the dispatch table's WIZARDONLY, worded as
+	// upstream's macro words it rather than in @help's own voice.
 	h.send("@help #set news welcome=mine now")
-	if got := h.out(); !strings.Contains(got, "Permission denied!") {
+	if got := h.out(); !strings.Contains(got,
+		"You are not allowed to @help.") {
 		t.Errorf("a mortal edited the help:\n%s", got)
 	}
 }

@@ -37,16 +37,39 @@ var lockCommandSpecs = []lockCommandSpec{
 func init() {
 	for _, spec := range lockCommandSpecs {
 		spec := spec
-		atCommands[spec.verb] = func(s *Server, c *ctx) { s.cmdSetLock(c, spec) }
+		register(spec.verb, func(s *Server, c *ctx) {
+			s.cmdSetLock(c, spec)
+		})
 	}
 	// @force_lock and @chown_lock are upstream's alternate full
-	// spellings of @flock and @chlock — not abbreviations,
-	// which lookupAtCommand already handles, but distinct
-	// registered names.
-	atCommands["@force_lock"] = atCommands["@flock"]
-	atCommands["@chown_lock"] = atCommands["@chlock"]
+	// spellings of @flock and @chlock. They are separate rows in
+	// the dispatch table rather than aliases, because upstream
+	// separates them on the length of what was typed —
+	// strlen(command) < 7 picks @chown over @chown_lock — and
+	// the table carries that as a max on one and a min on the
+	// other.
+	for alias, of := range map[string]string{
+		"@force_lock": "@flock",
+		"@chown_lock": "@chlock",
+	} {
+		spec := lockSpecFor(of)
+		register(alias, func(s *Server, c *ctx) {
+			s.cmdSetLock(c, spec)
+		})
+	}
 
-	atCommands["@unlock"] = (*Server).cmdUnlock
+	register("@unlock", (*Server).cmdUnlock)
+}
+
+// lockSpecFor finds a spec by its verb, so the alias registrations
+// name what they alias rather than indexing the table by position.
+func lockSpecFor(verb string) lockCommandSpec {
+	for _, spec := range lockCommandSpecs {
+		if spec.verb == verb {
+			return spec
+		}
+	}
+	panic("no lock command " + verb)
 }
 
 // cmdUnlock is do_unlock: clear the ordinary lock, and only that one.

@@ -59,64 +59,58 @@ func noisyMatch(c *ctx, name string, r ref.Ref) bool {
 // handler runs one command.
 type handler func(s *Server, c *ctx)
 
-// commands maps a verb to its handler. Names are matched
-// case-insensitively and in full; Fuzzball's prefix matching for
-// @-commands is applied separately, because a bare word must never be
-// taken as a prefix of a command when it could be an exit.
-var commands = map[string]handler{
-	"look":      (*Server).cmdLook,
-	"l":         (*Server).cmdLook,
-	"say":       (*Server).cmdSay,
-	"pose":      (*Server).cmdPose,
-	"page":      (*Server).cmdPage,
-	"whisper":   (*Server).cmdWhisper,
-	"go":        (*Server).cmdGo,
-	"move":      (*Server).cmdGo,
-	"home":      (*Server).cmdHome,
-	"inventory": (*Server).cmdInventory,
-	"i":         (*Server).cmdInventory,
-	"get":       (*Server).cmdGet,
-	"take":      (*Server).cmdGet,
-	"drop":      (*Server).cmdDrop,
-	"examine":   (*Server).cmdExamine,
-	"ex":        (*Server).cmdExamine,
-}
-
-// atCommands maps an @-command to its handler. These are matched by
-// prefix, as Fuzzball does, so "@cr" reaches "@create".
+// The two maps that used to live here are gone: resolution is now
+// commandTable in dispatch_table.go, which is upstream's own
+// dispatcher rather than a unique-prefix approximation of it.
+// Handlers attach to a name with register(), below and in each
+// command file's init.
 //
-// Commands that dispatch other commands — @force — register
-// themselves in an init instead, because naming them here makes the
-// table refer to itself and Go rejects that as an initialisation
-// cycle.
-var atCommands = map[string]handler{
-	"@create": (*Server).cmdCreate,
-	"@dig":    (*Server).cmdDig,
-	"@open":   (*Server).cmdOpen,
+// Several registrations have to happen in an init rather than in a
+// literal because they close over something that refers back to the
+// table — @force dispatches other commands — and Go rejects that
+// as an initialisation cycle.
+func init() {
+	register("look", (*Server).cmdLook)
+	register("say", (*Server).cmdSay)
+	register("pose", (*Server).cmdPose)
+	register("page", (*Server).cmdPage)
+	register("whisper", (*Server).cmdWhisper)
+	register("goto", (*Server).cmdGo)
+	register("move", (*Server).cmdGo)
+	register("home", (*Server).cmdHome)
+	register("inventory", (*Server).cmdInventory)
+	register("get", (*Server).cmdGet)
+	register("take", (*Server).cmdGet)
+	register("drop", (*Server).cmdDrop)
+	register("examine", (*Server).cmdExamine)
+
+	register("@create", (*Server).cmdCreate)
+	register("@dig", (*Server).cmdDig)
+	register("@open", (*Server).cmdOpen)
 	// @action is upstream's do_action, which attaches an exit to
 	// a named object rather than to the room, and says so in its
 	// own words. Until that is ported it is an alias for @open,
 	// which differs in where the exit lands.
-	"@action":   (*Server).cmdOpen,
-	"@link":     (*Server).cmdLink,
-	"@unlink":   (*Server).cmdUnlink,
-	"@name":     (*Server).cmdName,
-	"@describe": (*Server).cmdDescribe,
-	"@set":      (*Server).cmdSet,
-	"@password": (*Server).cmdPassword,
-	"@find":     (*Server).cmdFind,
-	"@teleport": (*Server).cmdTeleport,
-	"@recycle":  (*Server).cmdRecycle,
-	"@dump":     (*Server).cmdDump,
-	"@shutdown": (*Server).cmdShutdown,
-	"@tune":     (*Server).cmdTune,
-	"@program":  (*Server).cmdProgram,
-	"@edit":     (*Server).cmdEdit,
-	"@list":     (*Server).cmdList,
-	"@toad":     (*Server).cmdToad,
-	"@boot":     (*Server).cmdBoot,
-	"@stats":    (*Server).cmdStats,
-	"@version":  (*Server).cmdVersion,
+	register("@action", (*Server).cmdOpen)
+	register("@link", (*Server).cmdLink)
+	register("@unlink", (*Server).cmdUnlink)
+	register("@name", (*Server).cmdName)
+	register("@describe", (*Server).cmdDescribe)
+	register("@set", (*Server).cmdSet)
+	register("@password", (*Server).cmdPassword)
+	register("@find", (*Server).cmdFind)
+	register("@teleport", (*Server).cmdTeleport)
+	register("@recycle", (*Server).cmdRecycle)
+	register("@dump", (*Server).cmdDump)
+	register("@shutdown", (*Server).cmdShutdown)
+	register("@tune", (*Server).cmdTune)
+	register("@program", (*Server).cmdProgram)
+	register("@edit", (*Server).cmdEdit)
+	register("@list", (*Server).cmdList)
+	register("@toad", (*Server).cmdToad)
+	register("@boot", (*Server).cmdBoot)
+	register("@stats", (*Server).cmdStats)
+	register("@version", (*Server).cmdVersion)
 }
 
 // command dispatches one line from a logged-in player.
@@ -205,19 +199,12 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 		}
 	}
 
-	if strings.HasPrefix(c.verb, "@") {
-		if h, name := lookupAtCommand(c.verb); h != nil {
-			s.logCommand(w, d, name, c.arg)
-			h(s, c)
-			return
-		}
-		c.send(w.Tune.String("huh_mesg"))
-		return
-	}
-
-	if h, ok := commands[ascii.Fold(c.verb)]; ok {
-		s.logCommand(w, d, c.verb, c.arg)
-		h(s, c)
+	// One table for every command, "@"-prefixed or not, resolved
+	// the way upstream's own dispatcher resolves: see
+	// dispatch.go.
+	if cmd, ok := resolve(c.verb); ok {
+		s.logCommand(w, d, cmd.n, c.arg)
+		s.dispatch(c, cmd)
 		return
 	}
 
@@ -287,40 +274,6 @@ const (
 	sayToken      = '"'
 	poseToken     = ':'
 )
-
-// exactOnlyCommands may not be reached by an abbreviation. Upstream
-// compares these with strcmp rather than by prefix, and the reason is
-// plain: each can damage the database outright, and "@san" should not
-// be enough to run one.
-var exactOnlyCommands = map[string]bool{
-	"@sanity": true, "@sanfix": true, "@sanchange": true,
-}
-
-// lookupAtCommand resolves an @-command by prefix. An exact name
-// always wins, and an ambiguous prefix matches nothing rather than
-// picking arbitrarily.
-func lookupAtCommand(verb string) (handler, string) {
-	v := ascii.Fold(verb)
-	if h, ok := atCommands[v]; ok {
-		return h, v
-	}
-	var found handler
-	var name string
-	n := 0
-	for full, h := range atCommands {
-		if exactOnlyCommands[full] {
-			continue
-		}
-		if strings.HasPrefix(full, v) {
-			found, name = h, full
-			n++
-		}
-	}
-	if n == 1 {
-		return found, name
-	}
-	return nil, ""
-}
 
 // logCommand records a command for the audit log. Anything that could
 // carry a password is logged without its argument.

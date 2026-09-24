@@ -227,8 +227,8 @@ func (s *Server) boot(player ref.Ref, why string) {
 // Process control.
 
 func init() {
-	atCommands["@ps"] = (*Server).cmdPs
-	atCommands["@kill"] = (*Server).cmdKill
+	register("@ps", (*Server).cmdPs)
+	register("@kill", (*Server).cmdKill)
 }
 
 // cmdPs lists the running and suspended programs.

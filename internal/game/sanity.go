@@ -10,9 +10,9 @@ import (
 )
 
 func init() {
-	atCommands["@sanity"] = (*Server).cmdSanity
-	atCommands["@sanfix"] = (*Server).cmdSanfix
-	atCommands["@sanchange"] = (*Server).cmdSanchange
+	register("@sanity", (*Server).cmdSanity)
+	register("@sanfix", (*Server).cmdSanfix)
+	register("@sanchange", (*Server).cmdSanchange)
 }
 
 // cmdSanity checks the object graph for inconsistency and reports

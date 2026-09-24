@@ -29,44 +29,27 @@ const motdRule = "- - - - - - - - - - - - - - - - - - - " +
 	"- - - - - - - - - - - - - - - - - - -"
 
 func init() {
-	commands["help"] = func(s *Server, c *ctx) {
+	register("help", func(s *Server, c *ctx) {
 		s.showHelp(c, world.CorpusHelp)
-	}
-	commands["news"] = func(s *Server, c *ctx) {
+	})
+	register("news", func(s *Server, c *ctx) {
 		s.showHelp(c, world.CorpusNews)
-	}
-	commands["man"] = func(s *Server, c *ctx) {
+	})
+	register("man", func(s *Server, c *ctx) {
 		s.showHelp(c, world.CorpusMan)
-	}
+	})
 	// Upstream's command is "mpi"; only the tune parameters are
-	// called file_mpihelp. "mpihelp" is registered too, because
-	// the parameter names make it an easy thing to type.
-	commands["mpi"] = func(s *Server, c *ctx) {
+	// called file_mpihelp. Emerald used to register "mpihelp" as
+	// a friendly alias; it is gone, because Fuzzball has no such
+	// command and the dispatch table is Fuzzball's.
+	register("mpi", func(s *Server, c *ctx) {
 		s.showHelp(c, world.CorpusMPI)
-	}
-	commands["mpihelp"] = commands["mpi"]
-	commands["info"] = (*Server).cmdInfo
-	commands["motd"] = (*Server).cmdMOTD
+	})
+	register("info", (*Server).cmdInfo)
+	register("motd", (*Server).cmdMOTD)
 
-	// Upstream prefix-matches "help" and "news", so "h" and "n"
-	// reach them. This table is exact-match only, so the prefixes
-	// are registered by hand. They cost nothing: an exit of the
-	// same name still wins, because exits are matched first.
-	for _, p := range []string{"h", "he", "hel"} {
-		commands[p] = commands["help"]
-	}
-	for _, p := range []string{"n", "ne", "new"} {
-		commands[p] = commands["news"]
-	}
-
-	atCommands["@credits"] = (*Server).cmdCredits
-	atCommands["@help"] = (*Server).cmdEditHelp
-
-	// @credits would otherwise make "@cr" and "@cre" ambiguous
-	// against @create, and lookupAtCommand answers an ambiguous
-	// prefix with nothing at all. Upstream exact-matches
-	// "@credits" ahead of "@create" for the same reason.
-	exactOnlyCommands["@credits"] = true
+	register("@credits", (*Server).cmdCredits)
+	register("@help", (*Server).cmdEditHelp)
 }
 
 // showHelp is do_helpfile: look a topic up in one index corpus and
@@ -296,10 +279,9 @@ func atoiPrefix(s string) int {
 // Writing a whole topic is the configurator's job — a line at a
 // time through a command line is no way to author a manual.
 func (s *Server) cmdEditHelp(c *ctx) {
-	if !isWizard(c.w, ownerOf(c.w, c.who)) {
-		c.tell("Permission denied!")
-		return
-	}
+	// The wizard check is the dispatch table's pWiz, not an
+	// inline one: every guard upstream applies lives there, and
+	// this command's table entry carries the same flag.
 	sub, rest := trimCommand(strings.TrimSpace(c.arg))
 	corpus, rest := trimCommand(strings.TrimSpace(rest))
 	name, text, hasText := strings.Cut(rest, "=")
