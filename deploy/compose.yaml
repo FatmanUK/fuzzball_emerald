@@ -23,6 +23,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Containerfile
+      target: server
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +38,29 @@ services:
       FBE_LOG_FORMAT: "json"
     # A clean SIGTERM shutdown flushes outstanding writes.
     stop_grace_period: 30s
+
+  # The configurator, which is optional: bring it up with
+  #   podman-compose -f deploy/compose.yaml --profile admin up
+  #
+  # The published port is bound to loopback on the host. This interface
+  # can rewrite passwords and ownership, and anyone who reaches it with a
+  # wizard's password has the world.
+  fbeconfig:
+    profiles: ["admin"]
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+      target: config
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FBE_WEB_PORT:-4204}:4204"
+    volumes:
+      - ./tls:/etc/fbemerald/tls:ro,z
+    environment:
+      FBE_DATABASE_URL: "postgres://fbemerald:${FBE_DB_PASSWORD:-fbemerald}@postgres:5432/fbemerald?sslmode=disable"
+      FBE_LOG_FORMAT: "json"
 
 volumes:
   pgdata:

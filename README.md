@@ -149,6 +149,10 @@ yet. This is why Fuzzball's `ssl_*` `@tune` parameters have no equivalent.
 | `FBE_CONNECT_RATE` | `30` | New connections one address may open per window; `0` disables |
 | `FBE_CONNECT_WINDOW` | `1m` | The window `FBE_CONNECT_RATE` counts over |
 | `FBE_PPROF_ADDR` | — | Serve `net/http/pprof` here; must be a loopback address |
+| `FBE_WEB_ADDR` | `127.0.0.1:4204` | Where the optional configurator listens |
+| `FBE_WEB_TLS_CERT_FILE` | `FBE_TLS_CERT_FILE` | The configurator's certificate |
+| `FBE_WEB_TLS_KEY_FILE` | `FBE_TLS_KEY_FILE` | The configurator's key |
+| `FBE_WEB_SESSION_TTL` | `2h` | How long a configurator login lasts |
 
 Everything else is an `@tune` parameter, as upstream. Inspect the table with:
 
@@ -195,6 +199,36 @@ ssh -N -L 6060:127.0.0.1:6060 your-server
 ```bash
 go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
 ```
+
+### The configurator
+
+`fbeconfig` is an optional web interface over the same database and the same
+`FBE_*` variables: a status page, a `@tune` editor, a manual editor, player
+management and an object inspector. It is a separate binary and a separate
+image, so a deployment that does not want one does not ship it.
+
+```bash
+make config                        # run it against the local database
+make pod-config-build pod-config-run   # ...or in a container
+```
+
+```bash
+podman-compose -f deploy/compose.yaml --profile admin up
+```
+
+Sign in with a wizard's name and MUCK password — there is no separate account
+store. Two things are worth knowing:
+
+- **It is read-only while the server is running.** That is enforced on every
+  request that changes something, not just by leaving the inputs out, and it is
+  decided by a Postgres advisory lock the server holds for its lifetime. Stop
+  the server to edit anything.
+- **It bypasses the game**, so its own log is the only record of what was done.
+  A password changed here leaves no trace in the MUCK's logs.
+
+`FBE_WEB_ADDR` defaults to loopback. Binding it wider is allowed and warned
+about: anyone who can reach it and knows a wizard's password has the world, so
+put it behind a tunnel or a reverse proxy rather than on a public interface.
 
 ## Importing a legacy world
 

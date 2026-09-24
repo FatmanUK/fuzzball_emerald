@@ -576,6 +576,16 @@ inspector is for is looking at a world the server will not boot on, which is
 why it flags a reference to an object that is not there rather than rendering a
 blank.
 
+### Packaging
+
+`deploy/Containerfile` has two targets sharing one build stage: `server` (the
+default) and `config`. They are separate images rather than two commands on
+one, so a deployment that does not want an administrative web interface does
+not have one sitting in the image it runs. `compose.yaml` puts `fbeconfig`
+under an `admin` profile and publishes it to **loopback on the host** — inside
+the container it necessarily binds every interface, since that is the only way
+a port can be published at all.
+
 `ValidateWeb` is separate from `Validate` rather than an extension of it:
 `Validate` hard-requires the MUCK listener's TLS material and at least one MUCK
 listener, and the configurator has neither. Its TLS material falls back to the

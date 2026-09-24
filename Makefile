@@ -10,6 +10,7 @@
 BINARY      := fbemerald
 CONFIG_BIN  := fbeconfig
 IMAGE       ?= localhost/fbemerald
+CONFIG_IMAGE ?= localhost/fbeconfig
 TAG         ?= dev
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -47,6 +48,7 @@ DB_URL_POD  := postgres://$(DB_USER):$(DB_PASSWORD)@$(PG_CONTAINER):5432/$(DB_NA
 TEST_DB_URL := postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(TEST_DB_NAME)?sslmode=disable
 
 APP_CONTAINER := fbemerald
+CFG_CONTAINER := fbeconfig
 
 # The distroless base runs as the unprivileged "nonroot" user. Rootless Podman
 # maps that to a subordinate uid on the host, which cannot read a private key
@@ -297,8 +299,13 @@ PUBLISH_IMAGE ?= ghcr.io/fatmanuk/fuzzball_emerald
 
 .PHONY: pod-build
 pod-build: ## Build the container image
-	podman build --build-arg VERSION=$(VERSION) \
+	podman build --build-arg VERSION=$(VERSION) --target server \
 		-t $(IMAGE):$(TAG) -f deploy/Containerfile .
+
+.PHONY: pod-config-build
+pod-config-build: ## Build the configurator image
+	podman build --build-arg VERSION=$(VERSION) --target config \
+		-t $(CONFIG_IMAGE):$(TAG) -f deploy/Containerfile .
 
 .PHONY: pod-push
 pod-push: pod-build ## Push the container image
@@ -344,6 +351,29 @@ pod-import: pod-build db-up ## Import a world using the container image
 		-v "$(DUMP_DIR)":/dump:ro,z \
 		$(IMAGE):$(TAG) import -force /dump/$(DUMP_BASE)
 
+.PHONY: pod-config-run
+pod-config-run: pod-config-build certs db-up ## Run the configurator in a container
+	@podman network exists $(NETWORK) || podman network create $(NETWORK) >/dev/null
+	@podman rm -f $(CFG_CONTAINER) >/dev/null 2>&1 || true
+	podman run -d --name $(CFG_CONTAINER) \
+		--network $(NETWORK) \
+		--userns=$(USERNS) \
+		-p 127.0.0.1:$(WEB_PORT):4204 \
+		-e FBE_DATABASE_URL="$(DB_URL_POD)" \
+		-e FBE_LOG_FORMAT=json \
+		-v ./$(TLS_DIR):/etc/fbemerald/tls:ro,z \
+		$(CONFIG_IMAGE):$(TAG)
+	@echo "configurator on https://127.0.0.1:$(WEB_PORT)/"
+	@echo "sign in with a wizard's name and MUCK password"
+
+.PHONY: pod-config-stop
+pod-config-stop: ## Stop the configurator container
+	-podman rm -f $(CFG_CONTAINER) 2>/dev/null
+
+.PHONY: pod-config-logs
+pod-config-logs: ## Follow the configurator's logs
+	podman logs -f $(CFG_CONTAINER)
+
 .PHONY: pod-logs
 pod-logs: ## Follow the container's logs
 	podman logs -f $(APP_CONTAINER)
@@ -353,6 +383,7 @@ pod-stop: ## Stop the server container
 	-podman rm -f $(APP_CONTAINER) 2>/dev/null
 
 .PHONY: pod-clean
-pod-clean: pod-stop db-down ## Remove containers and the image
+pod-clean: pod-stop pod-config-stop db-down ## Remove containers and the image
 	-podman rmi -f $(IMAGE):$(TAG) 2>/dev/null
+	-podman rmi -f $(CONFIG_IMAGE):$(TAG) 2>/dev/null
 	-podman network rm $(NETWORK) 2>/dev/null

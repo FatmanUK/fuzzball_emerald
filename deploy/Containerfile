@@ -1,7 +1,9 @@
-# Build a static fbemerald binary, then ship it on a distroless base.
+# Build static binaries, then ship them on a distroless base.
 #
-# Built and run rootless under Podman:
+# Two targets share one build stage. The default is the server:
 #   podman build -t fbemerald -f deploy/Containerfile .
+# The configurator is optional and is its own image:
+#   podman build --target config -t fbeconfig -f deploy/Containerfile .
 
 FROM docker.io/library/golang:1.26-alpine AS build
 WORKDIR /src
@@ -15,8 +17,11 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath \
         -ldflags "-s -w -X main.version=${VERSION}" \
         -o /out/fbemerald ./cmd/fbemerald
+RUN CGO_ENABLED=0 go build -trimpath \
+        -ldflags "-s -w -X main.version=${VERSION}" \
+        -o /out/fbeconfig ./cmd/fbeconfig
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot AS server
 COPY --from=build /out/fbemerald /usr/bin/fbemerald
 
 # TLS material and the database live outside the image.
@@ -34,3 +39,24 @@ USER nonroot:nonroot
 # dance, so no STOPSIGNAL override is needed.
 ENTRYPOINT ["/usr/bin/fbemerald"]
 CMD ["serve"]
+
+# The configurator. A separate image rather than a second command on the
+# server's, so a deployment that does not want an administrative web
+# interface does not have one sitting in the image it runs.
+FROM gcr.io/distroless/static-debian12:nonroot AS config
+COPY --from=build /out/fbeconfig /usr/bin/fbeconfig
+
+VOLUME ["/etc/fbemerald/tls"]
+
+# It listens on every interface inside the container, because that is the
+# only way the port can be published at all; what keeps it private is where
+# the port is bound on the host. See compose.yaml, which binds it to
+# loopback.
+ENV FBE_WEB_TLS_CERT_FILE=/etc/fbemerald/tls/cert.pem \
+    FBE_WEB_TLS_KEY_FILE=/etc/fbemerald/tls/key.pem \
+    FBE_WEB_ADDR=:4204
+
+EXPOSE 4204
+USER nonroot:nonroot
+
+ENTRYPOINT ["/usr/bin/fbeconfig"]
