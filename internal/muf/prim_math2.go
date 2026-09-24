@@ -6,8 +6,9 @@ import (
 	"encoding/binary"
 )
 
-// GETSEED and SETSEED expose the per-frame seeded generator SRAND draws from,
-// upstream's fr->rndbuf — a 16-byte buffer re-hashed on every draw.
+// GETSEED and SETSEED expose the per-frame seeded generator SRAND
+// draws from, upstream's fr->rndbuf — a 16-byte buffer re-hashed on
+// every draw.
 func init() {
 	register("GETSEED", func(f *Frame) (*Result, error) {
 		if f.rndbuf == nil {
@@ -21,9 +22,10 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// Upstream's "!oper1->data.string" is the empty string, which a
-		// Fuzzball stack holds as a null pointer rather than a zero-length
-		// one: an empty seed re-seeds from the clock instead of decoding.
+		// Upstream's "!oper1->data.string" is the empty
+		// string, which a Fuzzball stack holds as a null
+		// pointer rather than a zero-length one: an empty
+		// seed re-seeds from the clock instead of decoding.
 		if s == "" {
 			f.rndbuf = newSeed()
 			return nil, nil
@@ -40,21 +42,22 @@ func newSeed() []byte {
 	return b
 }
 
-// rndFrom is upstream's rnd(): hash the buffer back over itself and take the
-// first word.
+// rndFrom is upstream's rnd(): hash the buffer back over itself and
+// take the first word.
 //
-// Upstream hashes "sizeof(digest)" bytes, where digest is a uint32* — so it
-// feeds MD5 the first 8 bytes of the 16-byte buffer, not all of it. That is
-// reproduced, because the sequence a given seed produces is observable and
-// programs that record a seed expect to replay it.
+// Upstream hashes "sizeof(digest)" bytes, where digest is a uint32*
+// — so it feeds MD5 the first 8 bytes of the 16-byte buffer, not
+// all of it. That is reproduced, because the sequence a given seed
+// produces is observable and programs that record a seed expect to
+// replay it.
 func rndFrom(buf []byte) uint32 {
 	sum := md5.Sum(buf[:8])
 	copy(buf, sum[:])
 	return binary.LittleEndian.Uint32(buf[:4])
 }
 
-// encodeSeed is GETSEED's nibble-per-character encoding: low nibble first,
-// then high, each offset by 'A'.
+// encodeSeed is GETSEED's nibble-per-character encoding: low nibble
+// first, then high, each offset by 'A'.
 func encodeSeed(buf []byte) string {
 	out := make([]byte, 32)
 	for i := 0; i < 16; i++ {
@@ -64,8 +67,9 @@ func encodeSeed(buf []byte) string {
 	return string(out)
 }
 
-// decodeSeed is SETSEED's inverse. A seed shorter than 32 characters is
-// repeated to fill, and a longer one truncated, both upstream's own.
+// decodeSeed is SETSEED's inverse. A seed shorter than 32 characters
+// is repeated to fill, and a longer one truncated, both upstream's
+// own.
 func decodeSeed(s string) []byte {
 	if len(s) > 32 {
 		s = s[:32]

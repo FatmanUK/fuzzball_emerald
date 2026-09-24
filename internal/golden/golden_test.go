@@ -7,19 +7,20 @@ import (
 	"time"
 )
 
-// Case is one differential test: a MUF program, and what to type at it.
+// Case is one differential test: a MUF program, and what to type at
+// it.
 type Case struct {
-	// Name identifies the case and names the exit that runs it, so it must
-	// be a single word a player could type.
+	// Name identifies the case and names the exit that runs it,
+	// so it must be a single word a player could type.
 	Name string
 	// Source is the program's MUF.
 	Source string
-	// Then is typed after the exit, one line per entry. A program that
-	// reads input needs it; everything else leaves it empty.
+	// Then is typed after the exit, one line per entry. A program
+	// that reads input needs it; everything else leaves it empty.
 	Then []string
-	// Pause is how long to wait before reading the case's output, for a
-	// program that suspends itself and resumes later. Most cases finish
-	// within the command and leave it zero.
+	// Pause is how long to wait before reading the case's output,
+	// for a program that suspends itself and resumes later. Most
+	// cases finish within the command and leave it zero.
 	Pause time.Duration
 }
 
@@ -31,17 +32,18 @@ func requireOracle(t *testing.T) {
 	}
 }
 
-// tell is the idiom the cases use to report a value, so a program's output is
-// one line per result.
+// tell is the idiom the cases use to report a value, so a program's
+// output is one line per result.
 const tellPrelude = `: t[ x -- ] me @ x @ intostr notify ;
 : ts[ s -- ] me @ s @ notify ;
 `
 
 // cases are run together against one server each.
 //
-// Starting a container costs about two seconds, so a case per container made
-// the suite's runtime grow with the number of cases. Putting every program in
-// one database turns that into a single cost per run.
+// Starting a container costs about two seconds, so a case per
+// container made the suite's runtime grow with the number of cases.
+// Putting every program in one database turns that into a single cost
+// per run.
 var cases = []Case{
 	{
 		Name: "arithmetic",
@@ -382,9 +384,9 @@ var cases = []Case{
 ;`,
 	},
 	{
-		// NEWOBJECT rejects a room as the parent, which is an upstream
-		// bug its own message contradicts. Reproduced, so a program
-		// behaves the same on both.
+		// NEWOBJECT rejects a room as the parent, which is an
+		// upstream bug its own message contradicts.
+		// Reproduced, so a program behaves the same on both.
 		Name: "creation_in_a_room",
 		Source: tellPrelude + `: main
   0 try loc @ "in a room" newobject recycle "created" ts catch ts endcatch
@@ -421,8 +423,8 @@ var cases = []Case{
 ;`,
 	},
 	{
-		// MPI is evaluated when a description is read, so the program
-		// stores one and then looks at itself.
+		// MPI is evaluated when a description is read, so the
+		// program stores one and then looks at itself.
 		Name: "mpi_text",
 		Source: tellPrelude + `: show[ str:s -- ]
   me @ "_/de" s @ setprop
@@ -497,11 +499,12 @@ var cases = []Case{
   "{owner:me}" show
 ;`,
 	},
-	// READ is deliberately not tested here. The harness marks the end of a
-	// command's output by sending a pose and reading until it appears, and
-	// a program waiting on a READ consumes that marker as its input. There
-	// is no marker a READ would not eat, so READ is covered by a unit test
-	// in internal/game instead.
+	// READ is deliberately not tested here. The harness marks the
+	// end of a command's output by sending a pose and reading
+	// until it appears, and a program waiting on a READ consumes
+	// that marker as its input. There is no marker a READ would
+	// not eat, so READ is covered by a unit test in internal/game
+	// instead.
 	{
 		// Sleeping suspends the program and resumes it later.
 		Name: "muf_sleep",
@@ -513,10 +516,11 @@ var cases = []Case{
 		Pause: 2 * time.Second,
 	},
 	{
-		// TESTLOCK, GETLOCKSTR/SETLOCKSTR, PARSELOCK/UNPARSELOCK/PRETTYLOCK
-		// and ARRAY_FILTER_LOCK, all against the wizard's own dbref (#1,
-		// always present in the fixture) so the case needs no dbref only
-		// known after a @create.
+		// TESTLOCK, GETLOCKSTR/SETLOCKSTR,
+		// PARSELOCK/UNPARSELOCK/PRETTYLOCK and
+		// ARRAY_FILTER_LOCK, all against the wizard's own
+		// dbref (#1, always present in the fixture) so the
+		// case needs no dbref only known after a @create.
 		Name: "locks",
 		Source: tellPrelude + `: main
   #1 "#1" setlockstr t
@@ -565,10 +569,11 @@ public foo
 ;`,
 	},
 	{
-		// FORK: the child runs independently of the parent, on its own copy
-		// of every variable — mutating "label" in the child must not be
-		// visible to the parent, which already reported its own value by
-		// the time the child gets to run.
+		// FORK: the child runs independently of the parent,
+		// on its own copy of every variable — mutating
+		// "label" in the child must not be visible to the
+		// parent, which already reported its own value by the
+		// time the child gets to run.
 		Name: "fork",
 		Source: tellPrelude + `: main
   "shared" var! label
@@ -582,15 +587,18 @@ public foo
 		Pause: time.Second,
 	},
 	{
-		// QUEUE: the fired instance is a fresh frame, not a copy of the
-		// queuer's — its own COMMAND is "Queued Event.", never the queuer's,
-		// and its initial stack argument is the string QUEUE was given, a
-		// different string upstream, both pushed from a plain interp() call
-		// with no relation to whatever the queuer's own COMMAND/args were.
+		// QUEUE: the fired instance is a fresh frame, not a
+		// copy of the queuer's — its own COMMAND is "Queued
+		// Event.", never the queuer's, and its initial stack
+		// argument is the string QUEUE was given, a different
+		// string upstream, both pushed from a plain interp()
+		// call with no relation to whatever the queuer's own
+		// COMMAND/args were.
 		//
-		// Also exercises GETPIDINFO's other-pid branch, before the queued
-		// process fires: SUBTYPE "QUEUE" and CALLED_DATA the arg QUEUE was
-		// given, both only knowable from the queuer's side since the fired
+		// Also exercises GETPIDINFO's other-pid branch,
+		// before the queued process fires: SUBTYPE "QUEUE"
+		// and CALLED_DATA the arg QUEUE was given, both only
+		// knowable from the queuer's side since the fired
 		// copy's own frame reports neither about itself.
 		Name: "queue",
 		Source: tellPrelude + `: main
@@ -607,10 +615,11 @@ public foo
 		Pause: time.Second,
 	},
 	{
-		// WATCHPID on a pid that names no live process queues the
-		// PROC.EXIT event immediately, on the caller's own frame — so the
-		// very next EVENT_WAITFOR call, filtering on that same event, is
-		// served without ever blocking.
+		// WATCHPID on a pid that names no live process queues
+		// the PROC.EXIT event immediately, on the caller's
+		// own frame — so the very next EVENT_WAITFOR call,
+		// filtering on that same event, is served without
+		// ever blocking.
 		Name: "watchpid",
 		Source: tellPrelude + `: main
   999999 watchpid
@@ -620,15 +629,18 @@ public foo
 ;`,
 	},
 	{
-		// Phase 3: descriptor/connection introspection (src/p_connects.c).
-		// Only one connection is live for the whole run, so every check is
-		// either shape-only (counts, round-trips through SETWIDTH/
-		// SETHEIGHT) or an argument-validation abort, whose wording is
-		// exactly what golden exists to catch — DESCRIDLE, DESCRTIME,
-		// DESCRBUFSIZE, DESCRHOST and DESCRUSER's own successful-path
-		// values are environment-dependent (wall-clock elapsed time, an
-		// OS-assigned buffer size, a container's own view of the peer
-		// address) and deliberately not compared here.
+		// Phase 3: descriptor/connection introspection
+		// (src/p_connects.c). Only one connection is live for
+		// the whole run, so every check is either shape-only
+		// (counts, round-trips through SETWIDTH/ SETHEIGHT)
+		// or an argument-validation abort, whose wording is
+		// exactly what golden exists to catch — DESCRIDLE,
+		// DESCRTIME, DESCRBUFSIZE, DESCRHOST and DESCRUSER's
+		// own successful-path values are
+		// environment-dependent (wall-clock elapsed time, an
+		// OS-assigned buffer size, a container's own view of
+		// the peer address) and deliberately not compared
+		// here.
 		Name: "connects",
 		Source: tellPrelude + `: main
   descr me @ descrdbref = t
@@ -670,12 +682,14 @@ public foo
 ;`,
 	},
 	{
-		// Phase 4: a sample of the more tractable p_strings.c/p_misc.c/
-		// p_array.c/p_props.c/p_db.c primitives, run at the harness's own
-		// mlevel 3 — the mlevel-4 ones (SETSYSPARM, BLESSPROP/UNBLESSPROP,
-		// PARSEMPIBLESSED, COMPILE, UNCOMPILE) are covered by their own
-		// dedicated wizard-mlevel fixture instead, the same way FORCE's own
-		// family needed one.
+		// Phase 4: a sample of the more tractable
+		// p_strings.c/p_misc.c/ p_array.c/p_props.c/p_db.c
+		// primitives, run at the harness's own mlevel 3 —
+		// the mlevel-4 ones (SETSYSPARM,
+		// BLESSPROP/UNBLESSPROP, PARSEMPIBLESSED, COMPILE,
+		// UNCOMPILE) are covered by their own dedicated
+		// wizard-mlevel fixture instead, the same way FORCE's
+		// own family needed one.
 		Name: "phase4",
 		Source: tellPrelude + `: main
   "#5" stod intostr ts
@@ -706,13 +720,15 @@ public foo
 	},
 	{
 		// Phase 4's remainder: the flag-match expression both
-		// ARRAY_FILTER_FLAGS and FINDNEXT take, the rewritten shared
-		// sprintf behind FMTSTRING and ARRAY_FMTSTRINGS, the seeded
-		// generator GETSEED/SETSEED expose, FMTTIME's arbitrary format and
-		// INTERP's nested run. Each is mlevel 3 or below; COPYOBJ,
-		// NEWPLAYER, COPYPLAYER, TOADPLAYER, PNAME_HISTORY,
-		// PROGRAM_SETLINES and DUMP are all mlevel 4 and covered by unit
-		// tests instead, for the same reason as the case above.
+		// ARRAY_FILTER_FLAGS and FINDNEXT take, the rewritten
+		// shared sprintf behind FMTSTRING and
+		// ARRAY_FMTSTRINGS, the seeded generator
+		// GETSEED/SETSEED expose, FMTTIME's arbitrary format
+		// and INTERP's nested run. Each is mlevel 3 or below;
+		// COPYOBJ, NEWPLAYER, COPYPLAYER, TOADPLAYER,
+		// PNAME_HISTORY, PROGRAM_SETLINES and DUMP are all
+		// mlevel 4 and covered by unit tests instead, for the
+		// same reason as the case above.
 		Name: "phase4b",
 		Source: tellPrelude + `: main
   ( the flag language, positive and negated )
@@ -780,10 +796,12 @@ public foo
 ;`,
 	},
 	{
-		// Timers and cross-process events. A timer with a zero delay is
-		// already due when EVENT_WAITFOR asks for it, so this finishes in
-		// one step and needs no Pause — the delayed case is covered by a
-		// unit test instead, since the two servers' tick intervals differ.
+		// Timers and cross-process events. A timer with a
+		// zero delay is already due when EVENT_WAITFOR asks
+		// for it, so this finishes in one step and needs no
+		// Pause — the delayed case is covered by a unit
+		// test instead, since the two servers' tick intervals
+		// differ.
 		Name: "timers",
 		Source: tellPrelude + `: main
   0 try 0 "tick" timer_start catch ts endcatch
@@ -812,10 +830,11 @@ public foo
 ;`,
 	},
 	{
-		// Phase 5: the MPI list functions and the looping ones built on
-		// them. A carriage return inside a result would split the line the
-		// harness compares, so a list is inspected with {count}, {lmember}
-		// and {sublist} rather than printed whole.
+		// Phase 5: the MPI list functions and the looping
+		// ones built on them. A carriage return inside a
+		// result would split the line the harness compares,
+		// so a list is inspected with {count}, {lmember} and
+		// {sublist} rather than printed whole.
 		Name: "mpi_lists",
 		Source: tellPrelude + `: show[ str:s -- ]
   me @ "_/de" s @ setprop
@@ -876,9 +895,9 @@ public foo
 ;`,
 	},
 	{
-		// MPI property functions. {prop} searches outwards through the
-		// environment and {prop!} does not, which is what the room-set
-		// property here distinguishes.
+		// MPI property functions. {prop} searches outwards
+		// through the environment and {prop!} does not, which
+		// is what the room-set property here distinguishes.
 		Name: "mpi_props",
 		Source: tellPrelude + `: show[ str:s -- ]
   me @ "_/de" s @ setprop
@@ -934,8 +953,9 @@ public foo
 ;`,
 	},
 	{
-		// PARSEPROPEX: MPI with a MUF dictionary in scope, handed back
-		// with whatever the MPI left in each variable.
+		// PARSEPROPEX: MPI with a MUF dictionary in scope,
+		// handed back with whatever the MPI left in each
+		// variable.
 		Name: "parsepropex",
 		Source: tellPrelude + `: main
   me @ "_px" "{&greeting}, {&name}!{set:name,changed}" setprop
@@ -964,9 +984,11 @@ public foo
 	},
 
 	{
-		// MPI object introspection. Anything environment-dependent — a
-		// dbref number, a connection's idle time, the clock — is compared
-		// only for shape, the same rule the connects case follows.
+		// MPI object introspection. Anything
+		// environment-dependent — a dbref number, a
+		// connection's idle time, the clock — is compared
+		// only for shape, the same rule the connects case
+		// follows.
 		Name: "mpi_objects2",
 		Source: tellPrelude + `: show[ str:s -- ]
   me @ "_/de" s @ setprop
@@ -1039,18 +1061,18 @@ public foo
 	},
 }
 
-// TestAgainstFuzzball runs every case against the C server and against this
-// one, and reports where their transcripts differ.
+// TestAgainstFuzzball runs every case against the C server and
+// against this one, and reports where their transcripts differ.
 func TestAgainstFuzzball(t *testing.T) {
 	requireOracle(t)
 
 	programs := make([]Program, len(cases))
 	script := make(Script, 0, len(cases))
-	// steps[i] is how many script entries belong to case i, so its output
-	// can be gathered back together.
+	// steps[i] is how many script entries belong to case i, so
+	// its output can be gathered back together.
 	steps := make([]int, len(cases))
-	// pauses[i] delays reading step i's output, for a program that resumes
-	// after suspending itself.
+	// pauses[i] delays reading step i's output, for a program
+	// that resumes after suspending itself.
 	pauses := map[int]time.Duration{}
 	for i, c := range cases {
 		programs[i] = Program{Name: c.Name, Source: c.Source}
@@ -1065,8 +1087,8 @@ func TestAgainstFuzzball(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Each server gets its own copy, so neither can see what the other left
-	// behind in the database.
+	// Each server gets its own copy, so neither can see what the
+	// other left behind in the database.
 	oracleFx, err := WriteMultiFixture(t.TempDir(), programs)
 	if err != nil {
 		t.Fatal(err)
@@ -1084,13 +1106,14 @@ func TestAgainstFuzzball(t *testing.T) {
 	if err != nil {
 		t.Fatalf("running emerald: %v", err)
 	}
-	if len(oracleOut) != len(script) || len(emeraldOut) != len(script) {
+	if len(oracleOut) != len(script) ||
+		len(emeraldOut) != len(script) {
 		t.Fatalf("got %d oracle and %d emerald transcripts for %d steps",
 			len(oracleOut), len(emeraldOut), len(script))
 	}
 
-	// Each case is reported on its own, so one failure names itself rather
-	// than shifting every line after it.
+	// Each case is reported on its own, so one failure names
+	// itself rather than shifting every line after it.
 	at := 0
 	for i, c := range cases {
 		oracle := strings.Join(oracleOut[at:at+steps[i]], "")

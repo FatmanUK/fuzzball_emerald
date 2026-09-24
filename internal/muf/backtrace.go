@@ -9,47 +9,50 @@ import (
 
 // BacktraceFrame is one level of a failing program's call stack.
 type BacktraceFrame struct {
-	// Level counts outwards from the innermost call, which is zero.
+	// Level counts outwards from the innermost call, which is
+	// zero.
 	Level int
 	// Program is the object the code belongs to.
 	Program ref.Ref
 	// Line is the source line being executed at this level.
 	Line int
-	// Func is the procedure's name, or "???" when the address is not
-	// inside one.
+	// Func is the procedure's name, or "???" when the address is
+	// not inside one.
 	Func string
 	// Args renders the procedure's arguments as "name=value".
 	Args []string
 }
 
-// Report describes a failure fully enough to print what upstream prints.
+// Report describes a failure fully enough to print what upstream
+// prints.
 type Report struct {
 	Program ref.Ref
 	Line    int
-	// Inst is the instruction that failed, which for a primitive is its
-	// name. Upstream shows it before the message.
+	// Inst is the instruction that failed, which for a primitive
+	// is its name. Upstream shows it before the message.
 	Inst string
 	Msg  string
 
 	Frames []BacktraceFrame
 }
 
-// maxArgText is how much of an argument's value a backtrace shows, matching
-// the limit upstream passes to insttotext.
+// maxArgText is how much of an argument's value a backtrace shows,
+// matching the limit upstream passes to insttotext.
 const maxArgText = 30
 
 // Backtrace renders the call stack, innermost first.
 func (f *Frame) Backtrace() []BacktraceFrame {
 	var out []BacktraceFrame
 
-	// The innermost level is wherever the program counter is now; the rest
-	// come from the return addresses stacked under it.
+	// The innermost level is wherever the program counter is now;
+	// the rest come from the return addresses stacked under it.
 	pcs := make([]int, 0, len(f.calls)+1)
 	pcs = append(pcs, f.PC)
 	for i := len(f.calls) - 1; i >= 0; i-- {
-		// The stored return address is what upstream prints, not the
-		// call it came from. For "foo ;" that is the EXIT after the
-		// call, so a caller's line is the line of its own ';'.
+		// The stored return address is what upstream prints,
+		// not the call it came from. For "foo ;" that is the
+		// EXIT after the call, so a caller's line is the line
+		// of its own ';'.
 		pcs = append(pcs, f.calls[i].pc)
 	}
 
@@ -71,8 +74,8 @@ func (f *Frame) Backtrace() []BacktraceFrame {
 	return out
 }
 
-// procAt finds the procedure an address belongs to, by scanning back to the
-// nearest function header.
+// procAt finds the procedure an address belongs to, by scanning back
+// to the nearest function header.
 func (f *Frame) procAt(pc int) *Proc {
 	if pc < 0 || pc >= len(f.Prog.Code) {
 		return nil
@@ -90,7 +93,8 @@ func (f *Frame) argText(level int, proc *Proc) []string {
 	if proc.Args == 0 {
 		return nil
 	}
-	// Level zero is the innermost scope, which is the last one opened.
+	// Level zero is the innermost scope, which is the last one
+	// opened.
 	idx := len(f.scopes) - 1 - level
 	if idx < 0 || idx >= len(f.scopes) {
 		return nil
@@ -108,8 +112,8 @@ func (f *Frame) argText(level int, proc *Proc) []string {
 	return out
 }
 
-// Display renders a value the way a debugger shows it, quoting strings so an
-// empty one is visible.
+// Display renders a value the way a debugger shows it, quoting
+// strings so an empty one is visible.
 func (v Value) Display() string {
 	switch v.Type {
 	case TypeString:
@@ -147,12 +151,13 @@ func (f *Frame) Report(err error) *Report {
 
 // Render writes the report the way Fuzzball does.
 //
-// The shape is fixed by what players and programs have read for decades: a
-// header, one line naming the program, instruction and message, then the
-// backtrace with the failing source line under each level.
+// The shape is fixed by what players and programs have read for
+// decades: a header, one line naming the program, instruction and
+// message, then the backtrace with the failing source line under each
+// level.
 //
-// progName resolves a program's name, and source its text; both come from the
-// server. sourceLine is one-based.
+// progName resolves a program's name, and source its text; both come
+// from the server. sourceLine is one-based.
 func (r *Report) Render(owned bool, ownerName string,
 	progName func(ref.Ref) string, sourceLine func(ref.Ref, int) (string, bool)) []string {
 
@@ -174,8 +179,9 @@ func (r *Report) Render(owned bool, ownerName string,
 
 	out = append(out, "System stack backtrace:")
 	for _, bf := range r.Frames {
-		// The opening parenthesis is never closed. That is how upstream
-		// prints it, and reproducing it keeps transcripts comparable.
+		// The opening parenthesis is never closed. That is
+		// how upstream prints it, and reproducing it keeps
+		// transcripts comparable.
 		head := pad3(bf.Level) + ") " + progName(bf.Program) + "(" +
 			bf.Program.String() + ") line " + strconv.Itoa(bf.Line) +
 			", in " + bf.Func + "(" + strings.Join(bf.Args, ", ") + ":"

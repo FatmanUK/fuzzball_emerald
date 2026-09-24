@@ -8,26 +8,28 @@ type Result int
 const (
 	// Done means the program ran to completion.
 	Done Result = iota
-	// Blocked means it is waiting for input or a timer. M7 wires those up;
-	// until then the interpreter reports it and stops.
+	// Blocked means it is waiting for input or a timer. M7 wires
+	// those up; until then the interpreter reports it and stops.
 	Blocked
-	// Yielded means its instruction slice ran out and it should be resumed.
+	// Yielded means its instruction slice ran out and it should
+	// be resumed.
 	Yielded
 )
 
 // Limits bound what a program may do.
 type Limits struct {
-	// Slice is how many instructions run before the interpreter yields, so
-	// one program cannot monopolise the world goroutine. Zero means the
-	// default.
+	// Slice is how many instructions run before the interpreter
+	// yields, so one program cannot monopolise the world
+	// goroutine. Zero means the default.
 	Slice int
-	// Total is the hard ceiling on instructions for one run, after which the
-	// program is aborted. Zero means the default.
+	// Total is the hard ceiling on instructions for one run,
+	// after which the program is aborted. Zero means the default.
 	Total int
 }
 
-// Default instruction limits. Upstream tunes both; these stand in until the
-// @tune wiring arrives with the rest of the process machinery.
+// Default instruction limits. Upstream tunes both; these stand in
+// until the @tune wiring arrives with the rest of the process
+// machinery.
 const (
 	DefaultSlice = 10_000
 	DefaultTotal = 20_000_000
@@ -51,12 +53,13 @@ func (l Limits) total() int {
 func (f *Frame) Run(lim Limits) (Result, error) {
 	budget := lim.slice()
 
-	// Whether this program is being traced is settled here rather than per
-	// instruction: it depends on a flag and a control check, and asking the
-	// host for both on every instruction would cost more than the tracing
-	// does. DEBUG_ON and DEBUG_OFF set Traced directly, so a program that
-	// turns tracing on part-way through takes effect at once; an @set from
-	// outside is picked up when this frame next resumes.
+	// Whether this program is being traced is settled here rather
+	// than per instruction: it depends on a flag and a control
+	// check, and asking the host for both on every instruction
+	// would cost more than the tracing does. DEBUG_ON and
+	// DEBUG_OFF set Traced directly, so a program that turns
+	// tracing on part-way through takes effect at once; an @set
+	// from outside is picked up when this frame next resumes.
 	f.Traced = f.tracing()
 
 	for {
@@ -78,15 +81,17 @@ func (f *Frame) Run(lim Limits) (Result, error) {
 		}
 		res, err := f.step(in)
 		if err != nil {
-			// errSilentAbort is upstream's ERROR_DIE_NOW: KILLing the
-			// running program's own pid ends it immediately, skipping even
-			// an open TRY, and produces no error report at all — the one
-			// abort that is not decorated or unwound like every other.
+			// errSilentAbort is upstream's ERROR_DIE_NOW:
+			// KILLing the running program's own pid ends
+			// it immediately, skipping even an open TRY,
+			// and produces no error report at all — the
+			// one abort that is not decorated or unwound
+			// like every other.
 			if err == errSilentAbort {
 				return Done, nil
 			}
-			// A raised error unwinds to the innermost TRY; if none is
-			// open it ends the program.
+			// A raised error unwinds to the innermost
+			// TRY; if none is open it ends the program.
 			if caught := f.unwind(err); !caught {
 				return Done, f.decorate(err, in)
 			}
@@ -98,14 +103,15 @@ func (f *Frame) Run(lim Limits) (Result, error) {
 	}
 }
 
-// step runs one instruction. It returns a non-nil Result when the program
-// should stop.
+// step runs one instruction. It returns a non-nil Result when the
+// program should stop.
 func (f *Frame) step(in Inst) (*Result, error) {
 	switch in.Type {
 	case TypeFunction:
-		// Entering a procedure opens a scope for its variables. The
-		// arguments are already on the stack; a procedure that declares
-		// them pops them itself through SVAR!.
+		// Entering a procedure opens a scope for its
+		// variables. The arguments are already on the stack;
+		// a procedure that declares them pops them itself
+		// through SVAR!.
 		f.scopes = append(f.scopes, make([]Value, in.Proc.Vars))
 		if n := in.Proc.Args; n > 0 {
 			args, err := f.PopN(n)
@@ -214,10 +220,11 @@ func (f *Frame) step(in Inst) (*Result, error) {
 		return nil, f.call(target)
 
 	case TypeTry:
-		// TRY takes a count: how many stack items the guarded block
-		// consumes. Catching unwinds to exactly the depth below them,
-		// so the handler sees the stack as it was before the block ran
-		// rather than whatever it left half-built.
+		// TRY takes a count: how many stack items the guarded
+		// block consumes. Catching unwinds to exactly the
+		// depth below them, so the handler sees the stack as
+		// it was before the block ran rather than whatever it
+		// left half-built.
 		n, err := f.Pop()
 		if err != nil {
 			return nil, errf("Stack Underflow.")
@@ -228,8 +235,8 @@ func (f *Frame) step(in Inst) (*Result, error) {
 		if int(n.Num) > len(f.Stack) {
 			return nil, errf("Stack Underflow.")
 		}
-		// A nested TRY may not reach below what the one outside it
-		// protects.
+		// A nested TRY may not reach below what the one
+		// outside it protects.
 		if len(f.trys) > 0 {
 			outer := f.trys[len(f.trys)-1]
 			if len(f.Stack)-outer.stackTop < int(n.Num) {
@@ -270,14 +277,15 @@ func (f *Frame) call(addr int) error {
 	return nil
 }
 
-// maxCallDepth bounds recursion, so a program that calls itself forever fails
-// rather than exhausting memory.
+// maxCallDepth bounds recursion, so a program that calls itself
+// forever fails rather than exhausting memory.
 const maxCallDepth = 1024
 
 // ret returns from a procedure.
 func (f *Frame) ret() {
 	if len(f.calls) == 0 {
-		// Returning from the outermost procedure ends the program.
+		// Returning from the outermost procedure ends the
+		// program.
 		f.PC = len(f.Prog.Code)
 		return
 	}
@@ -296,8 +304,8 @@ func (f *Frame) getScoped(slot int) (Value, error) {
 	return s[slot], nil
 }
 
-// setScoped writes a scoped variable, growing the scope when a procedure
-// declares more variables as it goes.
+// setScoped writes a scoped variable, growing the scope when a
+// procedure declares more variables as it goes.
 func (f *Frame) setScoped(slot int, v Value) error {
 	if len(f.scopes) == 0 {
 		return errf("no scope for a scoped variable")
@@ -311,8 +319,8 @@ func (f *Frame) setScoped(slot int, v Value) error {
 	return nil
 }
 
-// unwind hands an error to the innermost TRY, restoring the stack to where the
-// block started. It reports whether anything caught it.
+// unwind hands an error to the innermost TRY, restoring the stack to
+// where the block started. It reports whether anything caught it.
 func (f *Frame) unwind(err error) bool {
 	if len(f.trys) == 0 {
 		return false

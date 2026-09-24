@@ -14,7 +14,8 @@ import (
 type procState int
 
 const (
-	// procRunnable is ready to continue now, which a yielded program is.
+	// procRunnable is ready to continue now, which a yielded
+	// program is.
 	procRunnable procState = iota
 	// procSleeping waits for a time.
 	procSleeping
@@ -47,23 +48,25 @@ type process struct {
 	// events are what a waiting process is listening for.
 	events []string
 
-	// calledData is upstream's timequeue called_data: what the process is
-	// doing, for GETPIDINFO's CALLED_DATA key. "READ", "SLEEPING" and
-	// "EVENT_WAITFOR" for the three ways to block, "FOREGROUND" or
-	// "BACKGROUND" for a runnable command-driven or forked process, or the
-	// arg string a QUEUE was given.
+	// calledData is upstream's timequeue called_data: what the
+	// process is doing, for GETPIDINFO's CALLED_DATA key. "READ",
+	// "SLEEPING" and "EVENT_WAITFOR" for the three ways to block,
+	// "FOREGROUND" or "BACKGROUND" for a runnable command-driven
+	// or forked process, or the arg string a QUEUE was given.
 	calledData string
 
-	// timers are upstream's muf timer events: TIMER_START schedules one and
-	// TIMER_STOP cancels it. When one fires the process gets a
-	// TIMER.<name> event, the same delivery path WATCHPID's PROC.EXIT uses.
+	// timers are upstream's muf timer events: TIMER_START
+	// schedules one and TIMER_STOP cancels it. When one fires the
+	// process gets a TIMER.<name> event, the same delivery path
+	// WATCHPID's PROC.EXIT uses.
 	timers []mufTimer
 
-	// waiters and waitees are upstream's fr->waiters/fr->waitees: WATCHPID
-	// bookkeeping. waiters lists the pids watching this process, notified
-	// with a PROC.EXIT.<pid> event when it ends; waitees lists the pids this
-	// process is watching, so that ending early drops it from their waiters
-	// too rather than leaving a stale entry.
+	// waiters and waitees are upstream's fr->waiters/fr->waitees:
+	// WATCHPID bookkeeping. waiters lists the pids watching this
+	// process, notified with a PROC.EXIT.<pid> event when it
+	// ends; waitees lists the pids this process is watching, so
+	// that ending early drops it from their waiters too rather
+	// than leaving a stale entry.
 	waiters []int
 	waitees []int
 
@@ -79,13 +82,15 @@ type process struct {
 
 // procQueue holds every suspended program.
 //
-// It is owned by the world goroutine, like everything else that touches the
-// object graph. Nothing here locks, because nothing else may reach it.
+// It is owned by the world goroutine, like everything else that
+// touches the object graph. Nothing here locks, because nothing else
+// may reach it.
 type procQueue struct {
 	next  int
 	procs map[int]*process
-	// reading indexes the process waiting on each descriptor's input, so a
-	// line typed at a READ goes to the program rather than the parser.
+	// reading indexes the process waiting on each descriptor's
+	// input, so a line typed at a READ goes to the program rather
+	// than the parser.
 	reading map[int]int
 }
 
@@ -119,7 +124,8 @@ func (q *procQueue) remove(pid int) {
 // get returns a process by id.
 func (q *procQueue) get(pid int) *process { return q.procs[pid] }
 
-// readerFor returns the process waiting on a descriptor's input, or nil.
+// readerFor returns the process waiting on a descriptor's input, or
+// nil.
 func (q *procQueue) readerFor(descr int) *process {
 	if pid, ok := q.reading[descr]; ok {
 		return q.procs[pid]
@@ -127,8 +133,8 @@ func (q *procQueue) readerFor(descr int) *process {
 	return nil
 }
 
-// due lists the processes ready to run at a given time, in pid order so a
-// program queued first runs first.
+// due lists the processes ready to run at a given time, in pid order
+// so a program queued first runs first.
 func (q *procQueue) due(now time.Time) []*process {
 	var out []*process
 	for _, p := range q.procs {
@@ -167,7 +173,8 @@ func (q *procQueue) forProgram(prog ref.Ref) []*process {
 }
 
 // forPlayer lists the processes running for one player, for the
-// max_plyr_processes check FORK and QUEUE both make before adding another.
+// max_plyr_processes check FORK and QUEUE both make before adding
+// another.
 func (q *procQueue) forPlayer(player ref.Ref) []*process {
 	var out []*process
 	for _, p := range q.all() {
@@ -184,8 +191,9 @@ type mufTimer struct {
 	fires time.Time
 }
 
-// Tick runs whatever is due. The engine calls it once per flush interval,
-// which is also how often a sleeping program can wake or a timer fire.
+// Tick runs whatever is due. The engine calls it once per flush
+// interval, which is also how often a sleeping program can wake or a
+// timer fire.
 func (s *Server) Tick(w *world.World) {
 	now := w.Now()
 	s.refillQuotas(w, now)
@@ -198,10 +206,10 @@ func (s *Server) Tick(w *world.World) {
 
 // fireTimers delivers every timer that has come due.
 //
-// A timer fires once and is then forgotten, which is upstream's own: a
-// program that wants another calls TIMER_START again. Delivery goes through
-// deliverEvent, so a process already waiting on the timer's name resumes
-// immediately rather than at the next tick.
+// A timer fires once and is then forgotten, which is upstream's own:
+// a program that wants another calls TIMER_START again. Delivery goes
+// through deliverEvent, so a process already waiting on the timer's
+// name resumes immediately rather than at the next tick.
 func (s *Server) fireTimers(w *world.World, now time.Time) {
 	for _, p := range s.procs.all() {
 		if len(p.timers) == 0 {
@@ -218,18 +226,20 @@ func (s *Server) fireTimers(w *world.World, now time.Time) {
 		}
 		p.timers = kept
 		for _, t := range pending {
-			// The event carries when the timer was due, not its name —
-			// upstream pushes event->when as an integer.
+			// The event carries when the timer was due,
+			// not its name — upstream pushes
+			// event->when as an integer.
 			s.deliverEvent(w, p, timerEventName(t.name),
 				muf.Int(t.fires.Unix()))
 		}
 	}
 }
 
-// resume continues a suspended program, optionally pushing a value first.
+// resume continues a suspended program, optionally pushing a value
+// first.
 //
-// A READ is resumed with the line the player typed; everything else resumes
-// with nothing new on the stack.
+// A READ is resumed with the line the player typed; everything else
+// resumes with nothing new on the stack.
 func (s *Server) resume(w *world.World, p *process, push *muf.Value) {
 	if p.state == procReading {
 		delete(s.procs.reading, p.descr)
@@ -258,9 +268,9 @@ func (s *Server) step(w *world.World, p *process) {
 			return
 
 		case muf.Yielded:
-			// The slice ran out. Leave it runnable so the next tick
-			// picks it up, which keeps one program from starving
-			// the others.
+			// The slice ran out. Leave it runnable so the
+			// next tick picks it up, which keeps one
+			// program from starving the others.
 			p.state = procRunnable
 			return
 
@@ -292,8 +302,9 @@ func (s *Server) blockProcess(w *world.World, p *process) {
 		p.events = b.Events
 
 	default:
-		// No reason given, which should not happen; treat it as done
-		// rather than leaving a process that nothing will ever resume.
+		// No reason given, which should not happen; treat it
+		// as done rather than leaving a process that nothing
+		// will ever resume.
 		s.finishProcess(w, p)
 	}
 }
@@ -304,11 +315,12 @@ func (s *Server) failProcess(w *world.World, p *process, err error) {
 	s.reportMUFErrorTo(w, p.player, p.frame, p.program, err)
 }
 
-// finishProcess is upstream's watchpid_process, called from every path that
-// ends a process for good. It notifies whoever WATCHPID'd this pid with a
-// PROC.EXIT.<pid> event, drops this pid from the waiters list of whatever it
-// was itself watching so a dead process leaves no stale entries behind, and
-// only then removes it from the queue.
+// finishProcess is upstream's watchpid_process, called from every
+// path that ends a process for good. It notifies whoever WATCHPID'd
+// this pid with a PROC.EXIT.<pid> event, drops this pid from the
+// waiters list of whatever it was itself watching so a dead process
+// leaves no stale entries behind, and only then removes it from the
+// queue.
 func (s *Server) finishProcess(w *world.World, p *process) {
 	for _, pid := range p.waitees {
 		if target := s.procs.get(pid); target != nil {
@@ -324,13 +336,15 @@ func (s *Server) finishProcess(w *world.World, p *process) {
 	s.procs.remove(p.pid)
 }
 
-// deliverEvent is upstream's muf_event_add, plus the immediate-delivery half
-// of muf_event_process: Emerald has no periodic scan to defer to, so a
-// target already blocked in a matching EVENT_WAITFOR resumes right here
-// instead of waiting for one. Otherwise the event is queued on its frame for
-// whenever it next blocks on a matching EVENT_WAITFOR — see Frame.popEvent.
+// deliverEvent is upstream's muf_event_add, plus the
+// immediate-delivery half of muf_event_process: Emerald has no
+// periodic scan to defer to, so a target already blocked in a
+// matching EVENT_WAITFOR resumes right here instead of waiting for
+// one. Otherwise the event is queued on its frame for whenever it
+// next blocks on a matching EVENT_WAITFOR — see Frame.popEvent.
 func (s *Server) deliverEvent(w *world.World, target *process, name string, data muf.Value) {
-	if target.state == procWaiting && (len(target.events) == 0 || matchesEvent(name, target.events)) {
+	if target.state == procWaiting &&
+		(len(target.events) == 0 || matchesEvent(name, target.events)) {
 		target.state = procRunnable
 		if err := target.frame.Push(data); err != nil {
 			s.failProcess(w, target, err)
@@ -364,18 +378,19 @@ func removePID(pids []int, pid int) []int {
 	return pids
 }
 
-// Input from a descriptor goes to a program waiting on a READ, when there is
-// one, rather than to the command parser.
+// Input from a descriptor goes to a program waiting on a READ, when
+// there is one, rather than to the command parser.
 func (s *Server) readInput(w *world.World, descr int, line string) bool {
 	p := s.procs.readerFor(descr)
 	if p == nil {
 		return false
 	}
-	// A blank line does not resume a READ that has not asked for one —
-	// READ_WANTS_BLANKS/READ_WANTS_NO_BLANKS, upstream's own default being
-	// "no" — but it is still swallowed here rather than reaching the
-	// command parser, matching upstream: while blocked on READ, every line
-	// goes to the reader, delivered or not.
+	// A blank line does not resume a READ that has not asked for
+	// one — READ_WANTS_BLANKS/READ_WANTS_NO_BLANKS, upstream's
+	// own default being "no" — but it is still swallowed here
+	// rather than reaching the command parser, matching upstream:
+	// while blocked on READ, every line goes to the reader,
+	// delivered or not.
 	if line == "" && !p.frame.WantsBlanks {
 		return true
 	}
@@ -384,9 +399,9 @@ func (s *Server) readInput(w *world.World, descr int, line string) bool {
 	return true
 }
 
-// killProcessesFor stops everything a player is running, which deleting or
-// disconnecting them has to do: a suspended program holds a frame naming an
-// object that may be about to change hands.
+// killProcessesFor stops everything a player is running, which
+// deleting or disconnecting them has to do: a suspended program holds
+// a frame naming an object that may be about to change hands.
 func (s *Server) killProcessesFor(w *world.World, player ref.Ref) {
 	for _, p := range s.procs.all() {
 		if p.player == player {
@@ -402,18 +417,18 @@ func (s *Server) killProcessesOf(w *world.World, program ref.Ref) {
 	}
 }
 
-// refillQuotas is upstream's update_quotas: every command_time_msec, each
-// connection is granted commands_per_time more commands, never accumulating
-// past command_burst_size.
+// refillQuotas is upstream's update_quotas: every command_time_msec,
+// each connection is granted commands_per_time more commands, never
+// accumulating past command_burst_size.
 //
-// A player whose input is going somewhere other than the command parser — the
-// MUF editor, or a program waiting on a READ — gets eight times the rate,
-// because typing program text is not the kind of traffic the limiter exists
-// to stop.
+// A player whose input is going somewhere other than the command
+// parser — the MUF editor, or a program waiting on a READ — gets
+// eight times the rate, because typing program text is not the kind
+// of traffic the limiter exists to stop.
 //
-// Only whole slices count, and the clock is advanced by exactly the slices
-// consumed rather than to now, so a tick that arrives late does not forfeit
-// the remainder.
+// Only whole slices count, and the clock is advanced by exactly the
+// slices consumed rather than to now, so a tick that arrives late
+// does not forfeit the remainder.
 func (s *Server) refillQuotas(w *world.World, now time.Time) {
 	period := time.Duration(w.Tune.Int("command_time_msec")) * time.Millisecond
 	if period <= 0 {
@@ -433,7 +448,8 @@ func (s *Server) refillQuotas(w *world.World, now time.Time) {
 	burst := int(w.Tune.Int("command_burst_size"))
 	for _, d := range s.hub.All() {
 		rate := perTime
-		if d.Connected && hasFlag(w, d.Player, ref.Interactive) {
+		if d.Connected &&
+			hasFlag(w, d.Player, ref.Interactive) {
 			rate = perTime * 8
 		}
 		d.Quota.Add(rate*slices, burst)

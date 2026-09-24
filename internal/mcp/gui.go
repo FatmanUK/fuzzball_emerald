@@ -13,10 +13,11 @@ const GUIPackage = "org-fuzzball-gui"
 
 // Dialog is one open dialog on one connection.
 //
-// A dialog's controls hold values the client edits, and a program reads them
-// back when the user presses a button. The values live here rather than in the
-// program because the client may change them at any time, including while the
-// program that opened the dialog is suspended.
+// A dialog's controls hold values the client edits, and a program
+// reads them back when the user presses a button. The values live
+// here rather than in the program because the client may change them
+// at any time, including while the program that opened the dialog is
+// suspended.
 type Dialog struct {
 	ID string
 	// Descr is the connection the dialog is shown on.
@@ -24,15 +25,16 @@ type Dialog struct {
 	// Dismissed records that the client has closed the dialog.
 	Dismissed bool
 
-	// values maps a control id to its lines, in the order the client sent
-	// them.
+	// values maps a control id to its lines, in the order the
+	// client sent them.
 	values map[string][]string
-	// order keeps the control ids in the order they were first set, so a
-	// program reading the whole dialog gets a stable answer.
+	// order keeps the control ids in the order they were first
+	// set, so a program reading the whole dialog gets a stable
+	// answer.
 	order []string
 
-	// OnEvent is called when the client reports a control event, and
-	// OnError when it reports a failure. Either may be nil.
+	// OnEvent is called when the client reports a control event,
+	// and OnError when it reports a failure. Either may be nil.
 	OnEvent func(d *Dialog, ctrl, event string, dismissed bool)
 	OnError func(d *Dialog, ctrl, code, text string)
 }
@@ -52,8 +54,8 @@ func (d *Dialog) Lines(ctrl string) ([]string, bool) {
 	return lines, ok
 }
 
-// Controls names the controls that have a value, in the order they first got
-// one.
+// Controls names the controls that have a value, in the order they
+// first got one.
 func (d *Dialog) Controls() []string { return d.order }
 
 // SetValue records a control's value.
@@ -67,9 +69,9 @@ func (d *Dialog) SetValue(ctrl string, lines []string) {
 
 // Dialogs holds every open dialog on a server.
 //
-// Dialog ids are handed out here rather than per connection because a program
-// names a dialog by id alone: it does not say which connection it meant, and
-// the id has to be enough to find it.
+// Dialog ids are handed out here rather than per connection because a
+// program names a dialog by id alone: it does not say which
+// connection it meant, and the id has to be enough to find it.
 type Dialogs struct {
 	mu   sync.Mutex
 	next int
@@ -115,7 +117,8 @@ func (r *Dialogs) Close(id string) bool {
 }
 
 // CloseDescr forgets every dialog on a connection, which is what a
-// disconnection has to do: nothing is going to close them from the far end.
+// disconnection has to do: nothing is going to close them from the
+// far end.
 func (r *Dialogs) CloseDescr(descr int) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -129,8 +132,8 @@ func (r *Dialogs) CloseDescr(descr int) []string {
 	return closed
 }
 
-// GUIHandler returns the handler for the GUI package, reading from and writing
-// to the given registry.
+// GUIHandler returns the handler for the GUI package, reading from
+// and writing to the given registry.
 func GUIHandler(dialogs *Dialogs) func(*Frame, *Message, Version) {
 	return func(f *Frame, msg *Message, _ Version) {
 		id, _ := msg.Arg("dlogid")
@@ -163,9 +166,10 @@ func GUIHandler(dialogs *Dialogs) func(*Frame, *Message, Version) {
 			if event == "" {
 				event = "buttonpress"
 			}
-			// An event dismisses the dialog unless the client says
-			// otherwise, because most controls are buttons and a
-			// button press closes what it is on.
+			// An event dismisses the dialog unless the
+			// client says otherwise, because most
+			// controls are buttons and a button press
+			// closes what it is on.
 			dismissed := true
 			if v, ok := msg.Arg("dismissed"); ok &&
 				(ascii.EqualFold(v, "false") || v == "0") {

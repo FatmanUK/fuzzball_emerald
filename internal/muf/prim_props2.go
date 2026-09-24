@@ -6,23 +6,26 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 )
 
-// BLESSPROP, UNBLESSPROP, BLESSED?, PROP-NAME-OK?, PARSEMPI, PARSEMPIBLESSED
-// and ARRAY_FILTER_PROP are ports of the more tractable primitives left in
-// src/p_props.c. PARSEPROPEX is not ported: unlike PARSEMPI, it converts a
-// whole caller-supplied dictionary into MPI variables and hands one back —
-// materially more plumbing than a primitive port on its own, and deferred
-// rather than rushed.
+// BLESSPROP, UNBLESSPROP, BLESSED?, PROP-NAME-OK?, PARSEMPI,
+// PARSEMPIBLESSED and ARRAY_FILTER_PROP are ports of the more
+// tractable primitives left in src/p_props.c. PARSEPROPEX is not
+// ported: unlike PARSEMPI, it converts a whole caller-supplied
+// dictionary into MPI variables and hands one back — materially
+// more plumbing than a primitive port on its own, and deferred rather
+// than rushed.
 //
 // None of these primitives check prop_read_perms/prop_write_perms —
-// Emerald's property primitives have no read/write permission model at all
-// yet (SETPROP and GETPROP do not either), so adding one only here would
-// make these primitives stricter than the rest of the property surface.
+// Emerald's property primitives have no read/write permission model
+// at all yet (SETPROP and GETPROP do not either), so adding one only
+// here would make these primitives stricter than the rest of the
+// property surface.
 func init() {
 	register("BLESSPROP", blessEdit(true))
 	register("UNBLESSPROP", blessEdit(false))
 
-	// BLESSED?'s own mlev<2 uses the dispatcher's own generic wording, so
-	// mlev_gen.go's generated floor already gates it — no inline check.
+	// BLESSED?'s own mlev<2 uses the dispatcher's own generic
+	// wording, so mlev_gen.go's generated floor already gates it
+	// — no inline check.
 	register("BLESSED?", func(f *Frame) (*Result, error) {
 		path, obj, h, err := f.propTarget()
 		if err != nil {
@@ -93,20 +96,22 @@ func init() {
 	})
 }
 
-// isValidPropName is a port of is_valid_propname: non-empty, and containing
-// neither a carriage return nor the ':' property-flag delimiter.
+// isValidPropName is a port of is_valid_propname: non-empty, and
+// containing neither a carriage return nor the ':' property-flag
+// delimiter.
 func isValidPropName(s string) bool {
 	return s != "" && !strings.ContainsAny(s, "\r:")
 }
 
-// trimPropDelim strips trailing '/' from a property path, upstream's own
-// repeated "yet another implementation of removing trailing slashes".
+// trimPropDelim strips trailing '/' from a property path, upstream's
+// own repeated "yet another implementation of removing trailing
+// slashes".
 func trimPropDelim(s string) string {
 	return strings.TrimRight(s, "/")
 }
 
-// blessEdit builds BLESSPROP and UNBLESSPROP, which share their argument
-// shape and mlev-4 wizard-only floor.
+// blessEdit builds BLESSPROP and UNBLESSPROP, which share their
+// argument shape and mlev-4 wizard-only floor.
 func blessEdit(blessed bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		nameV, err := f.Pop()
@@ -133,7 +138,8 @@ func blessEdit(blessed bool) primFunc {
 		if !h.Valid(objV.Ref) {
 			return nil, errf("Non-object argument (1)")
 		}
-		if strings.ContainsRune(nameV.Str, '\r') || strings.ContainsRune(nameV.Str, ':') {
+		if strings.ContainsRune(nameV.Str, '\r') ||
+			strings.ContainsRune(nameV.Str, ':') {
 			return nil, errf("Illegal propname")
 		}
 		h.BlessProp(objV.Ref, trimPropDelim(nameV.Str), blessed)
@@ -164,10 +170,12 @@ func parseMPI(blessed bool) primFunc {
 		if err != nil {
 			return nil, err
 		}
-		// PARSEMPI's own mlev<3 uses the dispatcher's generic wording, so
-		// mlev_gen.go's generated floor already gates it. PARSEMPIBLESSED's
-		// mlev<4 does not — plain "Permission denied.", not the generic
-		// "...Requires Wizbit." — so only that one needs checking here.
+		// PARSEMPI's own mlev<3 uses the dispatcher's generic
+		// wording, so mlev_gen.go's generated floor already
+		// gates it. PARSEMPIBLESSED's mlev<4 does not —
+		// plain "Permission denied.", not the generic
+		// "...Requires Wizbit." — so only that one needs
+		// checking here.
 		if blessed && f.MLevel() < floor {
 			return nil, errf("Permission denied.")
 		}
@@ -201,14 +209,15 @@ func parseMPI(blessed bool) primFunc {
 	}
 }
 
-// PARSEPROPEX is PARSEPROP with a dictionary of variables handed in and
-// handed back: the MPI in the property can read them, and whatever it leaves
-// in them comes out the other side. It is how a MUF program and a property's
-// MPI exchange more than one value.
+// PARSEPROPEX is PARSEPROP with a dictionary of variables handed in
+// and handed back: the MPI in the property can read them, and
+// whatever it leaves in them comes out the other side. It is how a
+// MUF program and a property's MPI exchange more than one value.
 func init() {
 	register("PARSEPROPEX", func(f *Frame) (*Result, error) {
-		// The floor's wording is its own, so it is checked here rather
-		// than left to the generated table — see PARSEPROP.
+		// The floor's wording is its own, so it is checked
+		// here rather than left to the generated table —
+		// see PARSEPROP.
 		if f.MLevel() < 3 {
 			return nil, errf("Mucker level 3 or greater required.")
 		}
@@ -266,8 +275,9 @@ func init() {
 			if len(k.Str) > maxMPINameLen {
 				return nil, errf("Key too long to be an MPI variable. (3)")
 			}
-			// Every value becomes text, because that is all an MPI
-			// variable can hold — a dbref as "#123", a float in %g.
+			// Every value becomes text, because that is
+			// all an MPI variable can hold — a dbref as
+			// "#123", a float in %g.
 			switch vals[i].Type {
 			case TypeInteger, TypeFloat, TypeObject, TypeString, TypeLock:
 			default:
@@ -283,8 +293,9 @@ func init() {
 			return nil, errf("%s", err.Error())
 		}
 
-		// The same dictionary comes back, its values replaced by what the
-		// MPI left in each variable — always strings, whatever went in.
+		// The same dictionary comes back, its values replaced
+		// by what the MPI left in each variable — always
+		// strings, whatever went in.
 		d := NewDict()
 		for _, kv := range after {
 			d.Set(Str(kv.Name), Str(kv.Value))
@@ -296,13 +307,13 @@ func init() {
 	})
 }
 
-// maxMPINameLen is upstream's MAX_MFUN_NAME_LEN, which bounds a variable's
-// name as well as a function's.
+// maxMPINameLen is upstream's MAX_MFUN_NAME_LEN, which bounds a
+// variable's name as well as a function's.
 const maxMPINameLen = 16
 
-// mpiValue renders a MUF value as the text an MPI variable holds. A dbref
-// keeps its '#', unlike INTOSTR's own rendering, because MPI's own object
-// functions expect to read one back.
+// mpiValue renders a MUF value as the text an MPI variable holds. A
+// dbref keeps its '#', unlike INTOSTR's own rendering, because MPI's
+// own object functions expect to read one back.
 func mpiValue(v Value) string {
 	if v.Type == TypeObject {
 		return v.Ref.String()

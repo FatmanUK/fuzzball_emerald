@@ -6,13 +6,14 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// flagCheck is upstream's struct flgchkdat: a compiled flag-match expression,
-// as ARRAY_FILTER_FLAGS and FINDNEXT take and @find and @owned parse.
+// flagCheck is upstream's struct flgchkdat: a compiled flag-match
+// expression, as ARRAY_FILTER_FLAGS and FINDNEXT take and @find and
+// @owned parse.
 //
-// The language is a string of single characters, each a test, with '!'
-// negating the one that follows it. Negation is per-character rather than
-// per-expression, which is why every test here comes in a positive and a
-// negative half rather than one half and a flag.
+// The language is a string of single characters, each a test, with
+// '!' negating the one that follows it. Negation is per-character
+// rather than per-expression, which is why every test here comes in a
+// positive and a negative half rather than one half and a flag.
 type flagCheck struct {
 	forType bool
 	isType  ref.ObjType
@@ -32,24 +33,27 @@ type flagCheck struct {
 	isOld  bool
 }
 
-// parseFlagCheck is upstream's init_checkflags, minus its output-type half:
-// the commands that parse one of these strings also read a display mode off
-// the end of it, after an '=' , which the two primitives using this never
-// pass. Anything after an '=' is therefore dropped rather than interpreted.
+// parseFlagCheck is upstream's init_checkflags, minus its output-type
+// half: the commands that parse one of these strings also read a
+// display mode off the end of it, after an '=' , which the two
+// primitives using this never pass. Anything after an '=' is
+// therefore dropped rather than interpreted.
 //
-// Upstream's size tests, '~' and '^', are parsed and then ignored. They
-// compare against size_object, this server's objects are laid out nothing
-// like the C's, and examine's own "Memory used" line is masked in the golden
-// case for exactly that reason — so a size clause filters nothing here rather
-// than filtering by a number that would not mean the same thing.
+// Upstream's size tests, '~' and '^', are parsed and then ignored.
+// They compare against size_object, this server's objects are laid
+// out nothing like the C's, and examine's own "Memory used" line is
+// masked in the golden case for exactly that reason — so a size
+// clause filters nothing here rather than filtering by a number that
+// would not mean the same thing.
 func parseFlagCheck(flags string) flagCheck {
 	if i := strings.IndexByte(flags, '='); i >= 0 {
 		flags = flags[:i]
 	}
 
 	var c flagCheck
-	// mode counts down: '!' sets it to 2 so it survives the decrement at the
-	// end of its own iteration and applies to the next character only.
+	// mode counts down: '!' sets it to 2 so it survives the
+	// decrement at the end of its own iteration and applies to
+	// the next character only.
 	mode := 0
 	for i := 0; i < len(flags); i++ {
 		ch := upperByte(flags[i])
@@ -72,8 +76,10 @@ func parseFlagCheck(flags string) flagCheck {
 		case 'F':
 			c.setType(neg, ref.TypeProgram, &c.notProg)
 		case '~', '^':
-			// Skip the size's digits so they are not read as level tests.
-			for i+1 < len(flags) && flags[i+1] >= '0' && flags[i+1] <= '9' {
+			// Skip the size's digits so they are not read
+			// as level tests.
+			for i+1 < len(flags) && flags[i+1] >= '0' &&
+				flags[i+1] <= '9' {
 				i++
 			}
 		case 'U':
@@ -88,8 +94,9 @@ func parseFlagCheck(flags string) flagCheck {
 				c.forLevel, c.isLevel = true, level
 			}
 		case 'M':
-			// 'M' is "has any mucker level", so its two halves are the other
-			// way round from the digits': plain M excludes level 0, and !M
+			// 'M' is "has any mucker level", so its two
+			// halves are the other way round from the
+			// digits': plain M excludes level 0, and !M
 			// asks for exactly level 0.
 			if neg {
 				c.forLevel, c.isLevel = true, 0
@@ -97,8 +104,9 @@ func parseFlagCheck(flags string) flagCheck {
 				c.notLevel[0] = true
 			}
 		case ' ':
-			// A space after '!' re-arms the negation for the next character
-			// rather than consuming it.
+			// A space after '!' re-arms the negation for
+			// the next character rather than consuming
+			// it.
 			if mode != 0 {
 				mode = 2
 			}
@@ -127,8 +135,8 @@ func (c *flagCheck) setType(neg bool, t ref.ObjType, not *bool) {
 }
 
 // checkFlagLetters is upstream's own letter-to-flag mapping inside
-// init_checkflags. It is not the same set as the flags examine prints: there
-// is no letter here for the internal ones.
+// init_checkflags. It is not the same set as the flags examine
+// prints: there is no letter here for the internal ones.
 var checkFlagLetters = map[byte]ref.Flags{
 	'A': ref.Abode,
 	'B': ref.Builder,
@@ -197,9 +205,10 @@ func (c flagCheck) matches(h Host, what ref.Ref) bool {
 	return true
 }
 
-// linked is checkflags' own per-type idea of what having a link means: a room
-// has a drop-to, an exit has at least one destination, and a player or thing
-// always counts as linked because its home always is one.
+// linked is checkflags' own per-type idea of what having a link
+// means: a room has a drop-to, an exit has at least one destination,
+// and a player or thing always counts as linked because its home
+// always is one.
 func linked(h Host, what ref.Ref, t ref.ObjType) bool {
 	switch t {
 	case ref.TypeRoom, ref.TypeExit:
@@ -211,9 +220,9 @@ func linked(h Host, what ref.Ref, t ref.ObjType) bool {
 	}
 }
 
-// recentlyTouched is the inverse of checkflags' "old" test: an object counts
-// as old only when both its last use and its last change are further back
-// than the aging_time parameter.
+// recentlyTouched is the inverse of checkflags' "old" test: an object
+// counts as old only when both its last use and its last change are
+// further back than the aging_time parameter.
 func recentlyTouched(h Host, what ref.Ref) bool {
 	_, modified, used, _ := h.Timestamps(what)
 	now := h.Now().Unix()

@@ -69,9 +69,9 @@ func TestRateLimit(t *testing.T) {
 	}
 }
 
-// TestRefusalDoesNotExtendTheWindow covers the trap in a naive rate limiter:
-// counting refused attempts would let a peer that keeps retrying hold itself
-// permanently shut out.
+// TestRefusalDoesNotExtendTheWindow covers the trap in a naive rate
+// limiter: counting refused attempts would let a peer that keeps
+// retrying hold itself permanently shut out.
 func TestRefusalDoesNotExtendTheWindow(t *testing.T) {
 	now := time.Unix(1000, 0)
 	g := New(Limits{Rate: 1, Window: time.Minute})
@@ -87,8 +87,8 @@ func TestRefusalDoesNotExtendTheWindow(t *testing.T) {
 			t.Fatalf("retry %d: got %q, want %q", i, v, TooFast)
 		}
 	}
-	// The window is measured from the one accepted connection, so it is
-	// over now despite the retries.
+	// The window is measured from the one accepted connection, so
+	// it is over now despite the retries.
 	now = now.Add(11 * time.Second)
 	if v := g.Admit("a"); v != Allowed {
 		t.Errorf("after the window, despite retries: %q", v)

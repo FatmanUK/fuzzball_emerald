@@ -11,8 +11,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestExitLockBlocksTraversal checks that useExit actually enforces an
-// exit's @lock now, rather than moving the player through unconditionally.
+// TestExitLockBlocksTraversal checks that useExit actually enforces
+// an exit's @lock now, rather than moving the player through
+// unconditionally.
 func TestExitLockBlocksTraversal(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -87,10 +88,10 @@ func TestExitFailMessages(t *testing.T) {
 	}
 }
 
-// TestLockedAgainstWizardAndStranger exercises LOCKED? end to end: a MUF
-// program calling it against a thing locked to the wizard only. The wizard
-// should pass (a dbref lock's CONST checks player == the locked-to dbref);
-// an unrelated player should not.
+// TestLockedAgainstWizardAndStranger exercises LOCKED? end to end: a
+// MUF program calling it against a thing locked to the wizard only.
+// The wizard should pass (a dbref lock's CONST checks player == the
+// locked-to dbref); an unrelated player should not.
 func TestLockedAgainstWizardAndStranger(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -130,10 +131,11 @@ func TestLockedAgainstWizardAndStranger(t *testing.T) {
 	}
 }
 
-// TestLockStringPrimitives exercises SETLOCKSTR, GETLOCKSTR, PARSELOCK,
-// UNPARSELOCK and PRETTYLOCK together through a real MUF program: setting a
-// lock string, reading it back, round-tripping it through PARSELOCK/
-// UNPARSELOCK, and rendering it human-readably with PRETTYLOCK.
+// TestLockStringPrimitives exercises SETLOCKSTR, GETLOCKSTR,
+// PARSELOCK, UNPARSELOCK and PRETTYLOCK together through a real MUF
+// program: setting a lock string, reading it back, round-tripping it
+// through PARSELOCK/ UNPARSELOCK, and rendering it human-readably
+// with PRETTYLOCK.
 func TestLockStringPrimitives(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -176,9 +178,10 @@ func TestLockStringPrimitives(t *testing.T) {
 	}
 }
 
-// TestSetLockStringForwardsMatchFailure checks that SETLOCKSTR's "silent"
-// call to _set_lock still shows a match failure's own message, even though
-// it suppresses _set_lock's own "Lock set."/"I don't understand that key."
+// TestSetLockStringForwardsMatchFailure checks that SETLOCKSTR's
+// "silent" call to _set_lock still shows a match failure's own
+// message, even though it suppresses _set_lock's own "Lock set."/"I
+// don't understand that key."
 func TestSetLockStringForwardsMatchFailure(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -213,8 +216,9 @@ func TestSetLockStringForwardsMatchFailure(t *testing.T) {
 	}
 }
 
-// TestCouldDoitUnlinkedExit checks the exit-specific branch of couldDoit
-// directly: an exit with no destinations at all can never be done.
+// TestCouldDoitUnlinkedExit checks the exit-specific branch of
+// couldDoit directly: an exit with no destinations at all can never
+// be done.
 func TestCouldDoitUnlinkedExit(t *testing.T) {
 	h := newHarness(t)
 
@@ -234,8 +238,9 @@ func TestCouldDoitUnlinkedExit(t *testing.T) {
 	}
 }
 
-// TestCouldDoitNilLinkChecksLock checks that a NIL-linked exit falls straight
-// through to its own @lock, skipping the destination checks entirely.
+// TestCouldDoitNilLinkChecksLock checks that a NIL-linked exit falls
+// straight through to its own @lock, skipping the destination checks
+// entirely.
 func TestCouldDoitNilLinkChecksLock(t *testing.T) {
 	h := newHarness(t)
 
@@ -262,7 +267,8 @@ func TestCouldDoitNilLinkChecksLock(t *testing.T) {
 }
 
 // TestCouldDoitPlayerDestRequiresJumpOK checks the JUMP_OK gate on a
-// player-linked exit: the destination player must allow being jumped to.
+// player-linked exit: the destination player must allow being jumped
+// to.
 func TestCouldDoitPlayerDestRequiresJumpOK(t *testing.T) {
 	h := newHarness(t)
 

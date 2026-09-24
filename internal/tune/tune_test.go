@@ -12,7 +12,8 @@ import (
 )
 
 func TestTableIsPopulated(t *testing.T) {
-	// 169 upstream parameters, less the 8 TLS/STARTTLS ones the plan drops.
+	// 169 upstream parameters, less the 8 TLS/STARTTLS ones the
+	// plan drops.
 	const want = 161
 	if len(params) != want {
 		t.Errorf("params has %d entries, want %d", len(params), want)
@@ -116,7 +117,8 @@ func TestTimespanRoundTrip(t *testing.T) {
 		{"  0d  4:00:00", 4 * time.Hour},
 		{"  0d  0:00:00", 0},
 		{"  1d 02:03:04", 24*time.Hour + 2*time.Hour + 3*time.Minute + 4*time.Second},
-		// Shorter forms right-align: "5:00" is minutes and seconds.
+		// Shorter forms right-align: "5:00" is minutes and
+		// seconds.
 		{"5:00", 5 * time.Minute},
 		{"30", 30 * time.Second},
 	}
@@ -174,9 +176,9 @@ func TestTypedAccessorPanicsOnWrongType(t *testing.T) {
 	NewSet().String("wiz_vehicles")
 }
 
-// TestAgainstRealDumpHeader parses the parameter block of the shipped minimal
-// database. It is the real compatibility check: every name must resolve and
-// every value must parse.
+// TestAgainstRealDumpHeader parses the parameter block of the shipped
+// minimal database. It is the real compatibility check: every name
+// must resolve and every value must parse.
 func TestAgainstRealDumpHeader(t *testing.T) {
 	f, err := os.Open("../../testdata/minimal.db")
 	if err != nil {
@@ -208,7 +210,8 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 	s := NewSet()
 	var seen, dropped int
 	for _, line := range lines[4 : 4+nparams] {
-		// A leading '%' means the value is still the server default.
+		// A leading '%' means the value is still the server
+		// default.
 		isDefault := strings.HasPrefix(line, "%")
 		line = strings.TrimPrefix(line, "%")
 		name, raw, ok := strings.Cut(line, "=")
@@ -230,7 +233,8 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 			t.Errorf("%s=%q: %v", name, raw, err)
 			continue
 		}
-		// Where the dump says a value is the default, ours must agree.
+		// Where the dump says a value is the default, ours
+		// must agree.
 		if isDefault {
 			if got := p.Format(s.vals[p.Name]); got != p.Format(p.Default) {
 				t.Errorf("%s: dump default %q, our default %q",
@@ -244,8 +248,8 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 	if dropped != 8 {
 		t.Errorf("skipped %d dropped parameters, want 8", dropped)
 	}
-	// minimal.db sets two parameters explicitly, without the '%' default
-	// marker: default_room_parent and player_start.
+	// minimal.db sets two parameters explicitly, without the '%'
+	// default marker: default_room_parent and player_start.
 	if s.IsDefault("default_room_parent") {
 		t.Error("default_room_parent is set explicitly in the fixture")
 	}

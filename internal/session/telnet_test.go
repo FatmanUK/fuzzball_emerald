@@ -92,8 +92,8 @@ func TestWindowSizeWithEscapedByte(t *testing.T) {
 }
 
 func TestDecodeAcrossChunkBoundaries(t *testing.T) {
-	// A command split across two reads must still be handled: TCP gives no
-	// guarantee about where a packet ends.
+	// A command split across two reads must still be handled: TCP
+	// gives no guarantee about where a packet ends.
 	var got WindowSize
 	d := newTelnetDecoder(func(ws WindowSize) { got = ws })
 
@@ -111,7 +111,8 @@ func TestDecodeAcrossChunkBoundaries(t *testing.T) {
 }
 
 func TestSubnegotiationIsBounded(t *testing.T) {
-	// A client that never sends SE must not make us buffer without limit.
+	// A client that never sends SE must not make us buffer
+	// without limit.
 	d := newTelnetDecoder(nil)
 	d.Decode([]byte{IAC, SB, 99})
 	d.Decode(bytes.Repeat([]byte{'x'}, 100_000))
@@ -121,8 +122,8 @@ func TestSubnegotiationIsBounded(t *testing.T) {
 }
 
 func TestDecodeDoesNotAliasInput(t *testing.T) {
-	// The decoder is handed a reusable read buffer; writing into it would
-	// corrupt data the caller still holds.
+	// The decoder is handed a reusable read buffer; writing into
+	// it would corrupt data the caller still holds.
 	d := newTelnetDecoder(nil)
 	in := []byte("hello")
 	out := d.Decode(in)

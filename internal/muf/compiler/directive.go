@@ -8,11 +8,12 @@ import (
 
 // directive handles a $-prefixed compiler directive.
 //
-// Directives run at compile time and change what the tokens after them mean.
-// The ones that read a program's own properties — $iflib, $ifver, $ifcancall
-// and their negations — need a live database, so they are recognised and
-// skipped rather than evaluated; a program that depends on one compiles as
-// though the condition were false.
+// Directives run at compile time and change what the tokens after
+// them mean. The ones that read a program's own properties —
+// $iflib, $ifver, $ifcancall and their negations — need a live
+// database, so they are recognised and skipped rather than evaluated;
+// a program that depends on one compiles as though the condition were
+// false.
 func (c *compiler) directive(word string) error {
 	name := ascii.Fold(strings.TrimPrefix(word, string(beginDirective)))
 	if name == "" {
@@ -31,8 +32,8 @@ func (c *compiler) directive(word string) error {
 		}
 		delete(c.defs, ascii.Fold(tok.text))
 	case "cleardefs":
-		// The argument, if any, is ignored; upstream clears everything
-		// and reinstates its built-ins.
+		// The argument, if any, is ignored; upstream clears
+		// everything and reinstates its built-ins.
 		_, _, _ = c.argToken("$cleardefs")
 		c.defs = map[string]string{}
 	case "echo":
@@ -43,8 +44,8 @@ func (c *compiler) directive(word string) error {
 	case "ifdef", "ifndef":
 		return c.conditional(name == "ifndef")
 	case "else":
-		// Reached while compiling a taken branch: the other half is the
-		// one to discard.
+		// Reached while compiling a taken branch: the other
+		// half is the one to discard.
 		if len(c.conds) == 0 {
 			return c.errf("$else without a matching conditional")
 		}
@@ -63,18 +64,21 @@ func (c *compiler) directive(word string) error {
 		_, found := c.include(tok.text)
 		return c.skipConditional(found == (name == "iflib"))
 
-	// Conditionals that need more of a live server than the compiler is
-	// given. Treated as false, taking the $else branch when there is one.
+	// Conditionals that need more of a live server than the
+	// compiler is given. Treated as false, taking the $else
+	// branch when there is one.
 	case "ifver", "ifnver", "iflibver", "ifnlibver", "ifcancall", "ifncancall":
-		// These take two arguments: an object and a version or name.
+		// These take two arguments: an object and a version
+		// or name.
 		_, _, _ = c.argToken("$" + name)
 		_, _, _ = c.argToken("$" + name)
 		c.notes = append(c.notes,
 			"$"+name+" was treated as false: it needs more than the compiler is given")
 		return c.skipConditional(false)
 
-	// Directives that set a property on the program object. The value is
-	// recorded so the caller can apply it; none of them affect the code.
+	// Directives that set a property on the program object. The
+	// value is recorded so the caller can apply it; none of them
+	// affect the code.
 	case "author", "note", "version", "lib-version", "libdef", "pubdef", "doccmd":
 		c.props = append(c.props, propSet{name: name, value: c.lex.restOfLine()})
 
@@ -97,7 +101,8 @@ func (c *compiler) directive(word string) error {
 	return nil
 }
 
-// include resolves a $include or $iflib target through the caller's resolver.
+// include resolves a $include or $iflib target through the caller's
+// resolver.
 func (c *compiler) include(target string) (map[string]string, bool) {
 	if c.opts.Include == nil {
 		return nil, false
@@ -105,7 +110,8 @@ func (c *compiler) include(target string) (map[string]string, bool) {
 	return c.opts.Include(target)
 }
 
-// propSet is a property a directive asked to be written on the program.
+// propSet is a property a directive asked to be written on the
+// program.
 type propSet struct {
 	name  string
 	value string
@@ -113,9 +119,9 @@ type propSet struct {
 
 // argToken reads a directive's argument.
 //
-// It reads without expanding, which upstream does with next_token_raw and
-// which matters: "$ifdef X" must test whether X is defined, not look up
-// whatever X expands to.
+// It reads without expanding, which upstream does with next_token_raw
+// and which matters: "$ifdef X" must test whether X is defined, not
+// look up whatever X expands to.
 func (c *compiler) argToken(what string) (token, bool, error) {
 	tok, ok, err := c.rawNext()
 	if err != nil {
@@ -129,8 +135,9 @@ func (c *compiler) argToken(what string) (token, bool, error) {
 
 // defineDirective reads "$define name ...tokens... $enddef".
 //
-// The body is kept as tokens rather than text, so a string literal in a
-// definition stays one literal rather than being re-lexed and re-escaped.
+// The body is kept as tokens rather than text, so a string literal in
+// a definition stays one literal rather than being re-lexed and
+// re-escaped.
 func (c *compiler) defineDirective(short bool) error {
 	nameTok, ok, err := c.argToken("$define")
 	if err != nil || !ok {
@@ -146,8 +153,8 @@ func (c *compiler) defineDirective(short bool) error {
 
 	var body []token
 	for {
-		// Read without expanding: a definition's body is expanded where
-		// it is used, not where it is written.
+		// Read without expanding: a definition's body is
+		// expanded where it is used, not where it is written.
 		tok, ok, err := c.rawNext()
 		if err != nil {
 			return err
@@ -155,7 +162,8 @@ func (c *compiler) defineDirective(short bool) error {
 		if !ok {
 			return c.errf("unexpected end of program looking for $enddef")
 		}
-		if !tok.isString && ascii.EqualFold(tok.text, "$enddef") {
+		if !tok.isString &&
+			ascii.EqualFold(tok.text, "$enddef") {
 			c.defs[name] = joinTokens(body)
 			return nil
 		}
@@ -163,8 +171,8 @@ func (c *compiler) defineDirective(short bool) error {
 	}
 }
 
-// joinTokens renders tokens back to source, re-quoting string literals so
-// re-lexing produces the same tokens.
+// joinTokens renders tokens back to source, re-quoting string
+// literals so re-lexing produces the same tokens.
 func joinTokens(toks []token) string {
 	var b strings.Builder
 	for i, t := range toks {
@@ -196,7 +204,8 @@ func joinTokens(toks []token) string {
 	return b.String()
 }
 
-// lexTokens splits a fragment into tokens, for the one-line $def form.
+// lexTokens splits a fragment into tokens, for the one-line $def
+// form.
 func lexTokens(src string, line int) ([]token, error) {
 	l := newLexer(src)
 	var out []token
@@ -216,8 +225,8 @@ func lexTokens(src string, line int) ([]token, error) {
 // conditional compiles the branch of "$ifdef" that applies.
 //
 // The condition is either a bare name, true when it is defined, or a
-// comparison "name=value", "name>value" or "name<value" against what the name
-// expands to. An undefined name makes any comparison false.
+// comparison "name=value", "name>value" or "name<value" against what
+// the name expands to. An undefined name makes any comparison false.
 func (c *compiler) conditional(negate bool) error {
 	tok, ok, err := c.argToken("$ifdef")
 	if err != nil || !ok {
@@ -228,11 +237,13 @@ func (c *compiler) conditional(negate bool) error {
 
 // testDefined evaluates an $ifdef condition.
 func (c *compiler) testDefined(cond string) bool {
-	// The operator is never the first character, so a name may begin with
-	// one. This mirrors the C, which starts scanning at index 1.
+	// The operator is never the first character, so a name may
+	// begin with one. This mirrors the C, which starts scanning
+	// at index 1.
 	op, at := byte(0), -1
 	for i := 1; i < len(cond); i++ {
-		if ch := cond[i]; ch == '=' || ch == '>' || ch == '<' {
+		if ch := cond[i]; ch == '=' || ch == '>' ||
+			ch == '<' {
 			op, at = ch, i
 			break
 		}
@@ -266,9 +277,9 @@ func (c *compiler) testDefined(cond string) bool {
 
 // skipConditional keeps the taken branch and discards the other.
 //
-// When the condition holds, compilation continues and the $else branch is
-// skipped when reached. When it does not, tokens are discarded until $else or
-// $endif.
+// When the condition holds, compilation continues and the $else
+// branch is skipped when reached. When it does not, tokens are
+// discarded until $else or $endif.
 func (c *compiler) skipConditional(taken bool) error {
 	if taken {
 		c.conds = append(c.conds, true)
@@ -277,8 +288,9 @@ func (c *compiler) skipConditional(taken bool) error {
 	return c.skipToElseOrEndif()
 }
 
-// skipToElseOrEndif discards tokens until the matching $else or $endif,
-// counting nested conditionals so an inner one does not end an outer.
+// skipToElseOrEndif discards tokens until the matching $else or
+// $endif, counting nested conditionals so an inner one does not end
+// an outer.
 func (c *compiler) skipToElseOrEndif() error {
 	depth := 0
 	for {
@@ -289,7 +301,8 @@ func (c *compiler) skipToElseOrEndif() error {
 		if !ok {
 			return c.errf("unexpected end of program looking for $endif")
 		}
-		if tok.isString || tok.text == "" || tok.text[0] != beginDirective {
+		if tok.isString || tok.text == "" ||
+			tok.text[0] != beginDirective {
 			continue
 		}
 		switch d := ascii.Fold(tok.text[1:]); {
@@ -302,7 +315,8 @@ func (c *compiler) skipToElseOrEndif() error {
 			depth--
 		case d == "else":
 			if depth == 0 {
-				// The other branch is the one to compile.
+				// The other branch is the one to
+				// compile.
 				c.conds = append(c.conds, true)
 				return nil
 			}
@@ -310,7 +324,8 @@ func (c *compiler) skipToElseOrEndif() error {
 	}
 }
 
-// skipToEndif discards the untaken half of a conditional after its $else.
+// skipToEndif discards the untaken half of a conditional after its
+// $else.
 func (c *compiler) skipToEndif() error {
 	depth := 0
 	for {
@@ -321,7 +336,8 @@ func (c *compiler) skipToEndif() error {
 		if !ok {
 			return c.errf("unexpected end of program looking for $endif")
 		}
-		if tok.isString || tok.text == "" || tok.text[0] != beginDirective {
+		if tok.isString || tok.text == "" ||
+			tok.text[0] != beginDirective {
 			continue
 		}
 		switch d := ascii.Fold(tok.text[1:]); {
@@ -337,7 +353,8 @@ func (c *compiler) skipToEndif() error {
 	}
 }
 
-// isConditionalDirective reports whether a directive opens a conditional.
+// isConditionalDirective reports whether a directive opens a
+// conditional.
 func isConditionalDirective(d string) bool {
 	switch d {
 	case "ifdef", "ifndef", "iflib", "ifnlib", "ifver", "ifnver",

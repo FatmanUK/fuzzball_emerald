@@ -10,17 +10,17 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestExamineShowsOnlyTheOwnerToOthers checks the privacy gate: someone who
-// neither controls an object nor passes its read lock is told who owns it and
-// nothing else.
+// TestExamineShowsOnlyTheOwnerToOthers checks the privacy gate:
+// someone who neither controls an object nor passes its read lock is
+// told who owns it and nothing else.
 func TestExamineShowsOnlyTheOwnerToOthers(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
 	var theirs, theirExit ref.Ref
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
-		// Someone else's thing, in the room, with a description that
-		// must not leak.
+		// Someone else's thing, in the room, with a
+		// description that must not leak.
 		other := w.Create("Stranger", ref.TypePlayer, ref.Nothing)
 		other.Owner = other.Ref
 
@@ -33,8 +33,8 @@ func TestExamineShowsOnlyTheOwnerToOthers(t *testing.T) {
 		}
 		theirs = o.Ref
 
-		// An exit that points nowhere may be examined by anyone,
-		// because anyone may link it.
+		// An exit that points nowhere may be examined by
+		// anyone, because anyone may link it.
 		e := w.Create("gate", ref.TypeExit, other.Ref)
 		if err := w.MoveTo(e.Ref, here); err != nil {
 			t.Error(err)
@@ -43,8 +43,8 @@ func TestExamineShowsOnlyTheOwnerToOthers(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// The test wizard controls everything, so it has to ask as someone
-	// who does not.
+	// The test wizard controls everything, so it has to ask as
+	// someone who does not.
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		mortal := w.Create("Mortal", ref.TypePlayer, ref.Nothing)
 		mortal.Owner = mortal.Ref
@@ -67,8 +67,9 @@ func TestExamineShowsOnlyTheOwnerToOthers(t *testing.T) {
 	}
 }
 
-// TestFlagDescriptionRenamesByType checks the flags that mean different things
-// on different types, which is most of the interesting ones.
+// TestFlagDescriptionRenamesByType checks the flags that mean
+// different things on different types, which is most of the
+// interesting ones.
 func TestFlagDescriptionRenamesByType(t *testing.T) {
 	cases := []struct {
 		typ   ref.ObjType
@@ -90,7 +91,8 @@ func TestFlagDescriptionRenamesByType(t *testing.T) {
 		{ref.TypeThing, ref.Haven, "Type: THING  Flags: HIDE"},
 		{ref.TypeRoom, ref.Guest, "Type: ROOM  Flags: NOGUEST"},
 		{ref.TypePlayer, ref.Guest, "Type: PLAYER  Flags: GUEST"},
-		// Order is fixed, and a mucker level appears as one word.
+		// Order is fixed, and a mucker level appears as one
+		// word.
 		{ref.TypePlayer, ref.Wizard | ref.Mucker | ref.SMucker | ref.Builder,
 			"Type: PLAYER  Flags: WIZARD MUCKER3 BUILDER"},
 	}
@@ -102,8 +104,9 @@ func TestFlagDescriptionRenamesByType(t *testing.T) {
 	}
 }
 
-// TestPropertyListingHidesSystemProps checks that the property lister keeps
-// the server's own propdir to itself, and hidden props to wizards.
+// TestPropertyListingHidesSystemProps checks that the property lister
+// keeps the server's own propdir to itself, and hidden props to
+// wizards.
 func TestPropertyListingHidesSystemProps(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -138,8 +141,8 @@ func TestPropertyListingHidesSystemProps(t *testing.T) {
 	}
 }
 
-// TestCreationCosts checks that building takes money and gives an object a
-// value, which is where an object's worth comes from.
+// TestCreationCosts checks that building takes money and gives an
+// object a value, which is where an object's worth comes from.
 func TestCreationCosts(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -158,8 +161,8 @@ func TestCreationCosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The mortal has no connection, so its replies are captured rather
-	// than read off a descriptor.
+	// The mortal has no connection, so its replies are captured
+	// rather than read off a descriptor.
 	run := func(line string) string {
 		h.t.Helper()
 		var said []string
@@ -188,7 +191,8 @@ func TestCreationCosts(t *testing.T) {
 			t.Errorf("the builder has %d pennies left, want 2", left)
 		}
 		for _, r := range w.Contents(mortal) {
-			if o := w.Get(r); o != nil && o.Name == "widget" {
+			if o := w.Get(r); o != nil &&
+				o.Name == "widget" {
 				if v := valueOf(w, r); v != 1 {
 					t.Errorf("the widget is worth %d, want 1", v)
 				}

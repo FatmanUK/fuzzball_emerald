@@ -11,11 +11,12 @@ import (
 
 // applyParam handles one line of a dump's parameter block.
 //
-// A leading '%' is Fuzzball's "reset to default" marker, written for any
-// parameter still holding its built-in value. The stored value on such a line
-// is informational: upstream discards it and resets the parameter. We do the
-// same, but compare first, because a mismatch means Emerald's default has
-// drifted from Fuzzball's and the operator should know.
+// A leading '%' is Fuzzball's "reset to default" marker, written for
+// any parameter still holding its built-in value. The stored value on
+// such a line is informational: upstream discards it and resets the
+// parameter. We do the same, but compare first, because a mismatch
+// means Emerald's default has drifted from Fuzzball's and the
+// operator should know.
 func applyParam(w *world.World, rep *Report, line string) error {
 	if strings.HasPrefix(line, "#") {
 		return nil // a comment

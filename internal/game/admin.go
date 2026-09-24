@@ -28,7 +28,8 @@ func (s *Server) cmdWho(c *ctx) {
 	s.writeWho(c.w, c.d, c.arg)
 }
 
-// writeWho renders the WHO table, optionally filtered by a name prefix.
+// writeWho renders the WHO table, optionally filtered by a name
+// prefix.
 func (s *Server) writeWho(w *world.World, d *session.Descriptor, filter string) {
 	filter = strings.TrimSpace(filter)
 	now := w.Now()
@@ -41,7 +42,8 @@ func (s *Server) writeWho(w *world.World, d *session.Descriptor, filter string) 
 		if o == nil {
 			continue
 		}
-		if filter != "" && !match.StringMatch(o.Name, filter) {
+		if filter != "" &&
+			!match.StringMatch(o.Name, filter) {
 			continue
 		}
 		d.Send(fmt.Sprintf("%-20s %8s %8s  %s",
@@ -69,17 +71,18 @@ func (s *Server) cmdVersion(c *ctx) {
 
 // cmdDump forces the world to be written now.
 //
-// In Fuzzball this froze the game for the length of a full database write.
-// Here it only asks the persister to flush what is already pending, so it
-// returns immediately and nothing pauses.
+// In Fuzzball this froze the game for the length of a full database
+// write. Here it only asks the persister to flush what is already
+// pending, so it returns immediately and nothing pauses.
 func (s *Server) cmdDump(c *ctx) {
 	if !s.requireWizard(c) {
 		return
 	}
 	c.tell("Flushing pending changes...")
 	who := c.who
-	// The flush waits on the persister, so it cannot run on the world
-	// goroutine; hand it off and report back through the hub.
+	// The flush waits on the persister, so it cannot run on the
+	// world goroutine; hand it off and report back through the
+	// hub.
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -109,15 +112,16 @@ func (s *Server) cmdShutdown(c *ctx) {
 	}
 }
 
-// AnnounceShutdown tells everyone still connected that the server is going
-// away. It is what a signal-driven shutdown needs and @shutdown gets for
-// free: cancelling the world's context drains and flushes, but says nothing
-// to anyone, and by the time the drain is over there is no way left to send.
+// AnnounceShutdown tells everyone still connected that the server is
+// going away. It is what a signal-driven shutdown needs and @shutdown
+// gets for free: cancelling the world's context drains and flushes,
+// but says nothing to anyone, and by the time the drain is over there
+// is no way left to send.
 //
-// The transports call this from their own goroutine, so it goes through the
-// engine like any other outside caller. A failure to enqueue means the world
-// has already stopped, which is exactly the case where there is nothing left
-// to say.
+// The transports call this from their own goroutine, so it goes
+// through the engine like any other outside caller. A failure to
+// enqueue means the world has already stopped, which is exactly the
+// case where there is nothing left to say.
 func (s *Server) AnnounceShutdown() {
 	_ = s.engine.Do(context.Background(), func(*world.World) {
 		s.tellEveryoneShutdown()
@@ -199,7 +203,8 @@ func (s *Server) tuneList(c *ctx, pattern string) {
 		if mlev < p.ReadMLev {
 			continue
 		}
-		if pattern != "" && !match.StringMatch(p.Name, pattern) {
+		if pattern != "" &&
+			!match.StringMatch(p.Name, pattern) {
 			continue
 		}
 		v, _ := c.w.Tune.Get(p.Name)
@@ -234,7 +239,8 @@ func (s *Server) cmdPs(c *ctx) {
 	c.tell("%5s %-16s %-6s %-20s %s", "PID", "Player", "State", "Program", "Command")
 	shown := 0
 	for _, p := range procs {
-		// A player sees their own processes; a wizard sees them all.
+		// A player sees their own processes; a wizard sees
+		// them all.
 		if !wizard && p.player != c.who {
 			continue
 		}

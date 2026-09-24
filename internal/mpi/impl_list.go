@@ -8,16 +8,16 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 )
 
-// The list functions. Two different things are called a list here, and the
-// distinction runs through the whole group:
+// The list functions. Two different things are called a list here,
+// and the distinction runs through the whole group:
 //
 //   - A *property* list, named by a string and read off an object — what
 //     {list}, {lexec}, {concat}, {rand} and {select} take.
 //   - A *text* list, carriage-return delimited, which is what those produce
 //     and what the {l...} set operate on.
 //
-// So {lsort:{list:names}} is the usual shape: read a property list into text,
-// then work on the text.
+// So {lsort:{list:names}} is the usual shape: read a property list
+// into text, then work on the text.
 func init() {
 	// Reading a property list.
 	register("LIST", propList(concatLines))
@@ -29,8 +29,9 @@ func init() {
 		}
 		name := strings.TrimLeft(args[0], "/")
 		text := concatList(env.listItems(obj, name), concatTight)
-		// Unlike {list}, the text is then evaluated as MPI — which is the
-		// whole point: a property list holding a program, run as one.
+		// Unlike {list}, the text is then evaluated as MPI
+		// — which is the whole point: a property list
+		// holding a program, run as one.
 		return Parse(env, text)
 	})
 
@@ -55,12 +56,13 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		// Upstream searches down from the index asked for, first a short
-		// contiguous run and then through the properties that actually
-		// exist, so a sparse list still answers. Both phases look for the
-		// same thing — the nearest item at or below the index that has a
-		// value — which a plain walk down finds too, since a list is
-		// bounded at 512 entries.
+		// Upstream searches down from the index asked for,
+		// first a short contiguous run and then through the
+		// properties that actually exist, so a sparse list
+		// still answers. Both phases look for the same thing
+		// — the nearest item at or below the index that has
+		// a value — which a plain walk down finds too,
+		// since a list is bounded at 512 entries.
 		for i := want; i >= 1; i-- {
 			if v := env.listItem(obj, args[1], i); v != "" {
 				return v, nil
@@ -84,9 +86,9 @@ func init() {
 		return itoa(countItems(args[0], sep)), nil
 	})
 
-	// SUBLIST slices a list, and is also what "{&var}" compiles to — with
-	// only the variable's value and nothing to slice by, that value is the
-	// answer.
+	// SUBLIST slices a list, and is also what "{&var}" compiles
+	// to — with only the variable's value and nothing to slice
+	// by, that value is the answer.
 	register("SUBLIST", func(_ *Env, _ *Func, args []string) (string, error) {
 		if len(args) < 2 {
 			return args[0], nil
@@ -114,8 +116,8 @@ func init() {
 		first = clampIndex(first, count)
 		last = clampIndex(last, count)
 
-		// A range given backwards walks the list backwards rather than
-		// producing nothing.
+		// A range given backwards walks the list backwards
+		// rather than producing nothing.
 		var out []string
 		if first <= last {
 			out = append(out, items[first-1:last]...)
@@ -127,9 +129,10 @@ func init() {
 		return strings.Join(out, sep), nil
 	})
 
-	// The set operations. Note the two different ideas of "the same line":
-	// these three compare case-insensitively and LREMOVE does not, which is
-	// upstream's own split between string_prefix and strncmp.
+	// The set operations. Note the two different ideas of "the
+	// same line": these three compare case-insensitively and
+	// LREMOVE does not, which is upstream's own split between
+	// string_prefix and strncmp.
 	register("LUNIQUE", func(_ *Env, _ *Func, args []string) (string, error) {
 		return strings.Join(dedupeFold(splitLines(args[0])), "\r"), nil
 	})
@@ -138,11 +141,13 @@ func init() {
 		return strings.Join(dedupeFold(both), "\r"), nil
 	})
 	register("LCOMMON", func(_ *Env, _ *Func, args []string) (string, error) {
-		// Upstream walks the *second* list and keeps what the first also
-		// holds, so the result follows the second list's order.
+		// Upstream walks the *second* list and keeps what the
+		// first also holds, so the result follows the second
+		// list's order.
 		var out []string
 		for _, line := range splitLines(args[1]) {
-			if containsFold(splitLines(args[0]), line) && !containsFold(out, line) {
+			if containsFold(splitLines(args[0]), line) &&
+				!containsFold(out, line) {
 				out = append(out, line)
 			}
 		}
@@ -152,7 +157,8 @@ func init() {
 		remove := splitLines(args[1])
 		var out []string
 		for _, line := range splitLines(args[0]) {
-			if containsExact(remove, line) || containsExact(out, line) {
+			if containsExact(remove, line) ||
+				containsExact(out, line) {
 				continue
 			}
 			out = append(out, line)
@@ -187,9 +193,9 @@ func init() {
 		if len(args) > 1 && len(args) < 4 {
 			return "", errf("LSORT", "Takes 1 or 4 arguments.")
 		}
-		// LSORT is one of the functions whose arguments arrive unevaluated,
-		// so that its comparison body can be re-evaluated per pair rather
-		// than once up front.
+		// LSORT is one of the functions whose arguments
+		// arrive unevaluated, so that its comparison body can
+		// be re-evaluated per pair rather than once up front.
 		list, err := Parse(env, args[0])
 		if err != nil {
 			return "", err
@@ -205,8 +211,9 @@ func init() {
 			return strings.Join(items, "\r"), nil
 		}
 
-		// The four-argument form names two variables and a body: the body
-		// is evaluated with each pair bound, and a true result swaps them.
+		// The four-argument form names two variables and a
+		// body: the body is evaluated with each pair bound,
+		// and a true result swaps them.
 		nameA, err := Parse(env, args[1])
 		if err != nil {
 			return "", err
@@ -224,10 +231,11 @@ func init() {
 		}
 		defer env.PopVar()
 
-		// Upstream's own selection sort, kept rather than replaced: the
-		// comparison is arbitrary MPI and need not be a consistent
-		// ordering, so which permutation comes out depends on the exact
-		// sequence of comparisons made.
+		// Upstream's own selection sort, kept rather than
+		// replaced: the comparison is arbitrary MPI and need
+		// not be a consistent ordering, so which permutation
+		// comes out depends on the exact sequence of
+		// comparisons made.
 		for i := 0; i < len(items); i++ {
 			for j := i + 1; j < len(items); j++ {
 				if err := env.SetVar(nameA, items[i]); err != nil {
@@ -249,7 +257,8 @@ func init() {
 	})
 }
 
-// propList builds {list} and {concat}, which differ only in how they join.
+// propList builds {list} and {concat}, which differ only in how they
+// join.
 func propList(mode int) impl {
 	return func(env *Env, f *Func, args []string) (string, error) {
 		obj, err := env.resolve(f.Name, args, 1)
@@ -260,9 +269,9 @@ func propList(mode int) impl {
 	}
 }
 
-// listSep reads an optional separator argument, defaulting to the carriage
-// return a text list is delimited by. An explicitly empty one is refused,
-// since splitting on it would never terminate.
+// listSep reads an optional separator argument, defaulting to the
+// carriage return a text list is delimited by. An explicitly empty
+// one is refused, since splitting on it would never terminate.
 func listSep(fn string, args []string, at int) (string, error) {
 	if at >= len(args) {
 		return "\r", nil
@@ -273,8 +282,8 @@ func listSep(fn string, args []string, at int) (string, error) {
 	return args[at], nil
 }
 
-// countItems counts separator-delimited items. An empty list holds none;
-// anything else holds one more than it has separators.
+// countItems counts separator-delimited items. An empty list holds
+// none; anything else holds one more than it has separators.
 func countItems(list, sep string) int {
 	if list == "" {
 		return 0
@@ -282,8 +291,9 @@ func countItems(list, sep string) int {
 	return strings.Count(list, sep) + 1
 }
 
-// clampIndex folds a one-based index into range, counting from the end when
-// negative, which is how the slicing functions read their bounds.
+// clampIndex folds a one-based index into range, counting from the
+// end when negative, which is how the slicing functions read their
+// bounds.
 func clampIndex(i, count int) int {
 	if i > count {
 		return count
@@ -297,7 +307,8 @@ func clampIndex(i, count int) int {
 	return i
 }
 
-// dedupeFold keeps the first of each line, comparing case-insensitively.
+// dedupeFold keeps the first of each line, comparing
+// case-insensitively.
 func dedupeFold(lines []string) []string {
 	var out []string
 	for _, line := range lines {

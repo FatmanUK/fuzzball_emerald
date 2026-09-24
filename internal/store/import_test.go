@@ -10,8 +10,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestImportStarterWorldRoundTrips is the M2 acceptance check: the shipped
-// starter database goes into Postgres and comes back unchanged.
+// TestImportStarterWorldRoundTrips is the M2 acceptance check: the
+// shipped starter database goes into Postgres and comes back
+// unchanged.
 func TestImportStarterWorldRoundTrips(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -37,7 +38,9 @@ func TestImportStarterWorldRoundTrips(t *testing.T) {
 	macros := make([]Macro, 0, len(res.Macros))
 	for _, m := range res.Macros {
 		macros = append(macros, Macro{
-			Name: m.Name, Definition: m.Definition, Owner: int32(m.Owner),
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      int32(m.Owner),
 		})
 	}
 	if err := s.SaveMacros(ctx, macros); err != nil {
@@ -83,8 +86,9 @@ func TestImportStarterWorldRoundTrips(t *testing.T) {
 		t.Errorf("loaded %d macros, want %d", len(gotMacros), len(macros))
 	}
 
-	// The documented starter password must still work after the round trip,
-	// which is the whole point of carrying legacy hashes across.
+	// The documented starter password must still work after the
+	// round trip, which is the whole point of carrying legacy
+	// hashes across.
 	one, ok := reloaded.PlayerNamed("One")
 	if !ok {
 		t.Fatal("player One is missing after the round trip")

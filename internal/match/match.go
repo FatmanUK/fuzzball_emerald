@@ -1,8 +1,10 @@
-// Package match resolves the names players type into database objects.
+// Package match resolves the names players type into database
+// objects.
 //
-// It follows Fuzzball's rules: names match on word-prefix boundaries, exits
-// carry ';'-separated aliases and a priority level, and a search walks out
-// through the environment tree rather than stopping at the current room.
+// It follows Fuzzball's rules: names match on word-prefix boundaries,
+// exits carry ';'-separated aliases and a priority level, and a
+// search walks out through the environment tree rather than stopping
+// at the current room.
 package match
 
 import (
@@ -18,8 +20,8 @@ import (
 // ExitDelimiter separates an exit's aliases.
 const ExitDelimiter = ';'
 
-// StringMatch reports whether sub is a prefix of any word in src, ignoring
-// ASCII case. This is how "rusty" finds "a rusty key".
+// StringMatch reports whether sub is a prefix of any word in src,
+// ignoring ASCII case. This is how "rusty" finds "a rusty key".
 func StringMatch(src, sub string) bool {
 	if sub == "" {
 		return false
@@ -43,17 +45,21 @@ func isAlnum(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// Matcher accumulates candidates for one name, then reports the winner.
+// Matcher accumulates candidates for one name, then reports the
+// winner.
 //
-// A search records one exact match and counts inexact ones, so an ambiguous
-// name can be reported as such instead of resolving arbitrarily.
+// A search records one exact match and counts inexact ones, so an
+// ambiguous name can be reported as such instead of resolving
+// arbitrarily.
 type Matcher struct {
 	w    *world.World
 	name string
 
-	// who is the player the search is for, used by "me" and "here".
+	// who is the player the search is for, used by "me" and
+	// "here".
 	who ref.Ref
-	// from is the object the search happens around, usually the player.
+	// from is the object the search happens around, usually the
+	// player.
 	from ref.Ref
 
 	exact ref.Ref
@@ -61,40 +67,44 @@ type Matcher struct {
 	count int
 
 	// level and longest implement the exit priority rules: a
-	// higher-priority exit wins, and at equal priority the longer alias
-	// does.
+	// higher-priority exit wins, and at equal priority the longer
+	// alias does.
 	level   int
 	longest int
 
-	// arg is what followed the matched exit alias, for an exit that runs a
-	// program and so matches a prefix of the line.
+	// arg is what followed the matched exit alias, for an exit
+	// that runs a program and so matches a prefix of the line.
 	arg string
 }
 
 // Arg returns the text that followed a matched exit's name.
 //
-// An exit that leads to a program may match just the first word of what the
-// player typed, and the rest becomes the program's argument: "@shout hello"
-// reaches the "@shout" exit with "hello" as its argument.
+// An exit that leads to a program may match just the first word of
+// what the player typed, and the rest becomes the program's argument:
+// "@shout hello" reaches the "@shout" exit with "hello" as its
+// argument.
 func (m *Matcher) Arg() string { return m.arg }
 
 // New starts a search for name on behalf of who.
 func New(w *world.World, who ref.Ref, name string) *Matcher {
 	return &Matcher{
-		w: w, name: strings.TrimSpace(name), who: who, from: who,
+		w:     w,
+		name:  strings.TrimSpace(name),
+		who:   who,
+		from:  who,
 		exact: ref.Nothing, last: ref.Nothing,
 	}
 }
 
-// Around changes the object the search happens around, which is how a program
-// matches from somewhere other than the player.
+// Around changes the object the search happens around, which is how a
+// program matches from somewhere other than the player.
 func (m *Matcher) Around(from ref.Ref) *Matcher {
 	m.from = from
 	return m
 }
 
-// Result returns the match: the object found, ref.Ambiguous when several
-// inexact matches tied, or ref.Nothing when there was none.
+// Result returns the match: the object found, ref.Ambiguous when
+// several inexact matches tied, or ref.Nothing when there was none.
 func (m *Matcher) Result() ref.Ref {
 	if m.exact != ref.Nothing {
 		return m.exact
@@ -132,7 +142,8 @@ func (m *Matcher) Me() *Matcher {
 // Here matches the literal "here", the room the player is in.
 func (m *Matcher) Here() *Matcher {
 	if ascii.EqualFold(m.name, "here") {
-		if o := m.w.Get(m.who); o != nil && o.Location != ref.Nothing {
+		if o := m.w.Get(m.who); o != nil &&
+			o.Location != ref.Nothing {
 			m.addExact(o.Location)
 		}
 	}
@@ -147,7 +158,8 @@ func (m *Matcher) Home() *Matcher {
 	return m
 }
 
-// Nil matches the literal "nil", the exit destination that does nothing.
+// Nil matches the literal "nil", the exit destination that does
+// nothing.
 func (m *Matcher) Nil() *Matcher {
 	if ascii.EqualFold(m.name, "nil") {
 		m.addExact(ref.Nil)
@@ -155,8 +167,9 @@ func (m *Matcher) Nil() *Matcher {
 	return m
 }
 
-// Absolute matches a "#123" reference. Only a wizard may name arbitrary
-// objects this way; for anyone else it resolves only to what they control.
+// Absolute matches a "#123" reference. Only a wizard may name
+// arbitrary objects this way; for anyone else it resolves only to
+// what they control.
 func (m *Matcher) Absolute() *Matcher {
 	r, ok := parseAbsolute(m.name)
 	if !ok {
@@ -172,13 +185,13 @@ func (m *Matcher) Absolute() *Matcher {
 	return m
 }
 
-// Registered matches a "$name" registration, looked up in the _reg propdir on
-// the searching object and then outwards through the environment. This is how
-// a world names its libraries: "$lib-strings" resolves wherever it is
-// registered, usually on #0.
+// Registered matches a "$name" registration, looked up in the _reg
+// propdir on the searching object and then outwards through the
+// environment. This is how a world names its libraries:
+// "$lib-strings" resolves wherever it is registered, usually on #0.
 //
-// The value may be stored as a dbref, an integer, or a string with or without
-// a leading '#', because all three appear in real databases.
+// The value may be stored as a dbref, an integer, or a string with or
+// without a leading '#', because all three appear in real databases.
 func (m *Matcher) Registered() *Matcher {
 	if !strings.HasPrefix(m.name, "$") || len(m.name) == 1 {
 		return m
@@ -191,8 +204,9 @@ func (m *Matcher) Registered() *Matcher {
 	switch v.Type {
 	case props.Ref:
 		r = v.Ref
-		// HOME and NIL are meaningful registrations and are returned
-		// without a validity check, as upstream does.
+		// HOME and NIL are meaningful registrations and are
+		// returned without a validity check, as upstream
+		// does.
 		if r == ref.Home || r == ref.Nil {
 			m.addExact(r)
 			return m
@@ -275,8 +289,8 @@ func (m *Matcher) matchContents(container ref.Ref) {
 	}
 }
 
-// Player matches a player by name, anywhere in the game. A leading '*' is
-// Fuzzball's way of forcing a player match.
+// Player matches a player by name, anywhere in the game. A leading
+// '*' is Fuzzball's way of forcing a player match.
 func (m *Matcher) Player() *Matcher {
 	name := strings.TrimPrefix(m.name, "*")
 	if name == "" {
@@ -288,20 +302,22 @@ func (m *Matcher) Player() *Matcher {
 	return m
 }
 
-// Exits matches an exit reachable from the player, walking out through the
-// environment tree. A nearer exit does not automatically win: exits carry a
-// priority level, and the highest one reached takes precedence.
+// Exits matches an exit reachable from the player, walking out
+// through the environment tree. A nearer exit does not automatically
+// win: exits carry a priority level, and the highest one reached
+// takes precedence.
 func (m *Matcher) Exits() *Matcher {
 	o := m.w.Get(m.from)
 	if o == nil {
 		return m
 	}
-	// Exits attached to what the player is carrying are reachable too.
+	// Exits attached to what the player is carrying are reachable
+	// too.
 	m.matchExitsOn(m.from)
 
 	loc := o.Location
-	// Bounded, so a cycle in a damaged environment tree cannot hang the
-	// world goroutine.
+	// Bounded, so a cycle in a damaged environment tree cannot
+	// hang the world goroutine.
 	for i := 0; loc != ref.Nothing && i <= m.w.Len(); i++ {
 		m.matchExitsOn(loc)
 		parent := m.w.Get(loc)
@@ -338,12 +354,12 @@ func (m *Matcher) matchExitsOn(on ref.Ref) {
 	}
 }
 
-// runsProgram reports whether an exit leads somewhere that takes an argument
-// rather than moving the player.
+// runsProgram reports whether an exit leads somewhere that takes an
+// argument rather than moving the player.
 //
-// Such an exit matches only the first word of what was typed, leaving the rest
-// as its argument. HAVEN marks an exit as taking one even when it does not
-// lead to a program.
+// Such an exit matches only the first word of what was typed, leaving
+// the rest as its argument. HAVEN marks an exit as taking one even
+// when it does not lead to a program.
 func (m *Matcher) runsProgram(e *world.Object) bool {
 	if e.Flags&ref.Haven != 0 {
 		return true
@@ -352,18 +368,20 @@ func (m *Matcher) runsProgram(e *world.Object) bool {
 		if d == ref.Nil {
 			return true
 		}
-		if o := m.w.Get(d); o != nil && o.Type() == ref.TypeProgram {
+		if o := m.w.Get(d); o != nil &&
+			o.Type() == ref.TypeProgram {
 			return true
 		}
 	}
 	return false
 }
 
-// matchAlias reports whether name matches any of an exit's ';'-separated
-// aliases. It returns the alias that matched and whatever followed it.
+// matchAlias reports whether name matches any of an exit's
+// ';'-separated aliases. It returns the alias that matched and
+// whatever followed it.
 //
-// An exit that takes an argument matches a prefix ending at a space; any other
-// exit must match the whole of what was typed.
+// An exit that takes an argument matches a prefix ending at a space;
+// any other exit must match the whole of what was typed.
 func matchAlias(exitName, name string, takesArg bool) (alias, arg string, ok bool) {
 	first := name
 	rest := ""
@@ -379,8 +397,8 @@ func matchAlias(exitName, name string, takesArg bool) (alias, arg string, ok boo
 			continue
 		}
 		if ascii.EqualFold(a, name) {
-			// An exact match on the whole line wins, and leaves no
-			// argument.
+			// An exact match on the whole line wins, and
+			// leaves no argument.
 			return a, "", true
 		}
 		if takesArg && ascii.EqualFold(a, first) {
@@ -390,8 +408,9 @@ func matchAlias(exitName, name string, takesArg bool) (alias, arg string, ok boo
 	return "", "", false
 }
 
-// priority is Fuzzball's PLevel: an exit's mucker bits raise how strongly it
-// binds, and an ABODE exit binds more weakly than the default.
+// priority is Fuzzball's PLevel: an exit's mucker bits raise how
+// strongly it binds, and an ABODE exit binds more weakly than the
+// default.
 func priority(f ref.Flags) int {
 	if f&(ref.Mucker|ref.SMucker) != 0 {
 		lev := 1
@@ -409,14 +428,14 @@ func priority(f ref.Flags) int {
 	return 1
 }
 
-// Everything runs the searches a bare command name should try, in the order
-// Fuzzball tries them.
+// Everything runs the searches a bare command name should try, in the
+// order Fuzzball tries them.
 func (m *Matcher) Everything() *Matcher {
 	return m.Absolute().Me().Here().Possession().Neighbor().Exits()
 }
 
-// Thing runs the searches for naming an object to act on, which excludes
-// exits.
+// Thing runs the searches for naming an object to act on, which
+// excludes exits.
 func (m *Matcher) Thing() *Matcher {
 	return m.Absolute().Me().Here().Possession().Neighbor()
 }

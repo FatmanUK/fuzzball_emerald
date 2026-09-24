@@ -27,9 +27,9 @@ func (s *Store) SavePrograms(ctx context.Context, progs map[ref.Ref]string) erro
 	return nil
 }
 
-// SaveMacros replaces the macro table wholesale. It is small and only ever
-// changes as a unit, so there is nothing to gain from tracking individual
-// entries.
+// SaveMacros replaces the macro table wholesale. It is small and only
+// ever changes as a unit, so there is nothing to gain from tracking
+// individual entries.
 func (s *Store) SaveMacros(ctx context.Context, macros []Macro) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("1 = 1").Delete(&Macro{}).Error; err != nil {
@@ -54,8 +54,8 @@ func (s *Store) LoadMacros(ctx context.Context) ([]Macro, error) {
 	return out, nil
 }
 
-// Reset empties every table. It exists so an import can replace a world
-// outright; nothing in the running server calls it.
+// Reset empties every table. It exists so an import can replace a
+// world outright; nothing in the running server calls it.
 func (s *Store) Reset(ctx context.Context) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, m := range allModels {

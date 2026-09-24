@@ -17,8 +17,8 @@ type securityRecords struct {
 	buf *bytes.Buffer
 }
 
-// messages returns the "msg" of every record on the security channel, so a
-// test asserts what was audited rather than how it was worded.
+// messages returns the "msg" of every record on the security channel,
+// so a test asserts what was audited rather than how it was worded.
 func (r *securityRecords) messages(t *testing.T) []string {
 	t.Helper()
 	var out []string
@@ -47,8 +47,8 @@ func (r *securityRecords) has(t *testing.T, want string) bool {
 	return false
 }
 
-// auditing points a harness's server at a JSON logger so its records can be
-// read back.
+// auditing points a harness's server at a JSON logger so its records
+// can be read back.
 func auditing(t *testing.T, h *harness) *securityRecords {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -98,8 +98,9 @@ func TestPasswordChangeIsAudited(t *testing.T) {
 	}
 }
 
-// TestRefusedWizardCommandIsAudited covers the case the channel exists for:
-// one of these is a typo, and a run of them is someone trying the doors.
+// TestRefusedWizardCommandIsAudited covers the case the channel
+// exists for: one of these is a typo, and a run of them is someone
+// trying the doors.
 func TestRefusedWizardCommandIsAudited(t *testing.T) {
 	h := newHarness(t)
 	h.login()

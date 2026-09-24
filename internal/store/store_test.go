@@ -17,15 +17,16 @@ import (
 // schemaSeq keeps test schema names distinct within a run.
 var schemaSeq atomic.Int64
 
-// testStore opens a store against a scratch schema, or skips if no test
-// database is configured. Set FBE_TEST_DATABASE_URL to run these.
+// testStore opens a store against a scratch schema, or skips if no
+// test database is configured. Set FBE_TEST_DATABASE_URL to run
+// these.
 //
-// The schema is put in the connection string rather than applied with SET.
-// GORM pools connections, so a SET reaches exactly one of them and every other
-// query silently lands in "public" — which means the tests would read and
-// write whatever real world happened to be in the database they were pointed
-// at. That is not a hypothetical: it destroyed a locally imported world before
-// this was fixed.
+// The schema is put in the connection string rather than applied with
+// SET. GORM pools connections, so a SET reaches exactly one of them
+// and every other query silently lands in "public" — which means
+// the tests would read and write whatever real world happened to be
+// in the database they were pointed at. That is not a hypothetical:
+// it destroyed a locally imported world before this was fixed.
 func testStore(t *testing.T) *Store {
 	t.Helper()
 	dsn := os.Getenv("FBE_TEST_DATABASE_URL")
@@ -36,8 +37,9 @@ func testStore(t *testing.T) *Store {
 	ctx := context.Background()
 	schema := fmt.Sprintf("fbe_test_%d_%d", os.Getpid(), schemaSeq.Add(1))
 
-	// A separate connection owns the schema's lifetime, because the store
-	// under test is pinned to a schema that will not exist yet.
+	// A separate connection owns the schema's lifetime, because
+	// the store under test is pinned to a schema that will not
+	// exist yet.
 	admin, err := Open(ctx, dsn, nil)
 	if err != nil {
 		t.Fatalf("opening test database: %v", err)
@@ -70,14 +72,14 @@ func testStore(t *testing.T) *Store {
 		t.Fatalf("migrating: %v", err)
 	}
 
-	// Prove the isolation rather than assuming it: every connection in the
-	// pool must resolve to the scratch schema.
+	// Prove the isolation rather than assuming it: every
+	// connection in the pool must resolve to the scratch schema.
 	assertSchemaIsolated(t, s, schema)
 	return s
 }
 
-// withSearchPath returns dsn with search_path set, so every connection the
-// pool opens starts in that schema.
+// withSearchPath returns dsn with search_path set, so every
+// connection the pool opens starts in that schema.
 func withSearchPath(dsn, schema string) (string, error) {
 	u, err := url.Parse(dsn)
 	if err != nil || u.Scheme == "" {
@@ -90,12 +92,12 @@ func withSearchPath(dsn, schema string) (string, error) {
 	return u.String(), nil
 }
 
-// assertSchemaIsolated checks that queries land in the scratch schema, on
-// every connection the pool might hand out.
+// assertSchemaIsolated checks that queries land in the scratch
+// schema, on every connection the pool might hand out.
 func assertSchemaIsolated(t *testing.T, s *Store, schema string) {
 	t.Helper()
-	// More probes than the pool is wide, so a connection that was not
-	// configured would be caught.
+	// More probes than the pool is wide, so a connection that was
+	// not configured would be caught.
 	for i := 0; i < 16; i++ {
 		var got string
 		if err := s.db.Raw("SELECT current_schema()").Scan(&got).Error; err != nil {
@@ -108,7 +110,8 @@ func assertSchemaIsolated(t *testing.T, s *Store, schema string) {
 	}
 }
 
-// buildWorld makes a small world with one of everything worth persisting.
+// buildWorld makes a small world with one of everything worth
+// persisting.
 func buildWorld(t *testing.T) *world.World {
 	t.Helper()
 	w := world.New()
@@ -151,7 +154,8 @@ func buildWorld(t *testing.T) *world.World {
 
 func TestMigrateIsIdempotent(t *testing.T) {
 	s := testStore(t)
-	// A second migration on an existing schema must be a no-op, not an error.
+	// A second migration on an existing schema must be a no-op,
+	// not an error.
 	if err := s.Migrate(context.Background()); err != nil {
 		t.Fatalf("second Migrate: %v", err)
 	}
@@ -180,8 +184,8 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
-// TestRoundTrip is the M1 acceptance check: a world written out and read back
-// must be identical.
+// TestRoundTrip is the M1 acceptance check: a world written out and
+// read back must be identical.
 func TestRoundTrip(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -322,7 +326,8 @@ func TestRecycledObjectsPersistAsGarbage(t *testing.T) {
 	if o.Props.Len() != 0 {
 		t.Error("recycled objects should carry no properties")
 	}
-	// The ceiling must not drop, so the ref is never handed out again.
+	// The ceiling must not drop, so the ref is never handed out
+	// again.
 	if reloaded.Top() != w.Top() {
 		t.Errorf("Top() = %v, want %v", reloaded.Top(), w.Top())
 	}
@@ -413,7 +418,9 @@ func assertWorldsMatch(t *testing.T, want, got *world.World) {
 				t.Errorf("%v %s = %v, want %v", a.Ref, f.name, f.gb, f.wa)
 			}
 		}
-		if !a.Created.Equal(b.Created) || !a.Modified.Equal(b.Modified) || !a.LastUsed.Equal(b.LastUsed) {
+		if !a.Created.Equal(b.Created) ||
+			!a.Modified.Equal(b.Modified) ||
+			!a.LastUsed.Equal(b.LastUsed) {
 			t.Errorf("%v timestamps differ: %v/%v/%v vs %v/%v/%v", a.Ref,
 				b.Created, b.Modified, b.LastUsed,
 				a.Created, a.Modified, a.LastUsed)

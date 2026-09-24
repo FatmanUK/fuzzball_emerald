@@ -10,9 +10,9 @@ import (
 )
 
 // STOD, OTELL, PRONOUN_SUB, STRENCRYPT, STRDECRYPT, TEXTATTR and
-// POSE-SEPARATOR? are ports of the remaining src/p_strings.c primitives.
-// ARRAY_FMTSTRINGS lives in fmtstring.go instead, with the formatter it
-// shares with FMTSTRING.
+// POSE-SEPARATOR? are ports of the remaining src/p_strings.c
+// primitives. ARRAY_FMTSTRINGS lives in fmtstring.go instead, with
+// the formatter it shares with FMTSTRING.
 func init() {
 	register("STOD", func(f *Frame) (*Result, error) {
 		s, err := f.popStr()
@@ -87,11 +87,11 @@ func init() {
 	})
 }
 
-// parseSTOD is a port of prim_stod's own hand-rolled parse: an optional
-// leading '#', an optional '+', then a run of digits (one leading '-'
-// allowed) — if anything but whitespace follows those digits, the whole
-// argument is ref.Nothing; otherwise it is whatever atoi would make of the
-// digits alone.
+// parseSTOD is a port of prim_stod's own hand-rolled parse: an
+// optional leading '#', an optional '+', then a run of digits (one
+// leading '-' allowed) — if anything but whitespace follows those
+// digits, the whole argument is ref.Nothing; otherwise it is whatever
+// atoi would make of the digits alone.
 func parseSTOD(s string) ref.Ref {
 	s = strings.TrimLeft(s, " \t\r\n\v\f")
 	s = strings.TrimPrefix(s, "#")
@@ -107,8 +107,8 @@ func parseSTOD(s string) ref.Ref {
 	if end < len(s) && !isSpaceByte(s[end]) {
 		return ref.Nothing
 	}
-	// atoi's own behaviour: no digits at all, sign included, parses as 0
-	// rather than failing.
+	// atoi's own behaviour: no digits at all, sign included,
+	// parses as 0 rather than failing.
 	n, _ := strconv.Atoi(s[:end])
 	return ref.Ref(n)
 }
@@ -120,12 +120,13 @@ func isSpaceByte(b byte) bool {
 // pronounDefaults is upstream's fbstrings.c subjective/possessive/
 // objective/reflexive/absolute tables, indexed [gender][form].
 //
-// This covers only the default substitution table, keyed off the gender
-// property's raw value — not upstream's full pronoun_substitute, which also
-// checks a per-object PRONOUNS_PROPDIR override, a global one on #0, and a
-// "_default" propdir fallback chain, and lets a substitution itself expand
-// to "%N" (the player's own name). Those layers are deliberately not
-// reproduced: this is the common case a MUF program actually relies on.
+// This covers only the default substitution table, keyed off the
+// gender property's raw value — not upstream's full
+// pronoun_substitute, which also checks a per-object PRONOUNS_PROPDIR
+// override, a global one on #0, and a "_default" propdir fallback
+// chain, and lets a substitution itself expand to "%N" (the player's
+// own name). Those layers are deliberately not reproduced: this is
+// the common case a MUF program actually relies on.
 var pronounDefaults = map[string][5]string{
 	"s": {"", "it", "she", "he", "sie"},
 	"p": {"", "its", "her", "his", "hir"},
@@ -134,8 +135,9 @@ var pronounDefaults = map[string][5]string{
 	"a": {"", "its", "hers", "his", "hirs"},
 }
 
-// genderIndex maps a gender property's value to pronounDefaults' own index:
-// unassigned/unrecognised, neuter, female, male, herm/hermaphrodite.
+// genderIndex maps a gender property's value to pronounDefaults' own
+// index: unassigned/unrecognised, neuter, female, male,
+// herm/hermaphrodite.
 func genderIndex(sex string) int {
 	switch strings.ToLower(strings.TrimSpace(sex)) {
 	case "male":
@@ -150,13 +152,14 @@ func genderIndex(sex string) int {
 	return 0
 }
 
-// PronounSub is a port of pronoun_substitute — see pronounDefaults' own doc
-// comment for what is deliberately not reproduced. %% is a literal %, and
-// an unrecognised directive letter is passed through unchanged, both
-// matching the C.
+// PronounSub is a port of pronoun_substitute — see pronounDefaults'
+// own doc comment for what is deliberately not reproduced. %% is a
+// literal %, and an unrecognised directive letter is passed through
+// unchanged, both matching the C.
 //
-// It is exported because MPI's {pronouns} is the same substitution, reached
-// through internal/game rather than through this package's own Host.
+// It is exported because MPI's {pronouns} is the same substitution,
+// reached through internal/game rather than through this package's
+// own Host.
 func PronounSub(h Host, who ref.Ref, s string) string {
 	genderProp, _ := h.TuneGet("gender_prop")
 	sex, _ := h.GetProp(who, genderProp)
@@ -176,10 +179,10 @@ func PronounSub(h Host, who ref.Ref, s string) string {
 		}
 		lower := strings.ToLower(string(c))
 
-		// An object with no gender set is referred to by name throughout,
-		// so "%s smiles" reads "Igor smiles" rather than losing the
-		// subject. Nothing here is capitalised: the name carries its own
-		// case already.
+		// An object with no gender set is referred to by name
+		// throughout, so "%s smiles" reads "Igor smiles"
+		// rather than losing the subject. Nothing here is
+		// capitalised: the name carries its own case already.
 		if idx == 0 {
 			switch lower {
 			case "n", "o", "s", "r":
@@ -198,8 +201,8 @@ func PronounSub(h Host, who ref.Ref, s string) string {
 		} else if table, ok := pronounDefaults[lower]; ok {
 			sub = table[idx]
 		} else {
-			// An unrecognised directive letter stands for itself, without
-			// the '%' that introduced it.
+			// An unrecognised directive letter stands for
+			// itself, without the '%' that introduced it.
 			b.WriteByte(c)
 			continue
 		}
@@ -211,8 +214,8 @@ func PronounSub(h Host, who ref.Ref, s string) string {
 	return b.String()
 }
 
-// enarr is upstream's own scramble table: ROT13 on letters, \r<->127 and
-// ESCAPE_CHAR(27)<->31 swapped, identity otherwise.
+// enarr is upstream's own scramble table: ROT13 on letters, \r<->127
+// and ESCAPE_CHAR(27)<->31 swapped, identity otherwise.
 var enarr = func() [256]byte {
 	var a [256]byte
 	for i := range a {
@@ -232,11 +235,12 @@ var enarr = func() [256]byte {
 const cryptCharCount = 97
 const cryptOffset = 32 - (cryptCharCount - 96)
 
-// strEncrypt is a port of strencrypt. Its own entropy includes a byte of
-// real randomness (RANDOM() >> 24), so — unlike the rest of this
-// codebase — its output cannot be golden-compared against upstream's
-// directly; strdecrypt(strencrypt(s, k), k) == s is what is verified
-// instead, which is the only contract MUF code actually depends on.
+// strEncrypt is a port of strencrypt. Its own entropy includes a byte
+// of real randomness (RANDOM() >> 24), so — unlike the rest of this
+// codebase — its output cannot be golden-compared against
+// upstream's directly; strdecrypt(strencrypt(s, k), k) == s is what
+// is verified instead, which is the only contract MUF code actually
+// depends on.
 func strEncrypt(data, key string) string {
 	seed := 0
 	for _, c := range []byte(key) {
@@ -310,8 +314,8 @@ func strDecrypt(data, key string) string {
 	return string(out)
 }
 
-// strCrypt builds STRENCRYPT and STRDECRYPT, which share the same argument
-// validation.
+// strCrypt builds STRENCRYPT and STRDECRYPT, which share the same
+// argument validation.
 func strCrypt(fn func(data, key string) string) primFunc {
 	return func(f *Frame) (*Result, error) {
 		keyV, err := f.Pop()
@@ -322,7 +326,8 @@ func strCrypt(fn func(data, key string) string) primFunc {
 		if err != nil {
 			return nil, err
 		}
-		if dataV.Type != TypeString || keyV.Type != TypeString {
+		if dataV.Type != TypeString ||
+			keyV.Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		if keyV.Str == "" {
@@ -332,9 +337,10 @@ func strCrypt(fn func(data, key string) string) primFunc {
 	}
 }
 
-// textAttr is a port of prim_textattr: attrs is a comma-separated (spaces
-// ignored) list of tags from internal/ansi, each turned into its escape
-// sequence and prepended to text, which is always followed by a reset.
+// textAttr is a port of prim_textattr: attrs is a comma-separated
+// (spaces ignored) list of tags from internal/ansi, each turned into
+// its escape sequence and prepended to text, which is always followed
+// by a reset.
 func textAttr(text, attrs string) (string, error) {
 	var b strings.Builder
 	for _, tag := range strings.Split(attrs, ",") {

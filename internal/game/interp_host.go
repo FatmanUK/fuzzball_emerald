@@ -5,16 +5,16 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// Interp implements muf.Host for INTERP: run prog to completion in the
-// foreground and hand back what it left on its stack.
+// Interp implements muf.Host for INTERP: run prog to completion in
+// the foreground and hand back what it left on its stack.
 //
-// This is RunLock's shape — a nested, synchronous frame the caller waits on —
-// with the same two limits, for the same reasons. A program that blocks on
-// READ or SLEEP cannot be resumed from inside a caller that is itself
-// mid-instruction, so it counts as producing nothing; and a program that
-// aborts reports its own error and yields nothing, rather than taking the
-// calling program down with it, which is upstream's own interp_loop
-// returning NULL.
+// This is RunLock's shape — a nested, synchronous frame the caller
+// waits on — with the same two limits, for the same reasons. A
+// program that blocks on READ or SLEEP cannot be resumed from inside
+// a caller that is itself mid-instruction, so it counts as producing
+// nothing; and a program that aborts reports its own error and yields
+// nothing, rather than taking the calling program down with it, which
+// is upstream's own interp_loop returning NULL.
 func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref, arg string) (muf.Value, bool) {
 	p, err := h.s.compileProgram(h.w, prog)
 	if err != nil {
@@ -27,8 +27,9 @@ func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref, arg string) (muf.
 	f.SetReserved(player, h.Location(player), trig, arg)
 	f.Descr = descr
 	f.Level = level + 1
-	// Upstream runs this frame PREEMPT: it gets the world to itself until it
-	// finishes, which is what lets the caller treat it as one instruction.
+	// Upstream runs this frame PREEMPT: it gets the world to
+	// itself until it finishes, which is what lets the caller
+	// treat it as one instruction.
 	f.Mode = muf.ModePreempt
 
 	for {

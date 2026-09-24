@@ -11,10 +11,11 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// cmdStats counts what is in the database, for everyone or for one player.
+// cmdStats counts what is in the database, for everyone or for one
+// player.
 //
-// A non-wizard asking for no one in particular is told only the size of the
-// database, which is what upstream gives away.
+// A non-wizard asking for no one in particular is told only the size
+// of the database, which is what upstream gives away.
 func (s *Server) cmdStats(c *ctx) {
 	name := strings.TrimSpace(c.arg)
 	wizard := ownerIsWizard(c.w, c.who)
@@ -39,17 +40,20 @@ func (s *Server) cmdStats(c *ctx) {
 	}
 
 	var rooms, exits, things, players, programs, garbage, total, old int
-	// Anything untouched for longer than aging_time is counted as old,
-	// which is how an admin finds what a database has stopped using.
+	// Anything untouched for longer than aging_time is counted as
+	// old, which is how an admin finds what a database has
+	// stopped using.
 	aging := c.w.Tune.Duration("aging_time")
 	now := c.w.Now()
 
 	c.w.Each(func(o *world.Object) bool {
 		mine := owner == ref.Nothing || o.Owner == owner
-		if o.Type() == ref.TypePlayer && owner != ref.Nothing {
-			// A player counts for themselves, not for whoever owns
-			// them, so an owner search does not pick up everyone a
-			// wizard happens to own.
+		if o.Type() == ref.TypePlayer &&
+			owner != ref.Nothing {
+			// A player counts for themselves, not for
+			// whoever owns them, so an owner search does
+			// not pick up everyone a wizard happens to
+			// own.
 			mine = o.Ref == owner
 		}
 		if !mine {
@@ -70,8 +74,8 @@ func (s *Server) cmdStats(c *ctx) {
 		case ref.TypeProgram:
 			programs++
 		case ref.TypeGarbage:
-			// Garbage belongs to no one, so it is only counted in
-			// the whole-database figure.
+			// Garbage belongs to no one, so it is only
+			// counted in the whole-database figure.
 			if owner != ref.Nothing {
 				return true
 			}
@@ -91,8 +95,8 @@ func (s *Server) cmdStats(c *ctx) {
 		total, padPlural(total), old)
 }
 
-// padPlural is upstream's plural for the stats table: a trailing space keeps
-// the columns lined up when the word is singular.
+// padPlural is upstream's plural for the stats table: a trailing
+// space keeps the columns lined up when the word is singular.
 func padPlural(n int) string {
 	if n == 1 {
 		return " "
@@ -122,8 +126,9 @@ func (s *Server) cmdBoot(c *ctx) {
 	}
 
 	s.notify(c.w, victim, "You have been booted off the game.")
-	// Upstream boots one connection, the most recent, rather than all of
-	// them: booting someone with two clients open leaves the other one up.
+	// Upstream boots one connection, the most recent, rather than
+	// all of them: booting someone with two clients open leaves
+	// the other one up.
 	ds := s.hub.DescriptorsFor(victim)
 	if len(ds) == 0 {
 		c.tell("%s is not connected.", o.Name)
@@ -138,8 +143,8 @@ func (s *Server) cmdBoot(c *ctx) {
 	}
 }
 
-// cmdToad deletes a player, turning them into an object and handing what they
-// owned to someone else.
+// cmdToad deletes a player, turning them into an object and handing
+// what they owned to someone else.
 func (s *Server) cmdToad(c *ctx) {
 	if !s.requireWizard(c) {
 		return
@@ -162,10 +167,10 @@ func (s *Server) cmdToad(c *ctx) {
 		c.tell("You cannot toad yourself.  Get someone else to do it for you.")
 		return
 	}
-	// A player named by a @tune parameter is load-bearing — the default
-	// toad recipient, lost-and-found, the starting room's owner — and
-	// deleting one would leave the parameter pointing at an object of the
-	// wrong type.
+	// A player named by a @tune parameter is load-bearing — the
+	// default toad recipient, lost-and-found, the starting room's
+	// owner — and deleting one would leave the parameter
+	// pointing at an object of the wrong type.
 	if param, named := tuneRefersTo(c.w, victim); named {
 		s.log.Info("refused to toad a tuned player",
 			"player", victim.String(), "parameter", param)
@@ -208,8 +213,9 @@ func (s *Server) toadPlayer(c *ctx, victim, recipient ref.Ref) {
 	w := c.w
 	name := nameOf(w, victim)
 
-	// Whatever they were carrying goes home rather than vanishing with
-	// them or piling up wherever they happened to be standing.
+	// Whatever they were carrying goes home rather than vanishing
+	// with them or piling up wherever they happened to be
+	// standing.
 	for _, r := range w.Contents(victim) {
 		if err := w.SendHome(r); err != nil {
 			s.log.Warn("could not send a toaded player's belongings home",
@@ -218,15 +224,17 @@ func (s *Server) toadPlayer(c *ctx, victim, recipient ref.Ref) {
 	}
 	s.killProcessesFor(w, victim)
 
-	// Everything they owned changes hands. A program passed to a wizard
-	// loses the flags that would let it run with the new owner's powers.
+	// Everything they owned changes hands. A program passed to a
+	// wizard loses the flags that would let it run with the new
+	// owner's powers.
 	w.Each(func(o *world.Object) bool {
 		if o.Owner == victim {
 			switch o.Type() {
 			case ref.TypeProgram:
 				s.killProcessesOf(w, o.Ref)
 				s.InvalidateProgram(o.Ref)
-				if r := w.Get(recipient); r != nil && r.Flags.IsTrueWizard() {
+				if r := w.Get(recipient); r != nil &&
+					r.Flags.IsTrueWizard() {
 					o.Flags &^= ref.Abode | ref.Wizard
 					o.Flags = o.Flags.SetMLevel(1)
 				}
@@ -244,8 +252,8 @@ func (s *Server) toadPlayer(c *ctx, victim, recipient ref.Ref) {
 	})
 	w.ChownMacros(victim, recipient)
 
-	// Close any editor the victim had open, so nothing is left holding a
-	// program that now belongs to someone else.
+	// Close any editor the victim had open, so nothing is left
+	// holding a program that now belongs to someone else.
 	if e := s.editing(victim); e != nil {
 		s.closeEditor(w, victim, e)
 	}
@@ -267,8 +275,8 @@ func (s *Server) toadPlayer(c *ctx, victim, recipient ref.Ref) {
 	}
 }
 
-// tuneRefersTo reports whether a @tune parameter points at an object, naming
-// the first one that does.
+// tuneRefersTo reports whether a @tune parameter points at an object,
+// naming the first one that does.
 func tuneRefersTo(w *world.World, r ref.Ref) (string, bool) {
 	for _, p := range w.Tune.Params() {
 		if p.Type != tune.TypeDbref {
@@ -281,19 +289,20 @@ func tuneRefersTo(w *world.World, r ref.Ref) (string, bool) {
 	return "", false
 }
 
-// @force registers itself here rather than in the table's declaration: it
-// dispatches commands, so naming it there would make the table refer to
-// itself.
+// @force registers itself here rather than in the table's
+// declaration: it dispatches commands, so naming it there would make
+// the table refer to itself.
 func init() {
 	atCommands["@force"] = (*Server).cmdForce
 	atCommands["@pcreate"] = (*Server).cmdPcreate
 }
 
-// cmdForce makes another object run a command as though it had typed it.
+// cmdForce makes another object run a command as though it had typed
+// it.
 func (s *Server) cmdForce(c *ctx) {
-	// A missing "=" is not a usage error: upstream hands both halves to the
-	// matcher regardless, so "@force" on its own complains about the empty
-	// name it could not find.
+	// A missing "=" is not a usage error: upstream hands both
+	// halves to the matcher regardless, so "@force" on its own
+	// complains about the empty name it could not find.
 	what, command, _ := strings.Cut(c.arg, "=")
 	what = strings.TrimSpace(what)
 	if int64(s.forceDepth) >= c.w.Tune.Int("max_force_level") {
@@ -334,8 +343,8 @@ func (s *Server) cmdForce(c *ctx) {
 			c.tell("Permission denied -- you cannot force dark zombies.")
 			return
 		}
-		// A puppet must not be able to impersonate a player, so its
-		// first word may not be somebody's name.
+		// A puppet must not be able to impersonate a player,
+		// so its first word may not be somebody's name.
 		first, _, _ := strings.Cut(o.Name, " ")
 		if _, taken := c.w.PlayerNamed(first); taken {
 			c.tell("Puppet cannot share the name of a player.")
@@ -348,9 +357,10 @@ func (s *Server) cmdForce(c *ctx) {
 		"by", c.who.String(), "byName", nameOf(c.w, c.who),
 		"command", command)
 
-	// forcelist records who is forcing what, for FORCEDBY/FORCEDBY_ARRAY —
-	// upstream's do_force pushes only the player, never a program, since
-	// @force is not called from inside one.
+	// forcelist records who is forcing what, for
+	// FORCEDBY/FORCEDBY_ARRAY — upstream's do_force pushes only
+	// the player, never a program, since @force is not called
+	// from inside one.
 	s.forcelist = append(s.forcelist, c.who)
 	defer func() { s.forcelist = s.forcelist[:len(s.forcelist)-1] }()
 
@@ -359,9 +369,9 @@ func (s *Server) cmdForce(c *ctx) {
 
 // force runs a command as another object.
 //
-// The forced object needs a descriptor, because a command may ask which
-// connection typed it. It borrows the forcer's when it has none of its own,
-// which is what dbref_first_descr comes to for a puppet.
+// The forced object needs a descriptor, because a command may ask
+// which connection typed it. It borrows the forcer's when it has none
+// of its own, which is what dbref_first_descr comes to for a puppet.
 func (s *Server) force(w *world.World, callerD *session.Descriptor, victim ref.Ref, command string) {
 	d := callerD
 	if ds := s.hub.DescriptorsFor(victim); len(ds) > 0 {
@@ -371,14 +381,14 @@ func (s *Server) force(w *world.World, callerD *session.Descriptor, victim ref.R
 	s.forceDepth++
 	defer func() { s.forceDepth-- }()
 
-	// The command goes to the parser, not through Input: a forced object
-	// must not be able to answer a READ or type into an editor session
-	// belonging to whoever holds the descriptor.
+	// The command goes to the parser, not through Input: a forced
+	// object must not be able to answer a READ or type into an
+	// editor session belonging to whoever holds the descriptor.
 	s.commandAs(w, d, victim, strings.TrimSpace(command))
 }
 
-// ownerOf returns the object a player's possessions belong to, which for a
-// player is themselves.
+// ownerOf returns the object a player's possessions belong to, which
+// for a player is themselves.
 func ownerOf(w *world.World, r ref.Ref) ref.Ref {
 	o := w.Get(r)
 	if o == nil {
@@ -390,19 +400,19 @@ func ownerOf(w *world.World, r ref.Ref) ref.Ref {
 	return o.Owner
 }
 
-// ownerIsWizard reports whether whoever owns an object has wizard powers,
-// which is the test upstream's Wizard(OWNER(player)) makes.
+// ownerIsWizard reports whether whoever owns an object has wizard
+// powers, which is the test upstream's Wizard(OWNER(player)) makes.
 func ownerIsWizard(w *world.World, r ref.Ref) bool {
 	o := w.Get(ownerOf(w, r))
 	return o != nil && o.Flags.IsWizard()
 }
 
-// propValue is where an object's currency is kept, from include/db.h. A toad
-// is left worth a single penny, as upstream leaves it.
+// propValue is where an object's currency is kept, from include/db.h.
+// A toad is left worth a single penny, as upstream leaves it.
 const propValue = "@/value"
 
-// cmdPcreate makes a player without them having to connect, which is how a
-// registration-only world hands out characters.
+// cmdPcreate makes a player without them having to connect, which is
+// how a registration-only world hands out characters.
 func (s *Server) cmdPcreate(c *ctx) {
 	if !s.requireWizard(c) {
 		return
@@ -429,7 +439,8 @@ func (s *Server) cmdPcreate(c *ctx) {
 }
 
 // okPassword applies upstream's rule: not empty, and no spaces or
-// unprintable characters, because a password is read from a line of input.
+// unprintable characters, because a password is read from a line of
+// input.
 func okPassword(pass string) bool {
 	if pass == "" {
 		return false

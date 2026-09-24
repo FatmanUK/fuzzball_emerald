@@ -24,7 +24,8 @@ func TestLoadStarterWorld(t *testing.T) {
 		t.Errorf("read %d macros, want 3", res.Report.Macros)
 	}
 
-	// Every program source must belong to a program object in the dump.
+	// Every program source must belong to a program object in the
+	// dump.
 	for _, p := range res.Programs {
 		o := res.World.Get(p.Ref)
 		if o == nil || o.Type() != ref.TypeProgram {
@@ -32,7 +33,8 @@ func TestLoadStarterWorld(t *testing.T) {
 		}
 	}
 
-	// An imported world has never been written, so it must all be pending.
+	// An imported world has never been written, so it must all be
+	// pending.
 	if res.World.DirtyCount() != res.World.Len() {
 		t.Errorf("%d of %d objects are pending; a fresh import should be entirely pending",
 			res.World.DirtyCount(), res.World.Len())
@@ -45,9 +47,9 @@ func TestLoadStarterWorld(t *testing.T) {
 }
 
 func TestLoadFindsMufDirBesideDataDir(t *testing.T) {
-	// The shipped layout puts the dump in data/ and the sources in muf/,
-	// as siblings. Emerald's testdata keeps them in one directory. Both
-	// must be found.
+	// The shipped layout puts the dump in data/ and the sources
+	// in muf/, as siblings. Emerald's testdata keeps them in one
+	// directory. Both must be found.
 	res, err := Load(Source{DumpPath: "../../testdata/starterdb/starterdb.db"})
 	if err != nil {
 		t.Fatal(err)
@@ -79,11 +81,12 @@ func TestLoadWithoutProgramDirectory(t *testing.T) {
 		t.Error("the missing program directory should have been reported")
 	}
 
-	// The world must be entirely pending, exactly as one loaded *with* a
-	// program directory is. This is the case that regressed: Load returned
-	// early on the missing directory, before marking anything dirty, so the
-	// dump parsed and reported fine and then wrote nothing at all. A dump
-	// with no muf/ beside it imported as an empty world.
+	// The world must be entirely pending, exactly as one loaded
+	// *with* a program directory is. This is the case that
+	// regressed: Load returned early on the missing directory,
+	// before marking anything dirty, so the dump parsed and
+	// reported fine and then wrote nothing at all. A dump with no
+	// muf/ beside it imported as an empty world.
 	if res.World.DirtyCount() != res.World.Len() {
 		t.Errorf("%d of %d objects are pending; a fresh import should be entirely pending",
 			res.World.DirtyCount(), res.World.Len())
@@ -101,8 +104,9 @@ func TestPlayersWithoutPasswords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Report whatever the shipped world has, so the operator sees it; the
-	// point is that the list is computed, not that it is empty.
+	// Report whatever the shipped world has, so the operator sees
+	// it; the point is that the list is computed, not that it is
+	// empty.
 	got := res.PlayersWithoutPasswords()
 	t.Logf("players with no password: %v", got)
 	for _, r := range got {
@@ -115,7 +119,8 @@ func TestPlayersWithoutPasswords(t *testing.T) {
 		}
 	}
 
-	// A synthetic world with a known empty password must be caught.
+	// A synthetic world with a known empty password must be
+	// caught.
 	w := world.New()
 	p := w.Create("Nobody", ref.TypePlayer, ref.God)
 	synthetic := &Result{World: w, Report: &Report{}}

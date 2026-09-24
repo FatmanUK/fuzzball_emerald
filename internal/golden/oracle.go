@@ -12,31 +12,34 @@ import (
 	"time"
 )
 
-// OracleImage is the container holding Fuzzball 7 built from the C sources.
+// OracleImage is the container holding Fuzzball 7 built from the C
+// sources.
 const OracleImage = "localhost/fbmuck-oracle"
 
 // oraclePort is the port the oracle listens on inside its container.
 const oraclePort = 4201
 
-// Script is what to send a server once connected, one command per entry.
+// Script is what to send a server once connected, one command per
+// entry.
 type Script []string
 
-// The sentinel a transcript is bounded by. Each command is followed by a pose
-// carrying a marker, so the harness knows when the command's output has
-// finished rather than guessing with a timeout.
+// The sentinel a transcript is bounded by. Each command is followed
+// by a pose carrying a marker, so the harness knows when the
+// command's output has finished rather than guessing with a timeout.
 const (
 	connectMarker = "EMERALDCONNECTED"
 	doneMarker    = "EMERALDDONE"
 )
 
-// RunOracle drives the C server through a script and returns one transcript.
+// RunOracle drives the C server through a script and returns one
+// transcript.
 func RunOracle(ctx context.Context, fx *Fixture, script Script) (string, error) {
 	steps, err := RunOracleSteps(ctx, fx, script, nil)
 	return strings.Join(steps, ""), err
 }
 
-// RunOracleSteps is the same, returning each command's output separately so a
-// failure names the case it belongs to.
+// RunOracleSteps is the same, returning each command's output
+// separately so a failure names the case it belongs to.
 func RunOracleSteps(ctx context.Context, fx *Fixture, script Script,
 	pauses map[int]time.Duration) ([]string, error) {
 	return withOracle(ctx, fx, func(conn net.Conn) ([]string, error) {
@@ -44,14 +47,15 @@ func RunOracleSteps(ctx context.Context, fx *Fixture, script Script,
 	})
 }
 
-// RunOracleQuiet drives the C server without the marker poses, bounding each
-// command's output by a period of silence instead.
+// RunOracleQuiet drives the C server without the marker poses,
+// bounding each command's output by a period of silence instead.
 //
-// A marker cannot be used for a session that holds the input line: the MUF
-// editor reads "!pose EMERALDDONE" as the editor command "x" — its last word
-// begins with the cancel letter — and a program waiting on a READ eats the
-// marker outright. Waiting for quiet is slower and is only worth it for those
-// cases, so the marker path stays the default.
+// A marker cannot be used for a session that holds the input line:
+// the MUF editor reads "!pose EMERALDDONE" as the editor command "x"
+// — its last word begins with the cancel letter — and a program
+// waiting on a READ eats the marker outright. Waiting for quiet is
+// slower and is only worth it for those cases, so the marker path
+// stays the default.
 func RunOracleQuiet(ctx context.Context, fx *Fixture, script Script,
 	quiet time.Duration) ([]string, error) {
 	return withOracle(ctx, fx, func(conn net.Conn) ([]string, error) {
@@ -59,14 +63,15 @@ func RunOracleQuiet(ctx context.Context, fx *Fixture, script Script,
 	})
 }
 
-// withOracle starts a C server holding the fixture, runs fn against it, and
-// tears it down.
+// withOracle starts a C server holding the fixture, runs fn against
+// it, and tears it down.
 func withOracle(ctx context.Context, fx *Fixture,
 	fn func(net.Conn) ([]string, error)) ([]string, error) {
-	// The C server writes back into its game directory — a dump, and the
-	// macro table — so it runs against a copy. Without this a case that
-	// defines a macro leaves it behind for this server to import, and the
-	// two transcripts stop being of the same world.
+	// The C server writes back into its game directory — a
+	// dump, and the macro table — so it runs against a copy.
+	// Without this a case that defines a macro leaves it behind
+	// for this server to import, and the two transcripts stop
+	// being of the same world.
 	dir, err := copyFixture(fx.Dir)
 	if err != nil {
 		return nil, err
@@ -82,8 +87,9 @@ func withOracle(ctx context.Context, fx *Fixture,
 	}
 	name := fmt.Sprintf("fbgold-%d", port)
 
-	// --rm so a crashed run leaves nothing behind; the container is torn
-	// down explicitly as well, in case the server does not exit on its own.
+	// --rm so a crashed run leaves nothing behind; the container
+	// is torn down explicitly as well, in case the server does
+	// not exit on its own.
 	run := exec.CommandContext(ctx, "podman", "run", "--rm", "-d",
 		"--name", name,
 		"-p", fmt.Sprintf("127.0.0.1:%d:%d", port, oraclePort),
@@ -128,12 +134,13 @@ func dialWithRetry(ctx context.Context, addr string) (net.Conn, error) {
 	return nil, fmt.Errorf("the oracle never started listening on %s", addr)
 }
 
-// drive runs a script against a connected server, returning each command's
-// output separately.
+// drive runs a script against a connected server, returning each
+// command's output separately.
 //
-// Each command is followed by a marker pose, so the harness reads until the
-// marker rather than waiting a fixed time. That keeps the transcript
-// deterministic even when a command produces output slowly.
+// Each command is followed by a marker pose, so the harness reads
+// until the marker rather than waiting a fixed time. That keeps the
+// transcript deterministic even when a command produces output
+// slowly.
 func drive(conn net.Conn, script Script, pauses map[int]time.Duration) ([]string, error) {
 	br := bufio.NewReader(conn)
 	out := make([]string, 0, len(script))
@@ -144,8 +151,8 @@ func drive(conn net.Conn, script Script, pauses map[int]time.Duration) ([]string
 		return err
 	}
 
-	// readTo collects output until the marker appears, discarding the
-	// marker line itself.
+	// readTo collects output until the marker appears, discarding
+	// the marker line itself.
 	readTo := func(marker string) (string, error) {
 		var got strings.Builder
 		deadline := time.Now().Add(30 * time.Second)
@@ -171,7 +178,8 @@ func drive(conn net.Conn, script Script, pauses map[int]time.Duration) ([]string
 	if err := send("!pose " + connectMarker); err != nil {
 		return nil, err
 	}
-	// The welcome banner and login output are not part of what is compared.
+	// The welcome banner and login output are not part of what is
+	// compared.
 	if _, err := readTo(connectMarker); err != nil {
 		return nil, fmt.Errorf("logging in: %w", err)
 	}
@@ -180,9 +188,9 @@ func drive(conn net.Conn, script Script, pauses map[int]time.Duration) ([]string
 		if err := send(cmd); err != nil {
 			return out, err
 		}
-		// A program that suspends itself needs time to resume before
-		// the marker is sent, or its later output lands in the next
-		// step's transcript.
+		// A program that suspends itself needs time to resume
+		// before the marker is sent, or its later output
+		// lands in the next step's transcript.
 		if d, ok := pauses[i]; ok {
 			time.Sleep(d)
 		}
@@ -215,8 +223,8 @@ func OracleAvailable() bool {
 	return exec.Command("podman", "image", "exists", OracleImage).Run() == nil
 }
 
-// driveQuiet runs a script with no markers, taking a pause in the output as
-// the end of a command's response.
+// driveQuiet runs a script with no markers, taking a pause in the
+// output as the end of a command's response.
 func driveQuiet(conn net.Conn, script Script, quiet time.Duration) ([]string, error) {
 	br := bufio.NewReader(conn)
 	out := make([]string, 0, len(script))
@@ -254,8 +262,8 @@ func driveQuiet(conn net.Conn, script Script, quiet time.Duration) ([]string, er
 	return out, nil
 }
 
-// copyFixture duplicates a fixture directory so the C server can write into it
-// without changing the original.
+// copyFixture duplicates a fixture directory so the C server can
+// write into it without changing the original.
 func copyFixture(src string) (string, error) {
 	dst, err := os.MkdirTemp("", "fbgold-fixture-")
 	if err != nil {

@@ -13,8 +13,9 @@ import (
 
 // The time, formatting and remaining odds and ends.
 func init() {
-	// Durations, rendered three ways: {timestr} as a clock, {stimestr} as
-	// the single largest unit, {ltimestr} spelled out.
+	// Durations, rendered three ways: {timestr} as a clock,
+	// {stimestr} as the single largest unit, {ltimestr} spelled
+	// out.
 	register("TIMESTR", func(_ *Env, _ *Func, args []string) (string, error) {
 		d, err := atoiArg("TIMESTR", args[0])
 		if err != nil {
@@ -42,9 +43,10 @@ func init() {
 		}
 		return itoa(secs) + "s", nil
 	})
-	// Unlike the other two, this counts in seven units rather than four, and
-	// names only the ones that are non-zero — so a duration of nothing spells
-	// out as nothing at all, not "0 seconds".
+	// Unlike the other two, this counts in seven units rather
+	// than four, and names only the ones that are non-zero — so
+	// a duration of nothing spells out as nothing at all, not "0
+	// seconds".
 	register("LTIMESTR", func(_ *Env, _ *Func, args []string) (string, error) {
 		d, err := atoiArg("LTIMESTR", args[0])
 		if err != nil {
@@ -84,8 +86,9 @@ func init() {
 			if err != nil {
 				return "", err
 			}
-			// A small number is read as hours and a large one as seconds,
-			// so both "{ftime:%H,-5}" and a raw offset work.
+			// A small number is read as hours and a large
+			// one as seconds, so both "{ftime:%H,-5}" and
+			// a raw offset work.
 			if off < 25 && off > -25 {
 				off *= 3600
 			}
@@ -94,9 +97,9 @@ func init() {
 		return timefmt.Format(args[0], time.Unix(when, 0).UTC()), nil
 	})
 	register("TZOFFSET", func(*Env, *Func, []string) (string, error) {
-		// Emerald reads and writes times in UTC throughout — see
-		// internal/muf's own strptime for why — so there is no offset to
-		// report.
+		// Emerald reads and writes times in UTC throughout
+		// — see internal/muf's own strptime for why — so
+		// there is no offset to report.
 		return "0", nil
 	})
 
@@ -120,8 +123,9 @@ func init() {
 		if period < 1 {
 			return "", errf("TIMESUB", "Time period too short.")
 		}
-		// Which line of the list is showing depends on the clock, so a
-		// property list becomes a slideshow that advances by itself.
+		// Which line of the list is showing depends on the
+		// clock, so a property list becomes a slideshow that
+		// advances by itself.
 		i := int(((env.Host.Now()+int64(offset))%int64(period))*int64(n)) / period
 		return env.listItem(obj, args[2], i+1), nil
 	})
@@ -166,8 +170,8 @@ func init() {
 			}
 			coords[i] = n
 		}
-		// Two points in one, two or three dimensions, or one point taken
-		// from the origin.
+		// Two points in one, two or three dimensions, or one
+		// point taken from the origin.
 		var dx, dy, dz int
 		switch len(coords) {
 		case 2:
@@ -184,8 +188,9 @@ func init() {
 		return itoa(isqrt(dx*dx + dy*dy + dz*dz)), nil
 	})
 
-	// {attr:tag,tag,...,text} — every argument but the last names an
-	// attribute, and the text follows, always closed with a reset.
+	// {attr:tag,tag,...,text} — every argument but the last
+	// names an attribute, and the text follows, always closed
+	// with a reset.
 	register("ATTR", func(_ *Env, _ *Func, args []string) (string, error) {
 		var b strings.Builder
 		for _, tag := range args[:len(args)-1] {
@@ -210,13 +215,15 @@ func init() {
 		return boolOf(truthy(args[0]) != truthy(args[1])), nil
 	})
 
-	// {escape} wraps text in backticks so the parser reads it literally,
-	// escaping any backtick or backslash already in it.
+	// {escape} wraps text in backticks so the parser reads it
+	// literally, escaping any backtick or backslash already in
+	// it.
 	register("ESCAPE", func(_ *Env, _ *Func, args []string) (string, error) {
 		var b strings.Builder
 		b.WriteByte(litChar)
 		for i := 0; i < len(args[0]); i++ {
-			if c := args[0][i]; c == escape || c == litChar {
+			if c := args[0][i]; c == escape ||
+				c == litChar {
 				b.WriteByte(escape)
 			}
 			b.WriteByte(args[0][i])
@@ -243,8 +250,8 @@ func init() {
 				return "", err
 			}
 		}
-		// The four-argument form names a variable and a body, so each item
-		// can be rendered before being joined.
+		// The four-argument form names a variable and a body,
+		// so each item can be rendered before being joined.
 		if len(args) > 3 {
 			name, err := Parse(env, args[2])
 			if err != nil {
@@ -277,9 +284,9 @@ func init() {
 		return v, nil
 	})
 
-	// {default} returns the first of its two arguments that is true, which
-	// is why neither is pre-evaluated: the second must not run if the first
-	// answers.
+	// {default} returns the first of its two arguments that is
+	// true, which is why neither is pre-evaluated: the second
+	// must not run if the first answers.
 	register("DEFAULT", func(env *Env, _ *Func, args []string) (string, error) {
 		first, err := Parse(env, args[0])
 		if err != nil {
@@ -309,18 +316,20 @@ func init() {
 		return "", nil
 	})
 
-	// {revoke} evaluates its argument without whatever blessing the message
-	// carries, so a property can run text it does not trust.
+	// {revoke} evaluates its argument without whatever blessing
+	// the message carries, so a property can run text it does not
+	// trust.
 	register("REVOKE", func(env *Env, _ *Func, args []string) (string, error) {
 		sub := *env
 		sub.Blessed = false
 		return Parse(&sub, args[0])
 	})
 
-	// {debug} and {debugif} evaluate their argument with upstream's MPI
-	// tracer on, printing every call and its result to the player. Emerald
-	// has no tracer, so these evaluate plainly — the text they produce is
-	// the same, only the diagnostics are missing.
+	// {debug} and {debugif} evaluate their argument with
+	// upstream's MPI tracer on, printing every call and its
+	// result to the player. Emerald has no tracer, so these
+	// evaluate plainly — the text they produce is the same,
+	// only the diagnostics are missing.
 	register("DEBUG", func(env *Env, _ *Func, args []string) (string, error) {
 		return Parse(env, args[0])
 	})
@@ -342,9 +351,9 @@ func init() {
 		return out, nil
 	})
 
-	// The three that act on the world rather than describing it. Each is
-	// gated, because a property anyone can write must not be able to run
-	// commands as its reader.
+	// The three that act on the world rather than describing it.
+	// Each is gated, because a property anyone can write must not
+	// be able to run commands as its reader.
 	register("FORCE", func(env *Env, _ *Func, args []string) (string, error) {
 		obj, err := env.resolve("FORCE", args, 0)
 		if err != nil {
@@ -381,7 +390,8 @@ func init() {
 
 	register("MUF", func(env *Env, _ *Func, args []string) (string, error) {
 		prog := env.lookup(args[0])
-		if !env.Host.Valid(prog) || env.Host.TypeName(prog) != "Program" {
+		if !env.Host.Valid(prog) ||
+			env.Host.TypeName(prog) != "Program" {
 			return "", errf("MUF", "Bad program reference.")
 		}
 		if !env.Host.HasFlag(prog, "link_ok") &&
@@ -417,9 +427,9 @@ func init() {
 // mufCallLimit is upstream's mpi_muf_call_levels bound.
 const mufCallLimit = 18
 
-// longUnits is timestr_long's own scale. A year is 365.24 days and a month a
-// twelfth of that, neither of which is a calendar month — this is arithmetic
-// on a duration, not on a date.
+// longUnits is timestr_long's own scale. A year is 365.24 days and a
+// month a twelfth of that, neither of which is a calendar month —
+// this is arithmetic on a duration, not on a date.
 var longUnits = [7]struct {
 	name string
 	secs int
@@ -433,8 +443,8 @@ var longUnits = [7]struct {
 	{"second", 1},
 }
 
-// splitDuration breaks a count of seconds into days, hours, minutes and
-// seconds.
+// splitDuration breaks a count of seconds into days, hours, minutes
+// and seconds.
 func splitDuration(d int) (days, hours, mins, secs int) {
 	if d < 0 {
 		d = 0
@@ -456,8 +466,8 @@ func abs(n int) int {
 	return n
 }
 
-// isqrt is an integer square root, which is what {dist} reports: upstream
-// computes the distance as a double and prints it with "%d".
+// isqrt is an integer square root, which is what {dist} reports:
+// upstream computes the distance as a double and prints it with "%d".
 func isqrt(n int) int {
 	if n <= 0 {
 		return 0

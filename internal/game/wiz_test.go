@@ -9,9 +9,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestSetFlagsByPrefix checks that @set resolves flag names the way upstream's
-// str_to_flag does, by prefix, and that mucker levels replace one another
-// rather than accumulating.
+// TestSetFlagsByPrefix checks that @set resolves flag names the way
+// upstream's str_to_flag does, by prefix, and that mucker levels
+// replace one another rather than accumulating.
 func TestSetFlagsByPrefix(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -50,8 +50,8 @@ func TestSetFlagsByPrefix(t *testing.T) {
 		}
 	}
 
-	// Two names the flag table resolves but @set refuses, because each
-	// would set something other than it says.
+	// Two names the flag table resolves but @set refuses, because
+	// each would set something other than it says.
 	for _, name := range []string{"T", "truewizard", "N", "nucker"} {
 		h.send("@set widget=" + name)
 		if got := h.out(); !strings.Contains(got, "I don't recognize that flag.") {
@@ -64,9 +64,9 @@ func TestSetFlagsByPrefix(t *testing.T) {
 	}
 }
 
-// TestToadHandsOverWhatThePlayerOwned checks the part of @toad a transcript
-// cannot show: everything the victim owned changes hands, and the victim stops
-// being a player.
+// TestToadHandsOverWhatThePlayerOwned checks the part of @toad a
+// transcript cannot show: everything the victim owned changes hands,
+// and the victim stops being a player.
 func TestToadHandsOverWhatThePlayerOwned(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -81,7 +81,8 @@ func TestToadHandsOverWhatThePlayerOwned(t *testing.T) {
 		}
 		victim = o.Ref
 
-		// Something the victim owns, and something homed to them.
+		// Something the victim owns, and something homed to
+		// them.
 		thing := w.Create("trinket", ref.TypeThing, victim)
 		thing.Home = victim
 		if err := w.MoveTo(thing.Ref, o.Home); err != nil {
@@ -126,14 +127,14 @@ func TestToadHandsOverWhatThePlayerOwned(t *testing.T) {
 	}
 }
 
-// TestForceRunsACommandAsSomeoneElse checks that a forced command acts and
-// answers as the victim, not as the forcer.
+// TestForceRunsACommandAsSomeoneElse checks that a forced command
+// acts and answers as the victim, not as the forcer.
 func TestForceRunsACommandAsSomeoneElse(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	// A puppet relays what it is told to whoever owns it, which is the
-	// only way anything a thing is told reaches a person.
+	// A puppet relays what it is told to whoever owns it, which
+	// is the only way anything a thing is told reaches a person.
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		if err := w.SetTune("allow_zombies", "yes"); err != nil {
 			t.Error(err)
@@ -163,8 +164,8 @@ func TestForceRunsACommandAsSomeoneElse(t *testing.T) {
 	}
 }
 
-// TestPuppetRelayRespectsDark checks the conditions that stop a puppet being
-// used to eavesdrop.
+// TestPuppetRelayRespectsDark checks the conditions that stop a
+// puppet being used to eavesdrop.
 func TestPuppetRelayRespectsDark(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -184,7 +185,8 @@ func TestPuppetRelayRespectsDark(t *testing.T) {
 		if _, _, ok := puppetRelay(h.s, w, puppet.Ref); !ok {
 			t.Error("a plain puppet should relay")
 		}
-		// An owner who is themselves flagged ZOMBIE has opted out.
+		// An owner who is themselves flagged ZOMBIE has opted
+		// out.
 		owner.Flags |= ref.Zombie
 		if _, _, ok := puppetRelay(h.s, w, puppet.Ref); ok {
 			t.Error("an owner flagged ZOMBIE should hear nothing")
@@ -194,14 +196,14 @@ func TestPuppetRelayRespectsDark(t *testing.T) {
 	}
 }
 
-// TestControlsRespectsStrictGodPriv checks that a wizard cannot touch God's
-// objects while strict_god_priv is set, which is what stops a wizard editing
-// God's programs into giving themselves God's powers.
+// TestControlsRespectsStrictGodPriv checks that a wizard cannot touch
+// God's objects while strict_god_priv is set, which is what stops a
+// wizard editing God's programs into giving themselves God's powers.
 func TestControlsRespectsStrictGodPriv(t *testing.T) {
 	h := newHarness(t)
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
-		// The harness's wizard is #1, which is God, so this needs a
-		// second wizard who is not.
+		// The harness's wizard is #1, which is God, so this
+		// needs a second wizard who is not.
 		other := w.Create("Archwizard", ref.TypePlayer, ref.Nothing)
 		other.Owner = other.Ref
 		other.Flags |= ref.Wizard
@@ -238,9 +240,9 @@ func (h *harness) flagsOf(t *testing.T, name string) ref.Flags {
 	return f
 }
 
-// TestGUIDialogRoundTrip drives a dialog from a program: it opens one, the
-// client sets a value and presses a button, and the program reads back what
-// the user chose.
+// TestGUIDialogRoundTrip drives a dialog from a program: it opens
+// one, the client sets a value and presses a button, and the program
+// reads back what the user chose.
 func TestGUIDialogRoundTrip(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -252,8 +254,9 @@ func TestGUIDialogRoundTrip(t *testing.T) {
 		` package: "org-fuzzball-gui" min-version: "1.0" max-version: "1.3"`)
 	h.out()
 
-	// The dialog is opened through the host rather than from a program, so
-	// this is a test of the protocol rather than of MUF.
+	// The dialog is opened through the host rather than from a
+	// program, so this is a test of the protocol rather than of
+	// MUF.
 	var id string
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		host := &mufHost{s: h.s, w: w, caller: h.wizRef()}
@@ -286,8 +289,9 @@ func TestGUIDialogRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// An event that dismisses the dialog closes it, because the client
-	// has taken it off the screen and nothing can reach it again.
+	// An event that dismisses the dialog closes it, because the
+	// client has taken it off the screen and nothing can reach it
+	// again.
 	h.send(`#$#org-fuzzball-gui-ctrl-event ` + key +
 		` dlogid: "` + id + `" id: "ok" event: "buttonpress"`)
 	h.sync()
@@ -302,16 +306,16 @@ func TestGUIDialogRoundTrip(t *testing.T) {
 	}
 }
 
-// TestMCPMessagesNeedPermission checks that a program below the mucker floor
-// cannot drive somebody's client.
+// TestMCPMessagesNeedPermission checks that a program below the
+// mucker floor cannot drive somebody's client.
 func TestMCPMessagesNeedPermission(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 	h.send("#$#mcp version: 2.1 to: 2.1")
 	h.out()
 
-	// The program is owned by the wizard, who is running it, so the owner
-	// exemption applies and this must succeed.
+	// The program is owned by the wizard, who is running it, so
+	// the owner exemption applies and this must succeed.
 	h.installProgram(t, "mine", `: main
   descr "org-fuzzball-notify" 1.0 1.0 mcp_register
   me @ "registered" notify
@@ -322,7 +326,8 @@ func TestMCPMessagesNeedPermission(t *testing.T) {
 	}
 }
 
-// authKeyFrom pulls the authentication key out of a negotiation transcript.
+// authKeyFrom pulls the authentication key out of a negotiation
+// transcript.
 func authKeyFrom(t *testing.T, transcript string) string {
 	t.Helper()
 	for _, line := range strings.Split(transcript, "\n") {

@@ -1,12 +1,13 @@
 package muf
 
-// MCP and MCP-GUI primitives: how a program talks to a client out of band, and
-// draws dialogs on the ones that can show them.
+// MCP and MCP-GUI primitives: how a program talks to a client out of
+// band, and draws dialogs on the ones that can show them.
 //
-// These are gated at the mucker level the mcp_muf_mlev parameter names, which
-// the generated table applies, with one addition upstream makes: a program's
-// own caller may use them regardless, so a library can offer a dialog to a
-// program that could not open one itself.
+// These are gated at the mucker level the mcp_muf_mlev parameter
+// names, which the generated table applies, with one addition
+// upstream makes: a program's own caller may use them regardless, so
+// a library can offer a dialog to a program that could not open one
+// itself.
 
 func init() {
 	register("MCP_SUPPORTS", func(f *Frame) (*Result, error) {
@@ -103,9 +104,10 @@ func init() {
 		return nil, h.MCPSend(descr, pkg, name, list)
 	})
 
-	// MCP_REGISTER_EVENT offers the package a program uses to receive
-	// events rather than messages. Emerald has no event mechanism of its
-	// own yet, so it registers the package and nothing more.
+	// MCP_REGISTER_EVENT offers the package a program uses to
+	// receive events rather than messages. Emerald has no event
+	// mechanism of its own yet, so it registers the package and
+	// nothing more.
 	register("MCP_REGISTER_EVENT", func(f *Frame) (*Result, error) {
 		maxVer, err := f.popFloat()
 		if err != nil {
@@ -175,8 +177,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// The dialog's own fields are set last so a caller cannot
-		// override them from the options dictionary.
+		// The dialog's own fields are set last so a caller
+		// cannot override them from the options dictionary.
 		list = replaceArg(list, "title", title)
 		list = replaceArg(list, "type", winType)
 		list = replaceArg(list, "dlogid", id)
@@ -261,8 +263,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// Recorded here as well as sent, so a program reads back what
-		// it just set rather than waiting for the client to echo it.
+		// Recorded here as well as sent, so a program reads
+		// back what it just set rather than waiting for the
+		// client to echo it.
 		h.GUISetValue(id, ctrl, lines)
 		return nil, h.MCPSend(descr, guiPackage, "ctrl-value", []MCPArg{
 			{Name: "dlogid", Lines: []string{id}},
@@ -300,8 +303,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// A control's initial value is remembered locally too, for the
-		// same reason GUI_VALUE_SET does it.
+		// A control's initial value is remembered locally
+		// too, for the same reason GUI_VALUE_SET does it.
 		if lines, ok := argLines(list, "value"); ok {
 			h.GUISetValue(id, ctrl, lines)
 		}
@@ -311,8 +314,8 @@ func init() {
 	})
 
 	// GUI_CTRL_COMMAND is the one of these upstream does not
-	// permission-check: a control command can only reach a dialog that
-	// already exists, and opening one needs the permission.
+	// permission-check: a control command can only reach a dialog
+	// that already exists, and opening one needs the permission.
 	register("GUI_CTRL_COMMAND", func(f *Frame) (*Result, error) {
 		args, err := f.popArrayArg(4, "Dictionary of arguments expected.")
 		if err != nil {
@@ -344,15 +347,17 @@ func init() {
 	})
 }
 
-// guiPackage is the MCP package that draws dialogs, from include/mcpgui.h.
+// guiPackage is the MCP package that draws dialogs, from
+// include/mcpgui.h.
 const guiPackage = "org-fuzzball-gui"
 
 // checkMCPPerm applies upstream's CHECKMCPPERM.
 //
-// The floor is a @tune parameter rather than a constant, so it cannot go in
-// the generated mucker-level table and is checked here instead. A program
-// below the floor may still use these when the player running it owns it,
-// which is what lets somebody drive their own dialogs without a mucker bit.
+// The floor is a @tune parameter rather than a constant, so it cannot
+// go in the generated mucker-level table and is checked here instead.
+// A program below the floor may still use these when the player
+// running it owns it, which is what lets somebody drive their own
+// dialogs without a mucker bit.
 func (f *Frame) checkMCPPerm(h Host) error {
 	if f.MLevel() >= h.MCPMinLevel() {
 		return nil
@@ -363,8 +368,8 @@ func (f *Frame) checkMCPPerm(h Host) error {
 	return errf("Permission denied!!!")
 }
 
-// guiDialogCommand sends a message naming only a dialog, and optionally
-// forgets the dialog afterwards.
+// guiDialogCommand sends a message naming only a dialog, and
+// optionally forgets the dialog afterwards.
 func (f *Frame) guiDialogCommand(name string, closing bool) error {
 	id, h, err := f.dialogAndHost()
 	if err != nil {
@@ -411,8 +416,9 @@ func (f *Frame) descrAndHost() (int, Host, error) {
 	return int(n), h, err
 }
 
-// version renders a package version the way GUI_AVAILABLE and MCP_SUPPORTS
-// report one: the major number plus the minor in thousandths, so 1.3 is 1.003.
+// version renders a package version the way GUI_AVAILABLE and
+// MCP_SUPPORTS report one: the major number plus the minor in
+// thousandths, so 1.3 is 1.003.
 func version(major, minor int) float64 {
 	return float64(major) + float64(minor)/1000.0
 }
@@ -425,8 +431,8 @@ func splitVersion(v float64) (major, minor int) {
 
 // mcpArgsFrom turns a MUF dictionary into message arguments.
 //
-// A list value becomes a multi-line argument, which is how a program sends
-// something like a program's source.
+// A list value becomes a multi-line argument, which is how a program
+// sends something like a program's source.
 func mcpArgsFrom(a *Array) ([]MCPArg, error) {
 	if a == nil {
 		return nil, nil
@@ -477,8 +483,8 @@ func valueLines(v Value) ([]string, error) {
 	return nil, errf("Unsupported value type in args dictionary. (4)")
 }
 
-// replaceArg sets an argument, removing any the caller supplied under the same
-// name.
+// replaceArg sets an argument, removing any the caller supplied under
+// the same name.
 func replaceArg(args []MCPArg, name, value string) []MCPArg {
 	kept := args[:0]
 	for _, a := range args {

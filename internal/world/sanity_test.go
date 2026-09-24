@@ -7,8 +7,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// sane builds a small, consistent world: a room (#0), a player in it (#1), a
-// thing the player carries (#2), and an exit on the room (#3).
+// sane builds a small, consistent world: a room (#0), a player in it
+// (#1), a thing the player carries (#2), and an exit on the room
+// (#3).
 func sane(t *testing.T) *World {
 	t.Helper()
 	w := New()
@@ -107,8 +108,8 @@ func TestCheckFindsDamage(t *testing.T) {
 		}, "doesn't have a name"},
 
 		{"a loop in a contents chain", func(w *World) {
-			// The thing points back at itself, so walking the
-			// player's contents never ends.
+			// The thing points back at itself, so walking
+			// the player's contents never ends.
 			w.Get(2).Next = 2
 		}, "loop"},
 	}
@@ -126,11 +127,12 @@ func TestCheckFindsDamage(t *testing.T) {
 	}
 }
 
-// TestFixRepairsWhatCheckFinds damages a world in every way the fixer claims
-// to handle, repairs it, and checks that nothing is left.
+// TestFixRepairsWhatCheckFinds damages a world in every way the fixer
+// claims to handle, repairs it, and checks that nothing is left.
 func TestFixRepairsWhatCheckFinds(t *testing.T) {
 	w := sane(t)
-	// The starting room has to exist for players to be sent to it.
+	// The starting room has to exist for players to be sent to
+	// it.
 	if err := w.SetTune("player_start", "#0"); err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +158,8 @@ func TestFixRepairsWhatCheckFinds(t *testing.T) {
 	}
 }
 
-// TestFixReportsWhatItCannotRepair checks that damage with nothing left to
-// reason from is reported rather than papered over.
+// TestFixReportsWhatItCannotRepair checks that damage with nothing
+// left to reason from is reported rather than papered over.
 func TestFixReportsWhatItCannotRepair(t *testing.T) {
 	w := sane(t)
 	if err := w.SetTune("player_start", "#0"); err != nil {
@@ -167,13 +169,14 @@ func TestFixReportsWhatItCannotRepair(t *testing.T) {
 	w.Get(2).Flags = w.Get(2).Flags&^ref.Flags(ref.TypeMask) | ref.Flags(7)
 
 	_, unfixed := w.Fix()
-	if len(unfixed) != 1 || !strings.Contains(unfixed[0].Problem, "unknown object type") {
+	if len(unfixed) != 1 ||
+		!strings.Contains(unfixed[0].Problem, "unknown object type") {
 		t.Errorf("expected one unfixable finding, got %+v", unfixed)
 	}
 }
 
-// TestFixCreatesLostAndFound checks that an object whose owner cannot be
-// worked out is given somewhere to go rather than being discarded.
+// TestFixCreatesLostAndFound checks that an object whose owner cannot
+// be worked out is given somewhere to go rather than being discarded.
 func TestFixCreatesLostAndFound(t *testing.T) {
 	w := sane(t)
 	if err := w.SetTune("player_start", "#0"); err != nil {
@@ -186,7 +189,8 @@ func TestFixCreatesLostAndFound(t *testing.T) {
 	if !hasProblem(log, "lost+found") {
 		t.Fatalf("no lost+found was made:\n%s", strings.Join(log, "\n"))
 	}
-	if o := w.Get(2); !w.Valid(o.Owner) || w.Get(o.Owner).Type() != ref.TypePlayer {
+	if o := w.Get(2); !w.Valid(o.Owner) ||
+		w.Get(o.Owner).Type() != ref.TypePlayer {
 		t.Errorf("the thing is still owned by %v", w.Get(2).Owner)
 	}
 	if found := check(w); len(found) > 0 {

@@ -1,7 +1,7 @@
 // Package e2e drives a real server over a real TLS socket.
 //
-// It is the M3 acceptance check: dial the listener, log in as the starter
-// world's #1, walk the world and read what comes back.
+// It is the M3 acceptance check: dial the listener, log in as the
+// starter world's #1, walk the world and read what comes back.
 package e2e
 
 import (
@@ -64,7 +64,8 @@ type testServer struct {
 	w    *world.World
 }
 
-// startServer loads the starter world and serves it over TLS on a free port.
+// startServer loads the starter world and serves it over TLS on a
+// free port.
 func startServer(t *testing.T) *testServer {
 	t.Helper()
 
@@ -81,7 +82,9 @@ func startServer(t *testing.T) *testServer {
 	macros := make([]world.Macro, 0, len(res.Macros))
 	for _, m := range res.Macros {
 		macros = append(macros, world.Macro{
-			Name: m.Name, Definition: m.Definition, Owner: m.Owner,
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      m.Owner,
 		})
 	}
 	w.SetMacros(macros)
@@ -147,8 +150,9 @@ func (c *client) send(line string) {
 	}
 }
 
-// readUntil collects output until want appears, or the deadline passes.
-// It returns everything read, so a failure can show the whole transcript.
+// readUntil collects output until want appears, or the deadline
+// passes. It returns everything read, so a failure can show the whole
+// transcript.
 func (c *client) readUntil(want string, timeout time.Duration) (string, bool) {
 	c.t.Helper()
 	var sb strings.Builder
@@ -181,7 +185,8 @@ func (c *client) expect(want string) string {
 	return got
 }
 
-// drain reads whatever is available, so later reads are not confused by it.
+// drain reads whatever is available, so later reads are not confused
+// by it.
 func (c *client) drain(d time.Duration) string {
 	var sb strings.Builder
 	_ = c.conn.SetReadDeadline(time.Now().Add(d))
@@ -198,9 +203,9 @@ func (c *client) drain(d time.Duration) string {
 // dbrefIn extracts the "#123" a creation message reports.
 func dbrefIn(t *testing.T, transcript string) string {
 	t.Helper()
-	// Creation messages name the new object the way examine does, as
-	// "Name(#123FLAGS)", so the dbref runs from the '#' to the first
-	// non-digit after it.
+	// Creation messages name the new object the way examine does,
+	// as "Name(#123FLAGS)", so the dbref runs from the '#' to the
+	// first non-digit after it.
 	i := strings.Index(transcript, "(#")
 	if i < 0 {
 		t.Fatalf("no dbref in %q", transcript)
@@ -227,8 +232,8 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	// #1's password is documented in the starter world's README.
 	c.send("connect One potrzebie")
 
-	// Logging in shows the room, so its name proves both the login and the
-	// look worked.
+	// Logging in shows the room, so its name proves both the
+	// login and the look worked.
 	transcript := c.expect("Room Zero")
 	if strings.Contains(transcript, "Either that player") {
 		t.Fatalf("login was refused:\n%s", transcript)
@@ -238,7 +243,8 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	// The room has a description.
 	c.send("look")
 	got := c.expect("Room Zero")
-	if !strings.Contains(got, "dark") && !strings.Contains(got, "You see nothing special") {
+	if !strings.Contains(got, "dark") &&
+		!strings.Contains(got, "You see nothing special") {
 		t.Errorf("look produced no description:\n%s", got)
 	}
 
@@ -249,9 +255,9 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 		t.Errorf("WHO did not list One:\n%s", got)
 	}
 
-	// Speech is echoed back.
-	// The starter world defines its own "say" exit, which wins over the
-	// built-in. A wizard's "!" prefix skips exit matching to reach ours.
+	// Speech is echoed back. The starter world defines its own
+	// "say" exit, which wins over the built-in. A wizard's "!"
+	// prefix skips exit matching to reach ours.
 	c.send("!say hello world")
 	c.expect(`You say, "hello world"`)
 
@@ -267,8 +273,8 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	c.send("@dig Test Chamber")
 	got = c.expect("created.")
 	t.Logf("dig: %s", strings.TrimSpace(got))
-	// A room that was just dug is somewhere else entirely, so it is linked
-	// by dbref, which is the normal idiom.
+	// A room that was just dug is somewhere else entirely, so it
+	// is linked by dbref, which is the normal idiom.
 	room := dbrefIn(t, got)
 
 	c.send("@open testexit=" + room)
@@ -277,8 +283,8 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	c.send("testexit")
 	c.expect("Test Chamber")
 
-	// And back out again, by teleporting home.
-	// This world's "@tel" exit lists "@teleport" among its aliases, so the
+	// And back out again, by teleporting home. This world's
+	// "@tel" exit lists "@teleport" among its aliases, so the
 	// built-in needs the wizard override to reach.
 	c.send("!@teleport me=#0")
 	c.expect("Room Zero")
@@ -287,8 +293,8 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	c.expect("Goodbye")
 }
 
-// TestBadPasswordIsRefused checks the failure path does not leak which half
-// was wrong.
+// TestBadPasswordIsRefused checks the failure path does not leak
+// which half was wrong.
 func TestBadPasswordIsRefused(t *testing.T) {
 	ts := startServer(t)
 	c := ts.dial(t)
@@ -306,8 +312,8 @@ func TestBadPasswordIsRefused(t *testing.T) {
 	c.expect("player does not exist")
 }
 
-// TestLegacyPasswordIsUpgraded checks that logging in with a password stored
-// in Fuzzball's format rewrites it as Argon2id.
+// TestLegacyPasswordIsUpgraded checks that logging in with a password
+// stored in Fuzzball's format rewrites it as Argon2id.
 func TestLegacyPasswordIsUpgraded(t *testing.T) {
 	ts := startServer(t)
 
@@ -346,18 +352,18 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 	a.send("connect One potrzebie")
 	a.expect("Room Zero")
 
-	// Put Keeper in the same room as One, so they can see each other.
-	// Registration is on in the starter world, which means characters are
-	// made out of band rather than at the login screen. Turn it off, as an
-	// operator would.
+	// Put Keeper in the same room as One, so they can see each
+	// other. Registration is on in the starter world, which means
+	// characters are made out of band rather than at the login
+	// screen. Turn it off, as an operator would.
 	a.send("@tune registration=no")
 	a.expect("registration set to")
 
 	b := ts.dial(t)
 	b.expect("Fuzzball Emerald")
 	b.send("create Visitor hunter2")
-	// A new character starts wherever player_start points, which in the
-	// starter world is not Room Zero.
+	// A new character starts wherever player_start points, which
+	// in the starter world is not Room Zero.
 	b.expect("Cave of Awakening")
 
 	// One is a wizard, so can bring the newcomer along.
@@ -366,8 +372,9 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 	b.drain(300 * time.Millisecond)
 	a.drain(300 * time.Millisecond)
 
-	// One speaks and Visitor listens. The wizard override is needed to reach
-	// the built-in past this world's "say" exit, and only One has it.
+	// One speaks and Visitor listens. The wizard override is
+	// needed to reach the built-in past this world's "say" exit,
+	// and only One has it.
 	a.send("!say knock knock")
 	got := b.expect("knock knock")
 	if !strings.Contains(got, "One says") {

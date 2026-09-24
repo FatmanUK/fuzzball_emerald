@@ -9,16 +9,17 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestProgramCreatesAndEdits walks the whole cycle: make a program, type it in,
-// save it, and run it.
+// TestProgramCreatesAndEdits walks the whole cycle: make a program,
+// type it in, save it, and run it.
 func TestProgramCreatesAndEdits(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
 	h.send("@program greeter")
-	// The listing on entry says nothing is available: upstream's current
-	// line starts at zero and its walk runs off the end of the buffer, so
-	// this is what @program and @edit both print before anything is typed.
+	// The listing on entry says nothing is available: upstream's
+	// current line starts at zero and its walk runs off the end
+	// of the buffer, so this is what @program and @edit both
+	// print before anything is typed.
 	if got := h.out(); !strings.Contains(got, "Program greeter(#") ||
 		!strings.Contains(got, "Entering editor for greeter(#") ||
 		!strings.Contains(got, "Line not available for display.") {
@@ -48,13 +49,15 @@ func TestProgramCreatesAndEdits(t *testing.T) {
 		t.Fatalf("q said %q", got)
 	}
 
-	// The source is stored, and the object is no longer locked for editing.
+	// The source is stored, and the object is no longer locked
+	// for editing.
 	var src string
 	var locked bool
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		r, _ := w.PlayerNamed("Wizard")
 		for _, c := range w.Contents(r) {
-			if o := w.Get(c); o != nil && o.Type() == ref.TypeProgram {
+			if o := w.Get(c); o != nil &&
+				o.Type() == ref.TypeProgram {
 				src, _ = w.Source(c)
 				locked = o.Flags&ref.Internal != 0
 			}
@@ -70,8 +73,8 @@ func TestProgramCreatesAndEdits(t *testing.T) {
 	}
 }
 
-// TestEditorInsertPositions pins where typed lines land, which is the part of
-// the editor most easily got subtly wrong.
+// TestEditorInsertPositions pins where typed lines land, which is the
+// part of the editor most easily got subtly wrong.
 func TestEditorInsertPositions(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -92,8 +95,9 @@ func TestEditorInsertPositions(t *testing.T) {
 	h.send(".")
 	h.out()
 
-	// Arguments come before the command letter, always: "1 n" is "n with
-	// argument 1", and "n 1" would be read as the command "1".
+	// Arguments come before the command letter, always: "1 n" is
+	// "n with argument 1", and "n 1" would be read as the command
+	// "1".
 	h.send("1 n")
 	h.out()
 	h.send("1 99 l")
@@ -144,7 +148,8 @@ func TestEditorDeletesLines(t *testing.T) {
 	}
 }
 
-// TestEditorCancelDiscards checks that "x" leaves the stored source alone.
+// TestEditorCancelDiscards checks that "x" leaves the stored source
+// alone.
 func TestEditorCancelDiscards(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -172,8 +177,9 @@ func TestEditorCancelDiscards(t *testing.T) {
 	}
 }
 
-// TestEditorReportsCompileErrors checks the error carries upstream's wording
-// and the line it happened on, which is what a programmer reads.
+// TestEditorReportsCompileErrors checks the error carries upstream's
+// wording and the line it happened on, which is what a programmer
+// reads.
 func TestEditorReportsCompileErrors(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -207,15 +213,16 @@ func TestEditorRefusesASecondEditor(t *testing.T) {
 
 	h.send("@edit shared")
 	h.out()
-	// A second @edit arrives through the editor, not the parser, so it is
-	// read as editor commands. Leave first, then prove the lock by setting
-	// it by hand.
+	// A second @edit arrives through the editor, not the parser,
+	// so it is read as editor commands. Leave first, then prove
+	// the lock by setting it by hand.
 	h.send("q")
 	h.out()
 
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		for _, c := range w.Contents(h.wizRef()) {
-			if o := w.Get(c); o != nil && o.Type() == ref.TypeProgram {
+			if o := w.Get(c); o != nil &&
+				o.Type() == ref.TypeProgram {
 				o.Flags |= ref.Internal
 			}
 		}
@@ -228,24 +235,26 @@ func TestEditorRefusesASecondEditor(t *testing.T) {
 	}
 }
 
-// TestEditorTakesEveryLine checks that the editor, not the command parser,
-// sees what a player types while a session is open.
+// TestEditorTakesEveryLine checks that the editor, not the command
+// parser, sees what a player types while a session is open.
 func TestEditorTakesEveryLine(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 	h.send("@program swallow")
 	h.out()
 
-	// Only the first letter of the last word means anything, so "jump" is
-	// an illegal editor command rather than reaching the parser. ("look"
-	// would not do here: it starts with 'l', the list command.)
+	// Only the first letter of the last word means anything, so
+	// "jump" is an illegal editor command rather than reaching
+	// the parser. ("look" would not do here: it starts with 'l',
+	// the list command.)
 	h.send("jump")
 	if got := h.out(); !strings.Contains(got, "Illegal editor command.") {
 		t.Errorf("the parser saw a line meant for the editor: %q", got)
 	}
 
-	// QUIT and @Q are answered before the editor sees them, so a player is
-	// never trapped. @Q with no program running says nothing at all.
+	// QUIT and @Q are answered before the editor sees them, so a
+	// player is never trapped. @Q with no program running says
+	// nothing at all.
 	h.send("@Q")
 	if got := h.out(); got != "" {
 		t.Errorf("@Q in the editor said %q, want nothing", got)
@@ -258,8 +267,8 @@ func TestEditorTakesEveryLine(t *testing.T) {
 	}
 }
 
-// TestListShowsStoredSource checks @list, including that it reads what is
-// saved rather than an open buffer.
+// TestListShowsStoredSource checks @list, including that it reads
+// what is saved rather than an open buffer.
 func TestListShowsStoredSource(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -282,8 +291,8 @@ func TestListShowsStoredSource(t *testing.T) {
 	}
 }
 
-// TestMacrosDefineAndDelete covers the editor's macro table, which the
-// compiler reads when it meets a '.name' token.
+// TestMacrosDefineAndDelete covers the editor's macro table, which
+// the compiler reads when it meets a '.name' token.
 func TestMacrosDefineAndDelete(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -318,7 +327,8 @@ func TestMacrosDefineAndDelete(t *testing.T) {
 	}
 }
 
-// TestPublicsAndDisassembly covers the two commands that read compiled output.
+// TestPublicsAndDisassembly covers the two commands that read
+// compiled output.
 func TestPublicsAndDisassembly(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -333,12 +343,14 @@ func TestPublicsAndDisassembly(t *testing.T) {
 
 	h.send("p")
 	got := h.out()
-	if !strings.Contains(got, "PUBLIC functions:") || !strings.Contains(got, "helper") {
+	if !strings.Contains(got, "PUBLIC functions:") ||
+		!strings.Contains(got, "helper") {
 		t.Errorf("p said:\n%s", got)
 	}
 
-	// "u" shows what a compile produced, and never compiles anything
-	// itself, so it says nothing is there until "c" has run.
+	// "u" shows what a compile produced, and never compiles
+	// anything itself, so it says nothing is there until "c" has
+	// run.
 	h.send("u")
 	if got := h.out(); !strings.Contains(got, "Nothing to disassemble!") {
 		t.Errorf("u before compiling said:\n%s", got)
@@ -351,8 +363,9 @@ func TestPublicsAndDisassembly(t *testing.T) {
 	}
 }
 
-// TestEditingSurvivesReconnect checks that a session outlives the connection
-// that opened it and says so, rather than silently eating input.
+// TestEditingSurvivesReconnect checks that a session outlives the
+// connection that opened it and says so, rather than silently eating
+// input.
 func TestEditingSurvivesReconnect(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -376,14 +389,15 @@ func TestEditingSurvivesReconnect(t *testing.T) {
 	}
 }
 
-// sourceOfProgram returns the source of the only program the wizard is
-// carrying.
+// sourceOfProgram returns the source of the only program the wizard
+// is carrying.
 func (h *harness) sourceOfProgram(t *testing.T) string {
 	t.Helper()
 	var src string
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		for _, c := range w.Contents(h.wizRef()) {
-			if o := w.Get(c); o != nil && o.Type() == ref.TypeProgram {
+			if o := w.Get(c); o != nil &&
+				o.Type() == ref.TypeProgram {
 				src, _ = w.Source(c)
 			}
 		}

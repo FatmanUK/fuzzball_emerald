@@ -1,10 +1,11 @@
-// Package golden runs the same session against this server and against a
-// Fuzzball 7 built from the C sources, and compares what each says.
+// Package golden runs the same session against this server and
+// against a Fuzzball 7 built from the C sources, and compares what
+// each says.
 //
-// It exists because porting 400 primitives by reading C is guesswork without
-// an oracle. A case here states a MUF snippet; the harness builds a database
-// holding it, drives both servers through the same script, and diffs the
-// transcripts.
+// It exists because porting 400 primitives by reading C is guesswork
+// without an oracle. A case here states a MUF snippet; the harness
+// builds a database holding it, drives both servers through the same
+// script, and diffs the transcripts.
 package golden
 
 import (
@@ -17,8 +18,9 @@ import (
 
 // Fixture is a database both servers can load.
 //
-// Fuzzball keeps program source in muf/<dbref>.m beside the dump rather than
-// inside it, so a fixture is a directory rather than a file.
+// Fuzzball keeps program source in muf/<dbref>.m beside the dump
+// rather than inside it, so a fixture is a directory rather than a
+// file.
 type Fixture struct {
 	Dir      string
 	DumpPath string
@@ -38,7 +40,8 @@ type object struct {
 	tail []string
 }
 
-// Object types and the flag bits the fixtures need, from include/db.h.
+// Object types and the flag bits the fixtures need, from
+// include/db.h.
 const (
 	typeRoom    = 0x0
 	typeThing   = 0x1
@@ -53,35 +56,38 @@ const (
 	flagHaven  = 0x10000
 )
 
-// The password Fuzzball's own minimal database uses for #1, which its README
-// documents. Using it keeps the fixture and the oracle's default in step.
+// The password Fuzzball's own minimal database uses for #1, which its
+// README documents. Using it keeps the fixture and the oracle's
+// default in step.
 const godPassword = "potrzebie"
 
-// md5OfGodPassword is the base64 MD5 of that password, the form a dump stores.
+// md5OfGodPassword is the base64 MD5 of that password, the form a
+// dump stores.
 const md5OfGodPassword = "CuG4ZtGvyRbfJubgNISTcg=="
 
-// WriteFixture builds a database holding one MUF program, an exit that runs
-// it, a room and a wizard player.
+// WriteFixture builds a database holding one MUF program, an exit
+// that runs it, a room and a wizard player.
 func WriteFixture(dir, source string) (*Fixture, error) {
 	return WriteMultiFixture(dir, []Program{{Name: "test", Source: source}})
 }
 
-// Program is one test program in a fixture, reachable through an exit of the
-// same name.
+// Program is one test program in a fixture, reachable through an exit
+// of the same name.
 type Program struct {
 	Name   string
 	Source string
 }
 
-// WriteMultiFixture builds a database holding several programs, each with its
-// own exit.
+// WriteMultiFixture builds a database holding several programs, each
+// with its own exit.
 //
-// Several rather than one because starting a container costs about two
-// seconds: putting every case in one database turns a per-case cost into a
-// per-run one.
+// Several rather than one because starting a container costs about
+// two seconds: putting every case in one database turns a per-case
+// cost into a per-run one.
 //
-// The layout mirrors the minimal database Fuzzball ships: #0 is the room, #1
-// is the wizard, and the programs and their exits follow in pairs.
+// The layout mirrors the minimal database Fuzzball ships: #0 is the
+// room, #1 is the wizard, and the programs and their exits follow in
+// pairs.
 func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 	const (
 		room = 0
@@ -100,8 +106,8 @@ func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 		return nil, fmt.Errorf("a fixture needs at least one program")
 	}
 
-	// Programs go in the wizard's inventory and exits on the room, each
-	// chain threaded through the next field.
+	// Programs go in the wizard's inventory and exits on the
+	// room, each chain threaded through the next field.
 	firstProg := 2
 	firstExit := firstProg + len(programs)
 
@@ -117,8 +123,8 @@ func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 		{
 			ref: god, name: "One",
 			location: room, contents: firstProg, next: -1,
-			// A wizard at mucker level 3, so the programs may do
-			// whatever they like.
+			// A wizard at mucker level 3, so the programs
+			// may do whatever they like.
 			flags: typePlayer | flagWizard | flagMucker | flagSMuck,
 			props: []string{"_/de:2:The test wizard."},
 			// home, exits, password
@@ -141,16 +147,22 @@ func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 
 		objs = append(objs,
 			object{
-				ref: progRef, name: prog.Name + ".muf",
-				location: god, contents: -1, next: nextProg,
-				flags: typeProgram | flagMucker | flagSMuck | flagLinkOK,
-				tail:  []string{itoa(god)},
+				ref:      progRef,
+				name:     prog.Name + ".muf",
+				location: god,
+				contents: -1,
+				next:     nextProg,
+				flags:    typeProgram | flagMucker | flagSMuck | flagLinkOK,
+				tail:     []string{itoa(god)},
 			},
 			object{
 				ref: exitRef, name: prog.Name,
-				location: room, contents: -1, next: nextExit,
-				flags: typeExit,
-				// destination count, destinations, owner
+				location: room,
+				contents: -1,
+				next:     nextExit,
+				flags:    typeExit,
+				// destination count, destinations,
+				// owner
 				tail: []string{"1", itoa(progRef), itoa(god)},
 			})
 	}
@@ -165,7 +177,8 @@ func WriteMultiFixture(dir string, programs []Program) (*Fixture, error) {
 			return nil, err
 		}
 	}
-	// An empty macro table, so neither server falls back to a stale one.
+	// An empty macro table, so neither server falls back to a
+	// stale one.
 	if err := os.WriteFile(filepath.Join(mufDir, "macros"), nil, 0o644); err != nil {
 		return nil, err
 	}
@@ -178,13 +191,15 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 // writeDump renders objects in the Foxen9 format both servers read.
 //
-// Objects are written highest ref first, as db_write does. The parameter block
-// is empty, which leaves every @tune setting at its default.
+// Objects are written highest ref first, as db_write does. The
+// parameter block is empty, which leaves every @tune setting at its
+// default.
 func writeDump(path string, objs []object) error {
 	var b strings.Builder
 
 	b.WriteString("***Foxen9 TinyMUCK DUMP Format***\n")
-	// The object count, an ignored flags word, and the number of parameters.
+	// The object count, an ignored flags word, and the number of
+	// parameters.
 	fmt.Fprintf(&b, "%d\n0\n0\n", len(objs))
 
 	for i := len(objs) - 1; i >= 0; i-- {
@@ -192,8 +207,8 @@ func writeDump(path string, objs []object) error {
 		fmt.Fprintf(&b, "#%d\n", o.ref)
 		b.WriteString(o.name + "\n")
 		fmt.Fprintf(&b, "%d\n%d\n%d\n%d\n", o.location, o.contents, o.next, o.flags)
-		// Created, last used, use count, modified. Fixed values keep the
-		// two servers' output identical.
+		// Created, last used, use count, modified. Fixed
+		// values keep the two servers' output identical.
 		b.WriteString("1000000000\n1000000000\n0\n1000000000\n")
 
 		if len(o.props) > 0 {
@@ -203,9 +218,10 @@ func writeDump(path string, objs []object) error {
 			}
 			b.WriteString("*End*\n")
 		} else {
-			// With no property block the type-specific fields follow
-			// the timestamps directly, and the first of them takes
-			// the slot the block would have used.
+			// With no property block the type-specific
+			// fields follow the timestamps directly, and
+			// the first of them takes the slot the block
+			// would have used.
 			b.WriteString(o.tail[0] + "\n")
 			for _, t := range o.tail[1:] {
 				b.WriteString(t + "\n")

@@ -22,16 +22,18 @@ type Store struct {
 	log *slog.Logger
 }
 
-// Open connects to Postgres. It does not create any schema; call Migrate.
+// Open connects to Postgres. It does not create any schema; call
+// Migrate.
 func Open(ctx context.Context, dsn string, log *slog.Logger) (*Store, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		// GORM's own logging duplicates ours and defaults to stdout.
+		// GORM's own logging duplicates ours and defaults to
+		// stdout.
 		Logger: logger.Discard,
-		// The world goroutine assigns every ref, so GORM has no reason to
-		// ask Postgres what a write produced.
+		// The world goroutine assigns every ref, so GORM has
+		// no reason to ask Postgres what a write produced.
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
@@ -42,8 +44,8 @@ func Open(ctx context.Context, dsn string, log *slog.Logger) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// One writer goroutine plus the occasional load means a small pool is
-	// plenty.
+	// One writer goroutine plus the occasional load means a small
+	// pool is plenty.
 	sqlDB.SetMaxOpenConns(8)
 	sqlDB.SetMaxIdleConns(4)
 	sqlDB.SetConnMaxLifetime(time.Hour)
@@ -71,8 +73,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
-// IsEmpty reports whether the database holds no objects, which is how the
-// server decides whether it needs a world imported.
+// IsEmpty reports whether the database holds no objects, which is how
+// the server decides whether it needs a world imported.
 func (s *Store) IsEmpty(ctx context.Context) (bool, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&Object{}).Count(&n).Error; err != nil {
@@ -81,8 +83,8 @@ func (s *Store) IsEmpty(ctx context.Context) (bool, error) {
 	return n == 0, nil
 }
 
-// Flush writes a snapshot in one transaction, so a crash mid-write leaves the
-// previous state intact rather than a half-applied batch.
+// Flush writes a snapshot in one transaction, so a crash mid-write
+// leaves the previous state intact rather than a half-applied batch.
 func (s *Store) Flush(ctx context.Context, snap world.Snapshot) error {
 	if snap.Empty() {
 		return nil
@@ -132,7 +134,9 @@ func writeObjects(tx *gorm.DB, objs []*world.Object) error {
 		}
 		for i, d := range o.Dest {
 			destRows = append(destRows, ExitDest{
-				Ref: int32(o.Ref), Idx: int32(i), Dest: int32(d),
+				Ref:  int32(o.Ref),
+				Idx:  int32(i),
+				Dest: int32(d),
 			})
 		}
 	}
@@ -142,10 +146,10 @@ func writeObjects(tx *gorm.DB, objs []*world.Object) error {
 		return fmt.Errorf("writing objects: %w", err)
 	}
 
-	// Properties and destinations are replaced wholesale for each object in
-	// the batch. Tracking individual property changes would save writes on
-	// objects with large property trees, but it is not worth the
-	// bookkeeping until a profile says so.
+	// Properties and destinations are replaced wholesale for each
+	// object in the batch. Tracking individual property changes
+	// would save writes on objects with large property trees, but
+	// it is not worth the bookkeeping until a profile says so.
 	if err := tx.Where("ref IN ?", refs).Delete(&Property{}).Error; err != nil {
 		return fmt.Errorf("clearing properties: %w", err)
 	}
@@ -197,9 +201,9 @@ func writeTune(tx *gorm.DB, params map[string]string) error {
 	return nil
 }
 
-// writePrograms saves the MUF source of programs changed since the last
-// flush. Only edited programs appear here, so a world with thousands of
-// programs writes nothing until someone saves one.
+// writePrograms saves the MUF source of programs changed since the
+// last flush. Only edited programs appear here, so a world with
+// thousands of programs writes nothing until someone saves one.
 func writePrograms(tx *gorm.DB, sources map[ref.Ref]string) error {
 	if len(sources) == 0 {
 		return nil
@@ -215,8 +219,8 @@ func writePrograms(tx *gorm.DB, sources map[ref.Ref]string) error {
 	return nil
 }
 
-// writeMacros replaces the editor's macro table. It is written whole, because
-// it is small and a deletion has to be visible.
+// writeMacros replaces the editor's macro table. It is written whole,
+// because it is small and a deletion has to be visible.
 func writeMacros(tx *gorm.DB, macros []world.Macro) error {
 	if macros == nil {
 		return nil
@@ -230,7 +234,9 @@ func writeMacros(tx *gorm.DB, macros []world.Macro) error {
 	rows := make([]Macro, 0, len(macros))
 	for _, m := range macros {
 		rows = append(rows, Macro{
-			Name: m.Name, Definition: m.Definition, Owner: int32(m.Owner),
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      int32(m.Owner),
 		})
 	}
 	if err := tx.CreateInBatches(rows, 200).Error; err != nil {

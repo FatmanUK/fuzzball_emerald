@@ -2,8 +2,9 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 
-// primIndex maps a folded primitive name to its number, which is its index in
-// primNames plus one. Zero means "not a primitive", as get_primitive returns.
+// primIndex maps a folded primitive name to its number, which is its
+// index in primNames plus one. Zero means "not a primitive", as
+// get_primitive returns.
 var primIndex = func() map[string]int {
 	m := make(map[string]int, len(primNames))
 	for i, n := range primNames {
@@ -12,11 +13,12 @@ var primIndex = func() map[string]int {
 	return m
 }()
 
-// PrimNumber returns a primitive's number, or 0 when the name is not one.
+// PrimNumber returns a primitive's number, or 0 when the name is not
+// one.
 //
-// Internal primitives are excluded: their names begin with a space so the
-// tokenizer can never produce them, but a lookup by a crafted name would
-// otherwise find them.
+// Internal primitives are excluded: their names begin with a space so
+// the tokenizer can never produce them, but a lookup by a crafted
+// name would otherwise find them.
 func PrimNumber(name string) int {
 	if name == "" || name[0] == ' ' {
 		return 0
@@ -24,7 +26,8 @@ func PrimNumber(name string) int {
 	return primIndex[ascii.Fold(name)]
 }
 
-// PrimName returns a primitive's name, or "?" when the number is not one.
+// PrimName returns a primitive's name, or "?" when the number is not
+// one.
 func PrimName(n int) string {
 	if n < 1 || n > len(primNames) {
 		return "?"
@@ -32,8 +35,9 @@ func PrimName(n int) string {
 	return primNames[n-1]
 }
 
-// primLevels indexes the mucker-level floors by primitive number, so the
-// dispatcher can check one without a string lookup per instruction.
+// primLevels indexes the mucker-level floors by primitive number, so
+// the dispatcher can check one without a string lookup per
+// instruction.
 var primLevels = func() []int {
 	out := make([]int, len(primNames)+1)
 	for name, lv := range primMLevel {
@@ -44,8 +48,8 @@ var primLevels = func() []int {
 	return out
 }()
 
-// PrimMLevel is the mucker level a primitive requires, or zero when any
-// program may call it.
+// PrimMLevel is the mucker level a primitive requires, or zero when
+// any program may call it.
 func PrimMLevel(n int) int {
 	if n < 1 || n >= len(primLevels) {
 		return 0
@@ -56,8 +60,9 @@ func PrimMLevel(n int) int {
 // PrimCount is how many names the table holds.
 func PrimCount() int { return len(primNames) }
 
-// Numbers of the instructions the compiler emits directly. Looking them up by
-// name rather than hard-coding an index keeps them correct if the table moves.
+// Numbers of the instructions the compiler emits directly. Looking
+// them up by name rather than hard-coding an index keeps them correct
+// if the table moves.
 var (
 	InJmp           = mustPrim("JMP")
 	InRead          = mustPrim("READ")
@@ -69,19 +74,23 @@ var (
 	InCatch         = mustPrim("CATCH")
 	InCatchDetailed = mustPrim("CATCH_DETAILED")
 
-	// dispatched lists those same nine, so a caller counting what is
-	// implemented does not report them as gaps. They are real primitives a
-	// program may name, but the compiler emits them as instructions and
-	// Frame.primitive answers them directly, so they never appear in the
-	// prims map — which has read as "missing" to every survey of this
-	// codebase so far.
+	// dispatched lists those same nine, so a caller counting what
+	// is implemented does not report them as gaps. They are real
+	// primitives a program may name, but the compiler emits them
+	// as instructions and Frame.primitive answers them directly,
+	// so they never appear in the prims map — which has read as
+	// "missing" to every survey of this codebase so far.
 	dispatched = map[int]bool{
-		InJmp: true, InRead: true, InSleep: true, InCall: true,
+		InJmp:     true,
+		InRead:    true,
+		InSleep:   true,
+		InCall:    true,
 		InExecute: true, InExit: true, InEventWaitFor: true,
 		InCatch: true, InCatchDetailed: true,
 	}
 
-	// The internal loop and try primitives, which a program cannot name.
+	// The internal loop and try primitives, which a program
+	// cannot name.
 	InFor     = mustInternalPrim(" FOR")
 	InForeach = mustInternalPrim(" FOREACH")
 	InForIter = mustInternalPrim(" FORITER")
@@ -97,8 +106,8 @@ func mustPrim(name string) int {
 	return n
 }
 
-// mustInternalPrim looks up a name the tokenizer cannot produce, so PrimNumber
-// deliberately refuses it.
+// mustInternalPrim looks up a name the tokenizer cannot produce, so
+// PrimNumber deliberately refuses it.
 func mustInternalPrim(name string) int {
 	n := primIndex[ascii.Fold(name)]
 	if n == 0 {

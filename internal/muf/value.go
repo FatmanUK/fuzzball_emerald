@@ -12,7 +12,8 @@ import (
 // Value is a runtime stack value.
 //
 // It is a tagged struct rather than an interface: MUF pushes and pops
-// constantly, and boxing every integer would dominate the interpreter's cost.
+// constantly, and boxing every integer would dominate the
+// interpreter's cost.
 type Value struct {
 	Type  Type
 	Num   int64
@@ -22,9 +23,9 @@ type Value struct {
 	Array *Array
 	// Addr is a code address, for TypeAddress.
 	Addr int
-	// Lock holds a TypeLock value's parsed expression. A nil Lock is
-	// TRUE_BOOLEXP — an unlocked lock — not the absence of a value; PARSELOCK
-	// is the only primitive that produces one.
+	// Lock holds a TypeLock value's parsed expression. A nil Lock
+	// is TRUE_BOOLEXP — an unlocked lock — not the absence of
+	// a value; PARSELOCK is the only primitive that produces one.
 	Lock *boolexp.Expr
 }
 
@@ -37,15 +38,26 @@ func Bool(b bool) Value {
 	}
 	return Int(n)
 }
-func Float(f float64) Value         { return Value{Type: TypeFloat, Float: f} }
-func Str(s string) Value            { return Value{Type: TypeString, Str: s} }
-func Obj(r ref.Ref) Value           { return Value{Type: TypeObject, Ref: r} }
-func Arr(a *Array) Value            { return Value{Type: TypeArray, Array: a} }
-func Mark() Value                   { return Value{Type: TypeMark} }
-func LockVal(b *boolexp.Expr) Value { return Value{Type: TypeLock, Lock: b} }
+func Float(f float64) Value {
+	return Value{Type: TypeFloat, Float: f}
+}
+func Str(s string) Value {
+	return Value{Type: TypeString, Str: s}
+}
+func Obj(r ref.Ref) Value {
+	return Value{Type: TypeObject, Ref: r}
+}
+func Arr(a *Array) Value {
+	return Value{Type: TypeArray, Array: a}
+}
+func Mark() Value { return Value{Type: TypeMark} }
+func LockVal(b *boolexp.Expr) Value {
+	return Value{Type: TypeLock, Lock: b}
+}
 
-// Truthy reports whether a value counts as true, which MUF decides per type:
-// a non-zero number, a non-empty string, a valid dbref, a non-empty array.
+// Truthy reports whether a value counts as true, which MUF decides
+// per type: a non-zero number, a non-empty string, a valid dbref, a
+// non-empty array.
 func (v Value) Truthy() bool {
 	switch v.Type {
 	case TypeInteger:
@@ -55,7 +67,8 @@ func (v Value) Truthy() bool {
 	case TypeString:
 		return v.Str != ""
 	case TypeObject:
-		// #-1 and the other sentinels are false; a real object is true.
+		// #-1 and the other sentinels are false; a real
+		// object is true.
 		return v.Ref.Ok()
 	case TypeArray:
 		return v.Array != nil && v.Array.Len() > 0
@@ -102,7 +115,8 @@ func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
-// Equal reports whether two values compare equal, across the numeric types.
+// Equal reports whether two values compare equal, across the numeric
+// types.
 func (v Value) Equal(w Value) bool {
 	if v.Type == TypeFloat || w.Type == TypeFloat {
 		a, aok := v.asFloat()
@@ -110,8 +124,8 @@ func (v Value) Equal(w Value) bool {
 		return aok && bok && a == b
 	}
 	if v.Type != w.Type {
-		// An integer and a dbref never compare equal, matching MUF's
-		// strictness about the two.
+		// An integer and a dbref never compare equal,
+		// matching MUF's strictness about the two.
 		return false
 	}
 	switch v.Type {
@@ -140,8 +154,8 @@ func (v Value) asFloat() (float64, bool) {
 	return 0, false
 }
 
-// Error is a MUF runtime failure. It carries the instruction that raised it so
-// the interpreter can report a line.
+// Error is a MUF runtime failure. It carries the instruction that
+// raised it so the interpreter can report a line.
 type Error struct {
 	Msg  string
 	Prim string
@@ -161,8 +175,9 @@ func errf(format string, args ...any) *Error {
 	return &Error{Msg: fmt.Sprintf(format, args...)}
 }
 
-// errSilentAbort is upstream's ERROR_DIE_NOW, a sentinel Run recognises and
-// handles differently from every other error: it is never caught by TRY and
-// never produces an error report. KILL uses it when a program kills its own
-// pid, matching prim_kill's do_abort_silent.
+// errSilentAbort is upstream's ERROR_DIE_NOW, a sentinel Run
+// recognises and handles differently from every other error: it is
+// never caught by TRY and never produces an error report. KILL uses
+// it when a program kills its own pid, matching prim_kill's
+// do_abort_silent.
 var errSilentAbort = &Error{Msg: "killed"}

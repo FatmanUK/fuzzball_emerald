@@ -83,7 +83,9 @@ func cmdServe(args []string) error {
 	table := make([]world.Macro, 0, len(macros))
 	for _, m := range macros {
 		table = append(table, world.Macro{
-			Name: m.Name, Definition: m.Definition, Owner: ref.Ref(m.Owner),
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      ref.Ref(m.Owner),
 		})
 	}
 	w.SetMacros(table)
@@ -135,13 +137,15 @@ func cmdServe(args []string) error {
 	engine.OnTick(gs.OnTick())
 	engine.OnEachOp(gs.OnTick())
 
-	// Run the world first: the listeners enqueue work onto it from their
-	// own goroutines, so it has to be draining before they accept anyone.
+	// Run the world first: the listeners enqueue work onto it
+	// from their own goroutines, so it has to be draining before
+	// they accept anyone.
 	//
-	// The world's context is deliberately *not* derived from the signal
-	// context. A signal has to reach the world in two steps — say goodbye,
-	// then stop — and deriving it would cancel both at once, racing the
-	// farewell against the drain that makes sending impossible.
+	// The world's context is deliberately *not* derived from the
+	// signal context. A signal has to reach the world in two
+	// steps — say goodbye, then stop — and deriving it would
+	// cancel both at once, racing the farewell against the drain
+	// that makes sending impossible.
 	runCtx, stopWorld := context.WithCancel(context.Background())
 	defer stopWorld()
 	gs.OnShutdown(stopWorld)
@@ -184,10 +188,11 @@ func cmdServe(args []string) error {
 		}(ls)
 	}
 
-	// On a signal, tell everyone still connected before stopping the world:
-	// AnnounceShutdown waits for the message to be queued, and only then is
-	// the drain allowed to begin. @shutdown reaches the same two steps from
-	// the other direction, having already announced before calling
+	// On a signal, tell everyone still connected before stopping
+	// the world: AnnounceShutdown waits for the message to be
+	// queued, and only then is the drain allowed to begin.
+	// @shutdown reaches the same two steps from the other
+	// direction, having already announced before calling
 	// stopWorld itself.
 	go func() {
 		<-ctx.Done()
@@ -196,8 +201,8 @@ func cmdServe(args []string) error {
 		stopWorld()
 	}()
 
-	// The world goroutine returning is what ends the server: it happens on
-	// a signal, or when a wizard types @shutdown.
+	// The world goroutine returning is what ends the server: it
+	// happens on a signal, or when a wizard types @shutdown.
 	err = <-worldDone
 	for _, ls := range listeners {
 		_ = ls.Close()
@@ -211,10 +216,10 @@ func cmdServe(args []string) error {
 
 // servePprof runs the profiling endpoints on a loopback address.
 //
-// Config.Validate has already refused anything that is not loopback. There is
-// no authentication beyond that: the handlers are a debugging aid for someone
-// who is already on the host, reached through an SSH tunnel rather than
-// exposed.
+// Config.Validate has already refused anything that is not loopback.
+// There is no authentication beyond that: the handlers are a
+// debugging aid for someone who is already on the host, reached
+// through an SSH tunnel rather than exposed.
 func servePprof(ctx context.Context, addr string, log *slog.Logger) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -236,7 +241,8 @@ func servePprof(ctx context.Context, addr string, log *slog.Logger) {
 	}()
 	go func() {
 		log.Info("pprof listening", "addr", addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
 			log.Error("pprof listener stopped", "error", err)
 		}
 	}()
@@ -313,8 +319,9 @@ table are read from a muf/ directory beside the dump.
 	ctx, stop := notifyContext()
 	defer stop()
 
-	// Read the whole world before touching the database, so a dump that
-	// turns out to be unreadable cannot leave a half-replaced world behind.
+	// Read the whole world before touching the database, so a
+	// dump that turns out to be unreadable cannot leave a
+	// half-replaced world behind.
 	started := time.Now()
 	res, err := importer.Load(importer.Source{DumpPath: dumpPath, MufDir: *mufDir})
 	if err != nil {
@@ -337,10 +344,11 @@ table are read from a muf/ directory beside the dump.
 		"took", time.Since(started).String(),
 	)
 
-	// Fuzzball lets a player with no password log in with any password.
-	// Emerald refuses, so these accounts are unreachable until someone sets
-	// a password on them. That is a change in behaviour and needs saying
-	// plainly rather than hiding in a count.
+	// Fuzzball lets a player with no password log in with any
+	// password. Emerald refuses, so these accounts are
+	// unreachable until someone sets a password on them. That is
+	// a change in behaviour and needs saying plainly rather than
+	// hiding in a count.
 	if locked := res.PlayersWithoutPasswords(); len(locked) > 0 {
 		names := make([]string, 0, len(locked))
 		for _, r := range locked {
@@ -395,7 +403,9 @@ table are read from a muf/ directory beside the dump.
 	macros := make([]store.Macro, 0, len(res.Macros))
 	for _, m := range res.Macros {
 		macros = append(macros, store.Macro{
-			Name: m.Name, Definition: m.Definition, Owner: int32(m.Owner),
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      int32(m.Owner),
 		})
 	}
 	if err := st.SaveMacros(ctx, macros); err != nil {

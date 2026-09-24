@@ -14,15 +14,16 @@ import (
 
 // RunEmerald drives this server through the same script.
 //
-// It runs in-process rather than over a socket: the transports are covered by
-// their own tests, and what is being compared here is what the game says, not
-// how it is delivered.
+// It runs in-process rather than over a socket: the transports are
+// covered by their own tests, and what is being compared here is what
+// the game says, not how it is delivered.
 func RunEmerald(ctx context.Context, fx *Fixture, script Script) (string, error) {
 	steps, err := RunEmeraldSteps(ctx, fx, script, nil)
 	return strings.Join(steps, ""), err
 }
 
-// RunEmeraldSteps is the same, returning each command's output separately.
+// RunEmeraldSteps is the same, returning each command's output
+// separately.
 func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 	pauses map[int]time.Duration) ([]string, error) {
 	res, err := importer.Load(importer.Source{
@@ -39,12 +40,15 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 	macros := make([]world.Macro, 0, len(res.Macros))
 	for _, m := range res.Macros {
 		macros = append(macros, world.Macro{
-			Name: m.Name, Definition: m.Definition, Owner: m.Owner,
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      m.Owner,
 		})
 	}
 	w.SetMacros(macros)
 
-	// A short interval, because the tick is what wakes a sleeping program.
+	// A short interval, because the tick is what wakes a sleeping
+	// program.
 	engine := world.NewEngine(w, world.Options{Interval: 50 * time.Millisecond})
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -60,10 +64,11 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 		return nil, err
 	}
 
-	// Output is drained after each command rather than in the background: a
-	// descriptor's Send happens on the world goroutine, so once a round trip
-	// through the engine completes, everything the command produced is
-	// already queued.
+	// Output is drained after each command rather than in the
+	// background: a descriptor's Send happens on the world
+	// goroutine, so once a round trip through the engine
+	// completes, everything the command produced is already
+	// queued.
 	drain := func() string {
 		var b strings.Builder
 		for {
@@ -92,8 +97,8 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 		if err := settle(); err != nil {
 			return out, err
 		}
-		// A program that suspends itself needs the ticks that resume it
-		// to run before its output is collected.
+		// A program that suspends itself needs the ticks that
+		// resume it to run before its output is collected.
 		if pause, ok := pauses[i]; ok {
 			time.Sleep(pause)
 			if err := settle(); err != nil {

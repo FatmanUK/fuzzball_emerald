@@ -80,8 +80,9 @@ func TestPprofAddrMustBeLoopback(t *testing.T) {
 		}
 	}
 
-	// A bare port binds every interface, which is the case that matters:
-	// the pprof handlers hand out goroutine stacks and heap dumps.
+	// A bare port binds every interface, which is the case that
+	// matters: the pprof handlers hand out goroutine stacks and
+	// heap dumps.
 	for _, addr := range []string{":6060", "0.0.0.0:6060", "192.168.1.5:6060", "nonsense"} {
 		c := base
 		c.PprofAddr = addr

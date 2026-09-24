@@ -11,8 +11,8 @@ import (
 )
 
 // The half of mpi.Host that describes the world rather than reading
-// properties from it — everything the object, connection and time functions
-// need.
+// properties from it — everything the object, connection and time
+// functions need.
 
 func (h *mpiHost) NotifyExcept(room mpi.Ref, except []mpi.Ref, msg string) {
 	skip := make([]ref.Ref, len(except))
@@ -22,8 +22,8 @@ func (h *mpiHost) NotifyExcept(room mpi.Ref, except []mpi.Ref, msg string) {
 	h.s.notifyRoom(h.w, ref.Ref(room), skip, "%s", msg)
 }
 
-// TypeName is upstream's own words for a type, which {type} returns verbatim
-// and {contents} matches its filter against.
+// TypeName is upstream's own words for a type, which {type} returns
+// verbatim and {contents} matches its filter against.
 func (h *mpiHost) TypeName(obj mpi.Ref) string {
 	o := h.w.Get(ref.Ref(obj))
 	if o == nil {
@@ -68,7 +68,9 @@ func (h *mpiHost) Links(obj mpi.Ref) []mpi.Ref {
 	return toMPIRefs((&mufHost{s: h.s, w: h.w}).Links(ref.Ref(obj)))
 }
 
-func (h *mpiHost) Value(obj mpi.Ref) int { return int(valueOf(h.w, ref.Ref(obj))) }
+func (h *mpiHost) Value(obj mpi.Ref) int {
+	return int(valueOf(h.w, ref.Ref(obj)))
+}
 
 func (h *mpiHost) Timestamps(obj mpi.Ref) (created, modified, used int64, count int) {
 	o := h.w.Get(ref.Ref(obj))
@@ -86,8 +88,8 @@ func (h *mpiHost) Locked(descr int, player, thing mpi.Ref) bool {
 	return !couldDoit(h.s, h.w, descr, 1, ref.Ref(player), ref.Ref(thing))
 }
 
-// TestLock parses a lock written as text and evaluates it, which is what
-// {testlock} does with a property's contents.
+// TestLock parses a lock written as text and evaluates it, which is
+// what {testlock} does with a property's contents.
 func (h *mpiHost) TestLock(descr int, player, thing mpi.Ref, lock string) (bool, error) {
 	lh := &lockHost{s: h.s, w: h.w, level: 1}
 	expr, err := boolexp.Parse(lh, descr, ref.Ref(thing), lock, false)
@@ -101,8 +103,8 @@ func (h *mpiHost) OnlinePlayers() []mpi.Ref {
 	return toMPIRefs((&mufHost{s: h.s, w: h.w}).Online())
 }
 
-// Idle and OnTime report on a player's least idle connection, which is what
-// upstream's own least_idle_player_descr picks.
+// Idle and OnTime report on a player's least idle connection, which
+// is what upstream's own least_idle_player_descr picks.
 func (h *mpiHost) Idle(obj mpi.Ref) int {
 	mh := &mufHost{s: h.s, w: h.w}
 	d := mh.DescrLeastIdle(ref.Ref(obj))
@@ -121,8 +123,14 @@ func (h *mpiHost) OnTime(obj mpi.Ref) int {
 	return mh.DescrOnTime(d)
 }
 
-func (h *mpiHost) Width(obj mpi.Ref) int  { w, _ := h.terminalSize(obj); return w }
-func (h *mpiHost) Height(obj mpi.Ref) int { _, ht := h.terminalSize(obj); return ht }
+func (h *mpiHost) Width(obj mpi.Ref) int {
+	w, _ := h.terminalSize(obj)
+	return w
+}
+func (h *mpiHost) Height(obj mpi.Ref) int {
+	_, ht := h.terminalSize(obj)
+	return ht
+}
 
 func (h *mpiHost) terminalSize(obj mpi.Ref) (width, height int) {
 	mh := &mufHost{s: h.s, w: h.w}
@@ -137,7 +145,9 @@ func (h *mpiHost) TuneGet(name string) (string, bool) {
 	return (&mufHost{s: h.s, w: h.w}).TuneGet(name)
 }
 
-func (h *mpiHost) MuckName() string { return h.w.Tune.String("muckname") }
+func (h *mpiHost) MuckName() string {
+	return h.w.Tune.String("muckname")
+}
 
 func (h *mpiHost) PronounSub(obj mpi.Ref, text string) string {
 	return muf.PronounSub(&mufHost{s: h.s, w: h.w, caller: ref.Ref(obj)},
@@ -149,11 +159,14 @@ func (h *mpiHost) Force(descr int, who mpi.Ref, command string) {
 		descr, ref.Ref(who), ref.Nothing, ref.Ref(who), command)
 }
 
-func (h *mpiHost) Kill(pid int) bool { return (&mufHost{s: h.s, w: h.w}).KillPID(pid) }
+func (h *mpiHost) Kill(pid int) bool {
+	return (&mufHost{s: h.s, w: h.w}).KillPID(pid)
+}
 
-// RunMUF is {muf}: run a program to completion and take back what it left on
-// its stack, rendered as text. It is INTERP's own nested-frame path, since
-// the two do the same thing from different languages.
+// RunMUF is {muf}: run a program to completion and take back what it
+// left on its stack, rendered as text. It is INTERP's own
+// nested-frame path, since the two do the same thing from different
+// languages.
 func (h *mpiHost) RunMUF(descr int, player, prog mpi.Ref, arg string) (string, error) {
 	mh := &mufHost{s: h.s, w: h.w, caller: ref.Ref(player)}
 	v, ok := mh.Interp(descr, 1, ref.Ref(prog), ref.Ref(player), arg)
@@ -190,9 +203,10 @@ type mpiEvent struct {
 	blessed bool
 }
 
-// fireMPIEvents evaluates whatever {delay} has scheduled and is now due. The
-// result is discarded: a delayed message acts through {tell} and {otell}
-// rather than by producing text, since there is nothing left to return it to.
+// fireMPIEvents evaluates whatever {delay} has scheduled and is now
+// due. The result is discarded: a delayed message acts through {tell}
+// and {otell} rather than by producing text, since there is nothing
+// left to return it to.
 func (s *Server) fireMPIEvents(w *world.World, now time.Time) {
 	if len(s.mpiEvents) == 0 {
 		return

@@ -12,16 +12,17 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// timeFormat is what strftime("%c %Z") produces in the C locale, which is
-// where upstream's timestamps come from. The day is space-padded, so a single
-// digit leaves two spaces after the month.
+// timeFormat is what strftime("%c %Z") produces in the C locale,
+// which is where upstream's timestamps come from. The day is
+// space-padded, so a single digit leaves two spaces after the month.
 const timeFormat = "Mon Jan _2 15:04:05 2006 MST"
 
-// cmdExamine shows everything about an object to someone who may see it.
+// cmdExamine shows everything about an object to someone who may see
+// it.
 //
-// With an argument after '=' it lists properties instead, which is how the
-// whole property tree is read: "examine me=/" lists the root, and "**" walks
-// the tree.
+// With an argument after '=' it lists properties instead, which is
+// how the whole property tree is read: "examine me=/" lists the root,
+// and "**" walks the tree.
 func (s *Server) cmdExamine(c *ctx) {
 	name, dir, _ := strings.Cut(c.arg, "=")
 	name = strings.TrimSpace(name)
@@ -38,9 +39,11 @@ func (s *Server) cmdExamine(c *ctx) {
 		return
 	}
 
-	// Someone who could not link to it and cannot pass its read lock is
-	// told only who owns it. That is the whole privacy model for examine.
-	if !s.canLink(c.w, c.who, target) && !s.passesReadLock(c, target) {
+	// Someone who could not link to it and cannot pass its read
+	// lock is told only who owns it. That is the whole privacy
+	// model for examine.
+	if !s.canLink(c.w, c.who, target) &&
+		!s.passesReadLock(c, target) {
 		s.printOwner(c, target)
 		return
 	}
@@ -79,8 +82,8 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 	w, o := c.w, c.w.Get(target)
 	unp := func(r ref.Ref) string { return unparse(w, c.who, r) }
 
-	// The heading differs by type: what a room is parented to, what a
-	// thing is worth, how much money a player has.
+	// The heading differs by type: what a room is parented to,
+	// what a thing is worth, how much money a player has.
 	switch o.Type() {
 	case ref.TypeRoom:
 		c.tell("%s  Owner: %s  Parent: %s",
@@ -102,7 +105,8 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 		c.send(desc)
 	}
 
-	// Locks are shown by the name each one is known by, and only when set.
+	// Locks are shown by the name each one is known by, and only
+	// when set.
 	for _, lk := range []struct{ label, path string }{
 		{"Key", propLock},
 		{"Link_OK Key", propLinkLock},
@@ -133,8 +137,8 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 	c.tell("Lastused: %s", o.LastUsed.Format(timeFormat))
 
 	if o.Type() == ref.TypeProgram {
-		// Instances counts how many copies are running, which the
-		// process queue knows.
+		// Instances counts how many copies are running, which
+		// the process queue knows.
 		c.tell("Usecount: %d     Instances: %d",
 			o.UseCount, len(s.procs.forProgram(target)))
 	} else {
@@ -193,14 +197,17 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 		}
 
 	case ref.TypeProgram:
-		// Reported from the compile cache, never by compiling: examine
-		// says whether a program is compiled, and compiling it to find
-		// out would make the answer always yes.
-		if cached, ok := s.programs[target]; ok && cached.prog != nil {
+		// Reported from the compile cache, never by
+		// compiling: examine says whether a program is
+		// compiled, and compiling it to find out would make
+		// the answer always yes.
+		if cached, ok := s.programs[target]; ok &&
+			cached.prog != nil {
 			c.tell("Program compiled size: %d instructions", len(cached.prog.Code))
-			// Upstream profiles every program's cumulative runtime.
-			// This does not, so the figure is reported as zero
-			// rather than invented.
+			// Upstream profiles every program's
+			// cumulative runtime. This does not, so the
+			// figure is reported as zero rather than
+			// invented.
 			c.tell("Cumulative runtime: 0.000000 seconds ")
 		} else {
 			c.tell("Program not compiled.")
@@ -209,13 +216,14 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 	}
 }
 
-// tellLocation names where something is, but only to someone who may see it:
-// a location is as private as the object standing in it.
+// tellLocation names where something is, but only to someone who may
+// see it: a location is as private as the object standing in it.
 func (s *Server) tellLocation(c *ctx, o *world.Object) {
 	if o.Location == ref.Nothing {
 		return
 	}
-	if !s.controls(c.w, c.who, o.Location) && !s.canSeeFlags(c, o.Location) {
+	if !s.controls(c.w, c.who, o.Location) &&
+		!s.canSeeFlags(c, o.Location) {
 		return
 	}
 	c.tell("Location: %s", unparse(c.w, c.who, o.Location))
@@ -230,8 +238,9 @@ func valueOf(w *world.World, r ref.Ref) int64 {
 	return v.Num
 }
 
-// lockString renders a lock property. Emerald stores a lock as the boolean
-// expression it was written as, which is also how a dump stores it.
+// lockString renders a lock property. Emerald stores a lock as the
+// boolean expression it was written as, which is also how a dump
+// stores it.
 func lockString(w *world.World, r ref.Ref, path string) string {
 	v, ok := w.GetProp(r, path)
 	if !ok || v.Type != props.Lock || v.Str == "" {
@@ -242,9 +251,10 @@ func lockString(w *world.World, r ref.Ref, path string) string {
 
 // sizeOfObject estimates what an object costs in memory.
 //
-// The number is this server's, not Fuzzball's: the two lay objects out
-// differently, so they could not agree even in principle. What the line is
-// for — telling an admin which objects are expensive — works either way.
+// The number is this server's, not Fuzzball's: the two lay objects
+// out differently, so they could not agree even in principle. What
+// the line is for — telling an admin which objects are expensive
+// — works either way.
 func sizeOfObject(o *world.Object) int {
 	// The fixed part of the struct, then what hangs off it.
 	n := 160 + len(o.Name) + len(o.PasswordHash) + 4*len(o.Dest)
@@ -256,9 +266,9 @@ func sizeOfObject(o *world.Object) int {
 
 // flagDescription is the "Type: ... Flags: ..." line.
 //
-// Several flags are shown under a different name depending on the type they
-// are on, because the same bit means different things: STICKY on a program is
-// SETUID, DARK on one is DEBUG, and so on.
+// Several flags are shown under a different name depending on the
+// type they are on, because the same bit means different things:
+// STICKY on a program is SETUID, DARK on one is DEBUG, and so on.
 func flagDescription(o *world.Object) string {
 	var b strings.Builder
 	b.WriteString("Type: ")
@@ -335,16 +345,17 @@ func flagDescription(o *world.Object) string {
 	return b.String()
 }
 
-// listProps prints the properties under a directory that match a pattern, and
-// returns how many it printed.
+// listProps prints the properties under a directory that match a
+// pattern, and returns how many it printed.
 //
-// A pattern ending in '/' means everything directly below it, and "**" means
-// recursively. System properties are never listed, and hidden ones only to a
-// wizard. Paths are shown from the root, with the leading '/' upstream prints.
+// A pattern ending in '/' means everything directly below it, and
+// "**" means recursively. System properties are never listed, and
+// hidden ones only to a wizard. Paths are shown from the root, with
+// the leading '/' upstream prints.
 func (s *Server) listProps(c *ctx, target ref.Ref, dir, pattern string) int {
-	// The trailing slash is expanded before the leading ones are stripped,
-	// which is upstream's order and is what makes "/" mean "everything at
-	// the root" rather than nothing.
+	// The trailing slash is expanded before the leading ones are
+	// stripped, which is upstream's order and is what makes "/"
+	// mean "everything at the root" rather than nothing.
 	if strings.HasSuffix(pattern, "/") {
 		pattern += "*"
 	}
@@ -367,7 +378,8 @@ func (s *Server) listProps(c *ctx, target ref.Ref, dir, pattern string) int {
 		if dir != "" {
 			path = dir + "/" + name
 		}
-		if propIsSystem(path) || propIsHidden(path) && !wizard {
+		if propIsSystem(path) || propIsHidden(path) &&
+			!wizard {
 			continue
 		}
 		if rest == "" || recurse {
@@ -388,8 +400,8 @@ func propIsSystem(path string) bool {
 	return ascii.HasPrefix(path, "@__sys__/") || ascii.EqualFold(path, "@__sys__")
 }
 
-// propIsHidden reports whether any segment of a path starts with '@', which is
-// how a property is marked wizard-only.
+// propIsHidden reports whether any segment of a path starts with '@',
+// which is how a property is marked wizard-only.
 func propIsHidden(path string) bool {
 	for _, seg := range strings.Split(path, "/") {
 		if strings.HasPrefix(seg, "@") {
@@ -399,14 +411,14 @@ func propIsHidden(path string) bool {
 	return false
 }
 
-// displayProp renders one property the way examine lists it: a blessed marker,
-// the type, the path, and the value. A path naming a directory as well as a
-// value keeps its trailing slash.
-// displayProp renders one property the way examine lists it: a blessed
-// marker, the type, the path from the root, and the value.
+// displayProp renders one property the way examine lists it: a
+// blessed marker, the type, the path, and the value. A path naming a
+// directory as well as a value keeps its trailing slash. displayProp
+// renders one property the way examine lists it: a blessed marker,
+// the type, the path from the root, and the value.
 //
-// A path that holds children shows a trailing slash, and one that holds only
-// children shows as a directory with no value of its own.
+// A path that holds children shows a trailing slash, and one that
+// holds only children shows as a directory with no value of its own.
 func displayProp(w *world.World, who ref.Ref, tree *props.Tree, path string) string {
 	shown := "/" + path
 	if len(tree.Children(path)) > 0 {
@@ -441,9 +453,9 @@ func displayProp(w *world.World, who ref.Ref, tree *props.Tree, path string) str
 	return "- dir " + shown + ":(no value)"
 }
 
-// canLink reports whether someone may link an object, which is also the test
-// for whether they may examine it: anyone may link an exit that points
-// nowhere, so an unlinked exit is examinable by anyone.
+// canLink reports whether someone may link an object, which is also
+// the test for whether they may examine it: anyone may link an exit
+// that points nowhere, so an unlinked exit is examinable by anyone.
 func (s *Server) canLink(w *world.World, who, what ref.Ref) bool {
 	if s.controls(w, who, what) {
 		return true
@@ -452,38 +464,41 @@ func (s *Server) canLink(w *world.World, who, what ref.Ref) bool {
 	return o != nil && o.Type() == ref.TypeExit && len(o.Dest) == 0
 }
 
-// canSeeFlags reports whether someone may be told where an object is, which
-// upstream ties to whether they could teleport there.
+// canSeeFlags reports whether someone may be told where an object is,
+// which upstream ties to whether they could teleport there.
 func (s *Server) canSeeFlags(c *ctx, where ref.Ref) bool {
 	if s.controls(c.w, c.who, where) {
 		return true
 	}
 	o := c.w.Get(where)
-	if o == nil || !s.lockPasses(c.w, c.d.ID, 1, c.who, where, propLinkLock, true) {
+	if o == nil ||
+		!s.lockPasses(c.w, c.d.ID, 1, c.who, where, propLinkLock, true) {
 		return false
 	}
 	return o.Flags&ref.LinkOK != 0 ||
 		o.Type() != ref.TypeThing && o.Flags&ref.Abode != 0
 }
 
-// passesReadLock reports whether someone may read an object's details. An
-// unset read lock means no, which is why examine normally shows only the
-// owner to anyone who does not control the object.
+// passesReadLock reports whether someone may read an object's
+// details. An unset read lock means no, which is why examine normally
+// shows only the owner to anyone who does not control the object.
 func (s *Server) passesReadLock(c *ctx, what ref.Ref) bool {
 	return s.lockPasses(c.w, c.d.ID, 1, c.who, what, propReadLock, false)
 }
 
 // lockPasses evaluates a lock property against who.
 //
-// A lock property holds its unparsed boolean expression in dbref form (see
-// internal/boolexp's package doc), so it is re-parsed on every check via
-// Parse's dbload path rather than cached. A lock that fails to parse — which
-// should not happen to a lock Unparse produced itself — is treated as
-// TRUE_BOOLEXP, upstream's own parse failure result, which always passes.
+// A lock property holds its unparsed boolean expression in dbref form
+// (see internal/boolexp's package doc), so it is re-parsed on every
+// check via Parse's dbload path rather than cached. A lock that fails
+// to parse — which should not happen to a lock Unparse produced
+// itself — is treated as TRUE_BOOLEXP, upstream's own parse failure
+// result, which always passes.
 //
-// level is this check's own interpreter nesting depth (muf.Frame.Level for a
-// check TESTLOCK or LOCKED? made; 1 for a fresh check with no calling MUF
-// frame), which a program-type lock constant's RunLock propagates onward.
+// level is this check's own interpreter nesting depth
+// (muf.Frame.Level for a check TESTLOCK or LOCKED? made; 1 for a
+// fresh check with no calling MUF frame), which a program-type lock
+// constant's RunLock propagates onward.
 func (s *Server) lockPasses(w *world.World, descr, level int, who, what ref.Ref, path string, defaultWhenUnset bool) bool {
 	v, ok := w.GetProp(what, path)
 	if !ok || v.Type != props.Lock || v.Str == "" {

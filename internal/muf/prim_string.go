@@ -15,7 +15,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Str(v[0].Str + v[1].Str))
@@ -32,7 +33,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Int(int64(cStrcmp(v[0].Str, v[1].Str))))
@@ -42,7 +44,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Int(int64(cStrcasecmp(v[0].Str, v[1].Str))))
@@ -52,7 +55,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Bool(ascii.HasPrefix(v[0].Str, v[1].Str)))
@@ -64,7 +68,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeInteger || v[2].Type != TypeInteger {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeInteger ||
+			v[2].Type != TypeInteger {
 			return nil, errf("Invalid argument type.")
 		}
 		// MUF indexes strings from one.
@@ -90,7 +96,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		before, after, found := strings.Cut(v[0].Str, v[1].Str)
@@ -108,15 +115,16 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		if v[1].Str == "" {
 			return nil, errf("Empty string argument (2)")
 		}
 		parts := strings.Split(v[0].Str, v[1].Str)
-		// EXPLODE pushes the parts in reverse, then the count, so the
-		// first part ends up on top.
+		// EXPLODE pushes the parts in reverse, then the
+		// count, so the first part ends up on top.
 		for i := len(parts) - 1; i >= 0; i-- {
 			if err := f.Push(Str(parts[i])); err != nil {
 				return nil, err
@@ -157,7 +165,8 @@ func init() {
 		}
 		v, ok := a.Get(key)
 		if !ok {
-			// A missing key reads as #-1, not as a failure.
+			// A missing key reads as #-1, not as a
+			// failure.
 			v = Obj(ref.Nothing)
 		}
 		return nil, f.Push(v)
@@ -235,8 +244,8 @@ func init() {
 	})
 
 	register("NOTIFY", func(f *Frame) (*Result, error) {
-		// Upstream names which argument was wrong, and programs read
-		// the message.
+		// Upstream names which argument was wrong, and
+		// programs read the message.
 		msg, err := f.popStrArg(2)
 		if err != nil {
 			return nil, err
@@ -248,8 +257,8 @@ func init() {
 		if f.host == nil {
 			return nil, errf("NOTIFY needs a running server")
 		}
-		// A carriage return inside a message separates lines, which is
-		// how MUF writes multi-line output.
+		// A carriage return inside a message separates lines,
+		// which is how MUF writes multi-line output.
 		for _, line := range strings.Split(msg, "\r") {
 			f.host.Notify(who, line)
 		}
@@ -258,10 +267,12 @@ func init() {
 }
 
 // cStrcmp compares two strings the way C's strcmp does, returning the
-// difference between the first bytes that differ rather than -1, 0 or 1.
+// difference between the first bytes that differ rather than -1, 0 or
+// 1.
 //
-// That difference is observable from MUF: comparing "abcdef" with "abcxyz"
-// gives -20, not -1, and programs have been written against it.
+// That difference is observable from MUF: comparing "abcdef" with
+// "abcxyz" gives -20, not -1, and programs have been written against
+// it.
 func cStrcmp(a, b string) int {
 	n := len(a)
 	if len(b) < n {
@@ -272,8 +283,8 @@ func cStrcmp(a, b string) int {
 			return int(a[i]) - int(b[i])
 		}
 	}
-	// One string ran out. C compares its terminating NUL with the other's
-	// next byte.
+	// One string ran out. C compares its terminating NUL with the
+	// other's next byte.
 	switch {
 	case len(a) < len(b):
 		return -int(b[n])
@@ -334,14 +345,16 @@ func mapString(fn func(string) string) primFunc {
 	}
 }
 
-// instr builds INSTR or RINSTR, which report a one-based position or zero.
+// instr builds INSTR or RINSTR, which report a one-based position or
+// zero.
 func instr(fromEnd bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		v, err := f.PopN(2)
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		var i int
@@ -368,7 +381,8 @@ func hostRefToStr(fn func(Host, ref.Ref) string) primFunc {
 	}
 }
 
-// hostRefToRef builds a primitive that resolves one object to another.
+// hostRefToRef builds a primitive that resolves one object to
+// another.
 func hostRefToRef(fn func(Host, ref.Ref) ref.Ref) primFunc {
 	return func(f *Frame) (*Result, error) {
 		r, err := f.popRef()

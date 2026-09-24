@@ -10,7 +10,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// fakePersister records what it was asked to write and can be made to fail.
+// fakePersister records what it was asked to write and can be made to
+// fail.
 type fakePersister struct {
 	mu       sync.Mutex
 	flushes  []Snapshot
@@ -71,8 +72,9 @@ func startEngine(t *testing.T, p Persister, interval time.Duration) (*Engine, *W
 }
 
 func TestEngineSerialisesOperations(t *testing.T) {
-	// Every operation runs on one goroutine, so an unsynchronised counter
-	// is safe. Under -race this would fail loudly if that stopped holding.
+	// Every operation runs on one goroutine, so an unsynchronised
+	// counter is safe. Under -race this would fail loudly if that
+	// stopped holding.
 	e, _, stop := startEngine(t, &fakePersister{}, time.Hour)
 	defer stop()
 
@@ -122,7 +124,8 @@ func TestEnginePanicDoesNotKillTheWorld(t *testing.T) {
 	if err := e.Go(func(*World) { panic("boom") }); err != nil {
 		t.Fatal(err)
 	}
-	// The engine must still be serving after a panicking operation.
+	// The engine must still be serving after a panicking
+	// operation.
 	alive := false
 	if err := e.Do(context.Background(), func(*World) { alive = true }); err != nil {
 		t.Fatal(err)
@@ -132,14 +135,14 @@ func TestEnginePanicDoesNotKillTheWorld(t *testing.T) {
 	}
 }
 
-// TestOnEachOpRunsAfterEveryOperation checks that an OnEachOp callback fires
-// once per applied operation, not just once per flush interval — the fix a
-// freshly-forked process needs so its first instruction slice does not wait
-// up to a full Interval to run.
+// TestOnEachOpRunsAfterEveryOperation checks that an OnEachOp
+// callback fires once per applied operation, not just once per flush
+// interval — the fix a freshly-forked process needs so its first
+// instruction slice does not wait up to a full Interval to run.
 func TestOnEachOpRunsAfterEveryOperation(t *testing.T) {
 	w := newTestWorld(t)
-	// An hour-long interval, so only OnEachOp — never the ticker — could be
-	// responsible for what this test counts.
+	// An hour-long interval, so only OnEachOp — never the
+	// ticker — could be responsible for what this test counts.
 	e := NewEngine(w, Options{Persister: &fakePersister{}, Interval: time.Hour})
 
 	var mu sync.Mutex
@@ -203,7 +206,8 @@ func TestEngineFlushesOnInterval(t *testing.T) {
 
 func TestEngineExplicitFlush(t *testing.T) {
 	p := &fakePersister{}
-	// A long interval, so only the explicit flush can be responsible.
+	// A long interval, so only the explicit flush can be
+	// responsible.
 	e, _, stop := startEngine(t, p, time.Hour)
 	defer stop()
 
@@ -218,7 +222,8 @@ func TestEngineExplicitFlush(t *testing.T) {
 	if got := p.objectCount(); got != 1 {
 		t.Errorf("wrote %d objects, want 1", got)
 	}
-	// Flushing again with nothing outstanding must not write an empty batch.
+	// Flushing again with nothing outstanding must not write an
+	// empty batch.
 	if err := e.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +291,8 @@ func TestShutdownDrainsAndFlushes(t *testing.T) {
 		t.Fatal("engine did not shut down")
 	}
 
-	// Everything queued before shutdown must have run and been written.
+	// Everything queued before shutdown must have run and been
+	// written.
 	if got := p.objectCount(); got != n {
 		t.Errorf("wrote %d objects on shutdown, want %d", got, n)
 	}

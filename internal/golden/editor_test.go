@@ -7,13 +7,13 @@ import (
 	"time"
 )
 
-// editorScript drives a whole editing session, from creating a program to
-// saving it and listing it back.
+// editorScript drives a whole editing session, from creating a
+// program to saving it and listing it back.
 //
-// Every line is deliberate. The session covers where inserted lines land, the
-// argument forms each command takes, what happens when a command is given
-// nonsense, and which lines the parser is still allowed to see while the
-// editor holds the input.
+// Every line is deliberate. The session covers where inserted lines
+// land, the argument forms each command takes, what happens when a
+// command is given nonsense, and which lines the parser is still
+// allowed to see while the editor holds the input.
 var editorScript = Script{
 	"@program probe",
 
@@ -24,8 +24,9 @@ var editorScript = Script{
 	"three",
 	".",
 
-	// Listing, with and without numbers. The bare "l" lists the current
-	// line, which after an insert run is past the end of the buffer.
+	// Listing, with and without numbers. The bare "l" lists the
+	// current line, which after an insert run is past the end of
+	// the buffer.
 	"1 n",
 	"1 99 l",
 	"l",
@@ -48,7 +49,8 @@ var editorScript = Script{
 	".",
 	"1 99 l",
 
-	// Deleting: a range, a single line, and the arguments that are refused.
+	// Deleting: a range, a single line, and the arguments that
+	// are refused.
 	"2 3 d",
 	"1 99 l",
 	"9 d",
@@ -79,20 +81,21 @@ var editorScript = Script{
 	"dbl k",
 	"dbl k",
 
-	// Lines the editor answers itself, and the two that reach past it.
+	// Lines the editor answers itself, and the two that reach
+	// past it.
 	"jump",
 	"WHO",
 	"look",
 	"@Q",
 
-	// Compiling what is in the buffer: this program does not compile, so
-	// the error names the line.
+	// Compiling what is in the buffer: this program does not
+	// compile, so the error names the line.
 	"c",
 	"p",
 	"u",
 
-	// Replace it with something that does compile, then check the same
-	// three commands again.
+	// Replace it with something that does compile, then check the
+	// same three commands again.
 	"1 99 d",
 	"i",
 	": helper 1 pop ;",
@@ -134,12 +137,14 @@ var editorScript = Script{
 	"q",
 }
 
-// TestEditorMatchesFuzzball runs a full editor session against both servers.
+// TestEditorMatchesFuzzball runs a full editor session against both
+// servers.
 //
-// The marker-bounded driver cannot be used here: the editor reads the marker
-// pose as a command, because only the first letter of the last word means
-// anything and "!pose EMERALDDONE" ends in one beginning with 'x'. This case
-// waits for quiet instead, which is slower and so is kept to one case.
+// The marker-bounded driver cannot be used here: the editor reads the
+// marker pose as a command, because only the first letter of the last
+// word means anything and "!pose EMERALDDONE" ends in one beginning
+// with 'x'. This case waits for quiet instead, which is slower and so
+// is kept to one case.
 func TestEditorMatchesFuzzball(t *testing.T) {
 	requireOracle(t)
 	ctx := context.Background()
@@ -173,12 +178,13 @@ func TestEditorMatchesFuzzball(t *testing.T) {
 	}
 }
 
-// dropOptimizerNote removes the line upstream prints when its peephole pass
-// fuses instructions.
+// dropOptimizerNote removes the line upstream prints when its
+// peephole pass fuses instructions.
 //
-// Emerald does not implement that pass, which is a known and documented
-// divergence: it changes the instruction numbers an error message quotes and
-// nothing else. Everything the compile actually produces is still compared.
+// Emerald does not implement that pass, which is a known and
+// documented divergence: it changes the instruction numbers an error
+// message quotes and nothing else. Everything the compile actually
+// produces is still compared.
 func dropOptimizerNote(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {

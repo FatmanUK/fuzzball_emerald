@@ -7,9 +7,10 @@ import (
 
 // Normalize reduces a transcript to what is worth comparing.
 //
-// The two servers differ in ways that say nothing about MUF: line endings,
-// blank lines, and the dbref suffixes an examine-style listing appends. Those
-// are removed so a diff shows only differences in behaviour.
+// The two servers differ in ways that say nothing about MUF: line
+// endings, blank lines, and the dbref suffixes an examine-style
+// listing appends. Those are removed so a diff shows only differences
+// in behaviour.
 func Normalize(s string) []string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
@@ -32,8 +33,8 @@ type Diff struct {
 	Emerald string
 }
 
-// Compare returns the differences between two transcripts, or nil when they
-// agree.
+// Compare returns the differences between two transcripts, or nil
+// when they agree.
 func Compare(oracle, emerald string) []Diff {
 	a, b := Normalize(oracle), Normalize(emerald)
 	n := len(a)
@@ -72,7 +73,8 @@ func Render(diffs []Diff) string {
 	return b.String()
 }
 
-// quote renders a line visibly, so a difference in whitespace is not invisible.
+// quote renders a line visibly, so a difference in whitespace is not
+// invisible.
 func quote(s string) string {
 	if s == "" {
 		return "(nothing)"

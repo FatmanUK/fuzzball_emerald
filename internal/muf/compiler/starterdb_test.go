@@ -12,8 +12,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// loadStarter reads the shipped starter world, its program sources and its
-// macro table.
+// loadStarter reads the shipped starter world, its program sources
+// and its macro table.
 func loadStarter(t *testing.T) *importer.Result {
 	t.Helper()
 	res, err := importer.Load(importer.Source{
@@ -25,9 +25,9 @@ func loadStarter(t *testing.T) *importer.Result {
 	return res
 }
 
-// definesFor collects the compile-time definitions a program sees: the _defs/
-// propdir on #0 and on the program's owner, which is where a world keeps the
-// names its libraries expose.
+// definesFor collects the compile-time definitions a program sees:
+// the _defs/ propdir on #0 and on the program's owner, which is where
+// a world keeps the names its libraries expose.
 func definesFor(w *world.World, prog ref.Ref) map[string]string {
 	out := map[string]string{}
 	add := func(holder ref.Ref) {
@@ -50,9 +50,9 @@ func definesFor(w *world.World, prog ref.Ref) map[string]string {
 	return out
 }
 
-// includerFor resolves $include targets the way Fuzzball's matcher does for a
-// compile: a registered name such as "$lib/alias" through the _reg/ propdir on
-// #0, or a bare dbref.
+// includerFor resolves $include targets the way Fuzzball's matcher
+// does for a compile: a registered name such as "$lib/alias" through
+// the _reg/ propdir on #0, or a bare dbref.
 func includerFor(w *world.World) func(string) (map[string]string, bool) {
 	return func(target string) (map[string]string, bool) {
 		var r ref.Ref
@@ -88,8 +88,8 @@ func includerFor(w *world.World) func(string) (map[string]string, bool) {
 	}
 }
 
-// TestCompileStarterPrograms is the M4 acceptance check: every program the
-// starter world ships must compile.
+// TestCompileStarterPrograms is the M4 acceptance check: every
+// program the starter world ships must compile.
 func TestCompileStarterPrograms(t *testing.T) {
 	res := loadStarter(t)
 
@@ -127,9 +127,10 @@ func TestCompileStarterPrograms(t *testing.T) {
 		t.Logf("  %s", f)
 	}
 
-	// Three of the shipped programs cannot compile anywhere, for reasons in
-	// the data rather than the compiler. Pinning them by name means a
-	// regression that breaks a fourth still fails this test.
+	// Three of the shipped programs cannot compile anywhere, for
+	// reasons in the data rather than the compiler. Pinning them
+	// by name means a regression that breaks a fourth still fails
+	// this test.
 	//
 	//   license-mit holds the MIT licence as bare text and declares no
 	//   procedure at all, so there is nothing to enter.

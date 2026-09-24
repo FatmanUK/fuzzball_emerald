@@ -7,10 +7,11 @@ import (
 	"testing"
 )
 
-// TestFunctionCoverage reports which MPI functions have implementations, the
-// way internal/muf's own TestPrimitiveCoverage does for primitives: the table
-// is generated from upstream's mfun_list, so the gap between it and the impls
-// map is visible here rather than discovered one property at a time.
+// TestFunctionCoverage reports which MPI functions have
+// implementations, the way internal/muf's own TestPrimitiveCoverage
+// does for primitives: the table is generated from upstream's
+// mfun_list, so the gap between it and the impls map is visible here
+// rather than discovered one property at a time.
 func TestFunctionCoverage(t *testing.T) {
 	var missing []string
 	for name := range functions {

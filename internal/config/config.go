@@ -1,9 +1,11 @@
-// Package config holds the settings a server needs before it can open its
-// database: listener addresses, TLS material and the Postgres DSN.
+// Package config holds the settings a server needs before it can open
+// its database: listener addresses, TLS material and the Postgres
+// DSN.
 //
-// These deliberately do not live in the @tune table. A TLS-only server cannot
-// bootstrap its listeners from a database it has not opened yet, which is why
-// Fuzzball 7's ssl_* parameters have no equivalent here.
+// These deliberately do not live in the @tune table. A TLS-only
+// server cannot bootstrap its listeners from a database it has not
+// opened yet, which is why Fuzzball 7's ssl_* parameters have no
+// equivalent here.
 package config
 
 import (
@@ -15,14 +17,16 @@ import (
 	"time"
 )
 
-// CipherPolicy selects a TLS cipher suite and version floor by name, replacing
-// Fuzzball 7's raw OpenSSL cipher string, which Go's crypto/tls cannot consume.
+// CipherPolicy selects a TLS cipher suite and version floor by name,
+// replacing Fuzzball 7's raw OpenSSL cipher string, which Go's
+// crypto/tls cannot consume.
 type CipherPolicy string
 
 const (
 	// PolicyModern requires TLS 1.3.
 	PolicyModern CipherPolicy = "modern"
-	// PolicyCompat allows TLS 1.2 with AEAD suites, for older clients.
+	// PolicyCompat allows TLS 1.2 with AEAD suites, for older
+	// clients.
 	PolicyCompat CipherPolicy = "compat"
 )
 
@@ -32,14 +36,15 @@ type TLS struct {
 	KeyFile     string
 	KeyPassword string
 	Policy      CipherPolicy
-	// AutoReload watches the certificate files and swaps them in without a
-	// restart, replacing @reconfigure_ssl.
+	// AutoReload watches the certificate files and swaps them in
+	// without a restart, replacing @reconfigure_ssl.
 	AutoReload bool
 }
 
 // Config is the full pre-database configuration.
 type Config struct {
-	// LineAddr is the raw TLS listener, which existing MUCK clients speak.
+	// LineAddr is the raw TLS listener, which existing MUCK
+	// clients speak.
 	LineAddr string
 	// WSSAddr is the WebSocket-over-TLS listener.
 	WSSAddr string
@@ -51,35 +56,39 @@ type Config struct {
 	// DatabaseURL is the Postgres DSN.
 	DatabaseURL string
 
-	// FlushInterval bounds how much work a crash can lose. It replaces
-	// Fuzzball 7's dump_interval, which froze the world for the length of
-	// a full database write.
+	// FlushInterval bounds how much work a crash can lose. It
+	// replaces Fuzzball 7's dump_interval, which froze the world
+	// for the length of a full database write.
 	FlushInterval time.Duration
 
 	LogLevel  string
 	LogFormat string // "text" or "json"
 
-	// Limits bound what one peer may open. They are refused at accept time,
-	// before the TLS handshake and before the world hears about the
-	// connection — see internal/admit for why they are not @tune
-	// parameters.
+	// Limits bound what one peer may open. They are refused at
+	// accept time, before the TLS handshake and before the world
+	// hears about the connection — see internal/admit for why
+	// they are not @tune parameters.
 	Limits Limits
 
-	// PprofAddr, when set, serves net/http/pprof there. It is refused
-	// unless it binds to a loopback address: the handlers expose goroutine
-	// stacks and heap contents, which is a debugging aid on a host an
-	// operator already has and a disclosure to anyone else.
+	// PprofAddr, when set, serves net/http/pprof there. It is
+	// refused unless it binds to a loopback address: the handlers
+	// expose goroutine stacks and heap contents, which is a
+	// debugging aid on a host an operator already has and a
+	// disclosure to anyone else.
 	PprofAddr string
 }
 
-// Limits bound incoming connections. A zero field means that limit is off.
+// Limits bound incoming connections. A zero field means that limit is
+// off.
 type Limits struct {
-	// MaxConnections is the ceiling on concurrent connections in total.
+	// MaxConnections is the ceiling on concurrent connections in
+	// total.
 	MaxConnections int
-	// MaxPerHost is the ceiling on concurrent connections from one address.
+	// MaxPerHost is the ceiling on concurrent connections from
+	// one address.
 	MaxPerHost int
-	// ConnectRate is how many new connections one address may open per
-	// ConnectWindow.
+	// ConnectRate is how many new connections one address may
+	// open per ConnectWindow.
 	ConnectRate   int
 	ConnectWindow time.Duration
 }
@@ -94,10 +103,11 @@ func Default() Config {
 		FlushInterval: time.Second,
 		LogLevel:      "info",
 		LogFormat:     "text",
-		// Chosen to be generous for a real player — several clients and a
-		// reconnect or two — and stingy for a script. A shared address
-		// behind NAT is the case that needs raising, which is why these
-		// are configurable rather than fixed.
+		// Chosen to be generous for a real player — several
+		// clients and a reconnect or two — and stingy for a
+		// script. A shared address behind NAT is the case
+		// that needs raising, which is why these are
+		// configurable rather than fixed.
 		Limits: Limits{
 			MaxConnections: 1024,
 			MaxPerHost:     16,
@@ -107,8 +117,8 @@ func Default() Config {
 	}
 }
 
-// FromEnv layers environment variables over the defaults. Every variable is
-// prefixed FBE_.
+// FromEnv layers environment variables over the defaults. Every
+// variable is prefixed FBE_.
 func FromEnv() (Config, error) {
 	c := Default()
 
@@ -188,8 +198,9 @@ func FromEnv() (Config, error) {
 	return c, nil
 }
 
-// Validate reports whether the configuration can start a server. It is
-// deliberately strict about TLS: there is no cleartext fallback to degrade to.
+// Validate reports whether the configuration can start a server. It
+// is deliberately strict about TLS: there is no cleartext fallback to
+// degrade to.
 func (c Config) Validate() error {
 	if c.DatabaseURL == "" {
 		return fmt.Errorf("no database URL (set FBE_DATABASE_URL)")
@@ -209,11 +220,12 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// isLoopback reports whether an address binds only to the local machine.
+// isLoopback reports whether an address binds only to the local
+// machine.
 //
-// A bare port or an empty host binds every interface, which is exactly what
-// this must refuse: the pprof handlers hand out goroutine stacks and heap
-// dumps to whoever asks.
+// A bare port or an empty host binds every interface, which is
+// exactly what this must refuse: the pprof handlers hand out
+// goroutine stacks and heap dumps to whoever asks.
 func isLoopback(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil || host == "" {

@@ -73,10 +73,11 @@ func TestLoadProgramDir(t *testing.T) {
 			t.Errorf("%v is not a usable dbref", p.Ref)
 		}
 	}
-	// The macros file sits in the same directory and must not be mistaken
-	// for a program.
+	// The macros file sits in the same directory and must not be
+	// mistaken for a program.
 	for _, p := range got {
-		if strings.Contains(p.Source, "smatch\n1\n") && len(p.Source) < 200 {
+		if strings.Contains(p.Source, "smatch\n1\n") &&
+			len(p.Source) < 200 {
 			t.Errorf("%v looks like the macro table, not a program", p.Ref)
 		}
 	}

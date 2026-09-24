@@ -1,9 +1,10 @@
-// Package wss serves the same session protocol over WebSocket, for clients
-// that run in a browser.
+// Package wss serves the same session protocol over WebSocket, for
+// clients that run in a browser.
 //
-// A WebSocket message is already framed, so there is no telnet negotiation
-// here: one message is one line. Everything after that is identical to the
-// line transport, because both terminate into the same descriptor.
+// A WebSocket message is already framed, so there is no telnet
+// negotiation here: one message is one line. Everything after that is
+// identical to the line transport, because both terminate into the
+// same descriptor.
 package wss
 
 import (
@@ -32,8 +33,9 @@ type Server struct {
 	log  *slog.Logger
 	http *http.Server
 	ln   net.Listener
-	// origins lists the Host values a browser may connect from. Empty means
-	// same-origin only, which is what the library enforces by default.
+	// origins lists the Host values a browser may connect from.
+	// Empty means same-origin only, which is what the library
+	// enforces by default.
 	origins []string
 	// gate refuses connections before the upgrade. It may be nil.
 	gate *admit.Gate
@@ -43,16 +45,17 @@ type Server struct {
 type Options struct {
 	// Path is the URL the socket is served at.
 	Path string
-	// Origins lists additional allowed origins for browser clients.
+	// Origins lists additional allowed origins for browser
+	// clients.
 	Origins []string
 	Logger  *slog.Logger
-	// Gate refuses connections before the upgrade. It may be nil, which
-	// admits everything.
+	// Gate refuses connections before the upgrade. It may be nil,
+	// which admits everything.
 	Gate *admit.Gate
 }
 
-// New returns a listener bound to addr. tlsConfig must be the same one the
-// line transport uses; there is no cleartext WebSocket.
+// New returns a listener bound to addr. tlsConfig must be the same
+// one the line transport uses; there is no cleartext WebSocket.
 func New(addr string, tlsConfig *tls.Config, g *game.Server, opts Options) (*Server, error) {
 	log := opts.Logger
 	if log == nil {
@@ -71,8 +74,9 @@ func New(addr string, tlsConfig *tls.Config, g *game.Server, opts Options) (*Ser
 	s := &Server{game: g, log: log, ln: ln, origins: opts.Origins, gate: opts.Gate}
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, s.handle)
-	// A health endpoint that says nothing about the world, so it can be
-	// exposed to a container runtime without leaking anything.
+	// A health endpoint that says nothing about the world, so it
+	// can be exposed to a container runtime without leaking
+	// anything.
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
@@ -81,9 +85,10 @@ func New(addr string, tlsConfig *tls.Config, g *game.Server, opts Options) (*Ser
 	s.http = &http.Server{
 		Handler:   mux,
 		TLSConfig: tlsConfig,
-		// Bound how long a client may dawdle over the handshake. The
-		// read timeout must not apply once the socket is upgraded, so
-		// it is left off and handled per-message instead.
+		// Bound how long a client may dawdle over the
+		// handshake. The read timeout must not apply once the
+		// socket is upgraded, so it is left off and handled
+		// per-message instead.
 		ReadHeaderTimeout: 10 * time.Second,
 		ErrorLog:          nil,
 	}
@@ -114,8 +119,8 @@ func (s *Server) Close() error { return s.http.Close() }
 
 // handle upgrades one request and runs the session on it.
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
-	// Refused before the upgrade, so a flood costs a 503 rather than a
-	// websocket.
+	// Refused before the upgrade, so a flood costs a 503 rather
+	// than a websocket.
 	host := clientHost(r)
 	if v := s.gate.Admit(host); v != admit.Allowed {
 		s.log.Warn("refused a connection", "host", host, "reason", string(v))
@@ -159,8 +164,9 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			case <-d.Done():
-				// Deliver whatever is still queued before
-				// closing, so a parting message survives.
+				// Deliver whatever is still queued
+				// before closing, so a parting
+				// message survives.
 				for _, text := range d.Drain() {
 					if !write(text) {
 						break
@@ -180,8 +186,8 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		if typ != websocket.MessageText {
 			continue
 		}
-		// A client may still send a trailing newline; one message is one
-		// line either way.
+		// A client may still send a trailing newline; one
+		// message is one line either way.
 		for _, line := range strings.Split(strings.TrimRight(string(data), "\r\n"), "\n") {
 			s.game.Input(d, strings.TrimRight(line, "\r"))
 		}
@@ -194,11 +200,12 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	<-writeDone
 }
 
-// clientHost reports where a request came from, preferring the address the
-// connection actually arrived on.
+// clientHost reports where a request came from, preferring the
+// address the connection actually arrived on.
 //
-// X-Forwarded-For is deliberately not trusted: anyone can set it, and a
-// forged value would poison the audit log and any rate limiting built on it.
+// X-Forwarded-For is deliberately not trusted: anyone can set it, and
+// a forged value would poison the audit log and any rate limiting
+// built on it.
 func clientHost(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

@@ -32,8 +32,8 @@ func TestStringMatchOnWordBoundaries(t *testing.T) {
 	}
 }
 
-// fixture builds a small world: a room holding a player, two things and an
-// exit, with the player carrying one thing.
+// fixture builds a small world: a room holding a player, two things
+// and an exit, with the player carrying one thing.
 type fixture struct {
 	w                          *world.World
 	room, player, key, box, ex ref.Ref
@@ -83,7 +83,8 @@ func TestMeAndHere(t *testing.T) {
 
 func TestMatchPossessionAndNeighbor(t *testing.T) {
 	f := newFixture(t)
-	// The key is carried, the box is in the room; both should be reachable.
+	// The key is carried, the box is in the room; both should be
+	// reachable.
 	if got := New(f.w, f.player, "rusty").Everything().Result(); got != f.key {
 		t.Errorf("rusty = %v, want the carried key %v", got, f.key)
 	}
@@ -98,8 +99,8 @@ func TestMatchPossessionAndNeighbor(t *testing.T) {
 func TestExactNameBeatsPartial(t *testing.T) {
 	f := newFixture(t)
 	w := f.w
-	// Two things whose names share a prefix; the exact one must win rather
-	// than the pair being called ambiguous.
+	// Two things whose names share a prefix; the exact one must
+	// win rather than the pair being called ambiguous.
 	sword := w.Create("sword", ref.TypeThing, f.player)
 	if err := w.MoveTo(sword.Ref, f.room); err != nil {
 		t.Fatal(err)
@@ -138,7 +139,8 @@ func TestExitAliases(t *testing.T) {
 			t.Errorf("%q = %v, want the exit %v", alias, got, f.ex)
 		}
 	}
-	// A partial alias is not an exit match; exits match whole aliases.
+	// A partial alias is not an exit match; exits match whole
+	// aliases.
 	if got := New(f.w, f.player, "nort").Everything().Result(); got == f.ex {
 		t.Error("a partial alias should not match an exit")
 	}
@@ -147,8 +149,9 @@ func TestExitAliases(t *testing.T) {
 func TestExitsFoundThroughEnvironment(t *testing.T) {
 	f := newFixture(t)
 	w := f.w
-	// A global exit attached to the parent room must be reachable from a
-	// child room, which is how $-commands and global exits work.
+	// A global exit attached to the parent room must be reachable
+	// from a child room, which is how $-commands and global exits
+	// work.
 	outer := w.Create("Global Environment", ref.TypeRoom, ref.God)
 	if err := w.MoveTo(f.room, outer.Ref); err != nil {
 		t.Fatal(err)
@@ -175,9 +178,10 @@ func TestExitPriorityBeatsProximity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Two exits with the same name: one nearby at default priority, one
-	// further out with mucker bits set, which raise its priority. The
-	// higher-priority exit wins even though it is further away.
+	// Two exits with the same name: one nearby at default
+	// priority, one further out with mucker bits set, which raise
+	// its priority. The higher-priority exit wins even though it
+	// is further away.
 	near := w.Create("teleport", ref.TypeExit, ref.God)
 	if err := w.MoveTo(near.Ref, f.room); err != nil {
 		t.Fatal(err)
@@ -267,8 +271,9 @@ func TestMatchingSurvivesAnEnvironmentCycle(t *testing.T) {
 	}
 }
 
-// TestRegisteredResolvesThroughTheEnvironment checks that "$name" finds a
-// registration on an ancestor, which is how a world names its libraries.
+// TestRegisteredResolvesThroughTheEnvironment checks that "$name"
+// finds a registration on an ancestor, which is how a world names its
+// libraries.
 func TestRegisteredResolvesThroughTheEnvironment(t *testing.T) {
 	w := world.New()
 	root := w.Create("Root", ref.TypeRoom, ref.God)

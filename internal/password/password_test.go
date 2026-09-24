@@ -5,16 +5,18 @@ import (
 	"testing"
 )
 
-// The starter database ships with this password for #1, and documents it in
-// its README, so it is a public fixture rather than a secret. It gives a real
-// vector for the legacy formats.
+// The starter database ships with this password for #1, and documents
+// it in its README, so it is a public fixture rather than a secret.
+// It gives a real vector for the legacy formats.
 const starterPassword = "potrzebie"
 
-// As stored in dbs/starterdb and dbs/minimal: a bare base64 MD5 digest.
+// As stored in dbs/starterdb and dbs/minimal: a bare base64 MD5
+// digest.
 const starterMD5 = "CuG4ZtGvyRbfJubgNISTcg=="
 
-// Generated independently with Python's hashlib, mirroring pbkdf2_hash in
-// src/fbmath.c: HMAC-SHA512, 1000 iterations, first 56 derived bytes as hex.
+// Generated independently with Python's hashlib, mirroring
+// pbkdf2_hash in src/fbmath.c: HMAC-SHA512, 1000 iterations, first 56
+// derived bytes as hex.
 const starterPBKDF2 = "$1$abcdefghij$" +
 	"fb904b0156dedfef0ae31121dacbb8c786e04b498f89581337cb9b3ad4858fc0" +
 	"179324829f958c4af80613ff060edfa69c91902cc709a9c0"
@@ -95,9 +97,9 @@ func TestLegacyPBKDF2(t *testing.T) {
 }
 
 func TestNoPasswordRefusesEverything(t *testing.T) {
-	// Fuzzball accepts any password when none is stored. Emerald refuses,
-	// because silently accepting anything for an account is not behaviour
-	// worth preserving.
+	// Fuzzball accepts any password when none is stored. Emerald
+	// refuses, because silently accepting anything for an account
+	// is not behaviour worth preserving.
 	for _, attempt := range []string{"", "anything", starterPassword} {
 		if Verify(NoPassword, attempt).OK {
 			t.Errorf("an account with no password accepted %q", attempt)
@@ -109,9 +111,9 @@ func TestNoPasswordRefusesEverything(t *testing.T) {
 }
 
 func TestTruncatedHashIsRejected(t *testing.T) {
-	// Upstream compares only strlen(computed) leading bytes, so a stored
-	// hash that merely starts with the right digest is accepted. Emerald
-	// compares the whole value.
+	// Upstream compares only strlen(computed) leading bytes, so a
+	// stored hash that merely starts with the right digest is
+	// accepted. Emerald compares the whole value.
 	full := LegacyMD5Prefix + starterMD5
 	truncated := full[:len(full)-4]
 	if Verify(truncated, starterPassword).OK {

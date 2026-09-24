@@ -11,18 +11,19 @@ import (
 
 // Source describes a legacy database on disk.
 //
-// Fuzzball splits a world across three places: the dump itself, a muf/
-// directory of program sources named <dbref>.m, and a macros file inside it.
-// A dump alone carries no code.
+// Fuzzball splits a world across three places: the dump itself, a
+// muf/ directory of program sources named <dbref>.m, and a macros
+// file inside it. A dump alone carries no code.
 type Source struct {
 	// DumpPath is the .db file.
 	DumpPath string
-	// MufDir holds the program sources and the macro table. When empty it
-	// is guessed from the dump's location.
+	// MufDir holds the program sources and the macro table. When
+	// empty it is guessed from the dump's location.
 	MufDir string
 }
 
-// Result is a fully read legacy world, ready to be written to the store.
+// Result is a fully read legacy world, ready to be written to the
+// store.
 type Result struct {
 	World    *world.World
 	Programs []ProgramSource
@@ -30,8 +31,9 @@ type Result struct {
 	Report   *Report
 }
 
-// guessMufDir looks for the program directory in the two places Fuzzball's own
-// layouts put it: beside the dump, and one level up from a data/ directory.
+// guessMufDir looks for the program directory in the two places
+// Fuzzball's own layouts put it: beside the dump, and one level up
+// from a data/ directory.
 //
 //	dbs/starterdb/muf/          with the dump in dbs/starterdb/data/
 //	<dump dir>/muf/
@@ -65,13 +67,15 @@ func Load(src Source) (*Result, error) {
 
 	res := &Result{World: w, Report: rep}
 
-	// An imported world has never been written, so everything is pending.
+	// An imported world has never been written, so everything is
+	// pending.
 	//
-	// This has to happen here rather than at the end: a dump with no muf/
-	// directory beside it returns early below, and marking only on the way
-	// out meant such a world was parsed, reported as imported, and then
-	// written as nothing at all. Nothing after this point adds to the world
-	// — program source and macros are carried on the Result and stored
+	// This has to happen here rather than at the end: a dump with
+	// no muf/ directory beside it returns early below, and
+	// marking only on the way out meant such a world was parsed,
+	// reported as imported, and then written as nothing at all.
+	// Nothing after this point adds to the world — program
+	// source and macros are carried on the Result and stored
 	// separately — so marking now covers every path out.
 	w.MarkAllDirty()
 
@@ -91,8 +95,8 @@ func Load(src Source) (*Result, error) {
 	}
 	rep.Programs = len(res.Programs)
 
-	// A program file whose object is missing or is not a program would
-	// otherwise be stored against nothing.
+	// A program file whose object is missing or is not a program
+	// would otherwise be stored against nothing.
 	kept := res.Programs[:0]
 	for _, p := range res.Programs {
 		o := w.Get(p.Ref)
@@ -109,7 +113,8 @@ func Load(src Source) (*Result, error) {
 	res.Programs = kept
 	rep.Programs = len(kept)
 
-	// Programs in the dump with no source file cannot be run or listed.
+	// Programs in the dump with no source file cannot be run or
+	// listed.
 	withSource := make(map[ref.Ref]bool, len(kept))
 	for _, p := range kept {
 		withSource[p.Ref] = true
@@ -143,15 +148,17 @@ func Load(src Source) (*Result, error) {
 	return res, nil
 }
 
-// PlayersWithoutPasswords lists players whose dump record carried no password.
+// PlayersWithoutPasswords lists players whose dump record carried no
+// password.
 //
-// Fuzzball treats an empty password as "any password works". Emerald refuses
-// such logins instead, so these accounts need a password set before anyone can
-// connect to them, and the operator needs telling.
+// Fuzzball treats an empty password as "any password works". Emerald
+// refuses such logins instead, so these accounts need a password set
+// before anyone can connect to them, and the operator needs telling.
 func (r *Result) PlayersWithoutPasswords() []ref.Ref {
 	var out []ref.Ref
 	r.World.Each(func(o *world.Object) bool {
-		if o.Type() == ref.TypePlayer && o.PasswordHash == "" {
+		if o.Type() == ref.TypePlayer &&
+			o.PasswordHash == "" {
 			out = append(out, o.Ref)
 		}
 		return true

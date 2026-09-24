@@ -20,7 +20,8 @@ func TestForkCopiesTheStackDeeply(t *testing.T) {
 		t.Fatal("the array should be a distinct copy, not the same pointer")
 	}
 
-	// Mutating the child's copy must not reach the parent's, and vice versa.
+	// Mutating the child's copy must not reach the parent's, and
+	// vice versa.
 	child.Stack[1].Array.Set(Int(0), Int(99))
 	if v, _ := parent.Stack[1].Array.Get(Int(0)); v.Num != 1 {
 		t.Errorf("mutating the child's array changed the parent's: %+v", v)
@@ -92,8 +93,8 @@ func TestForkCopiesCallsForsAndTrysIndependently(t *testing.T) {
 		t.Fatal("a FOREACH array should be deep-copied too")
 	}
 
-	// Appending to the child's slices must not touch the parent's backing
-	// arrays.
+	// Appending to the child's slices must not touch the parent's
+	// backing arrays.
 	child.calls = append(child.calls, callSite{pc: 100})
 	if len(parent.calls) != 1 {
 		t.Errorf("appending to child.calls grew parent.calls: %+v", parent.calls)
@@ -117,7 +118,9 @@ func TestForkPreservesScalarFieldsAndBackgroundsTheChild(t *testing.T) {
 	if child.PC != 42 {
 		t.Errorf("PC = %d, want 42 (unadvanced — the caller moves it past FORK)", child.PC)
 	}
-	if child.Caller != 5 || child.Trig != 6 || child.Descr != 7 || child.Level != 3 || child.Supplicant != 8 {
+	if child.Caller != 5 || child.Trig != 6 ||
+		child.Descr != 7 || child.Level != 3 ||
+		child.Supplicant != 8 {
 		t.Errorf("scalar fields not preserved: %+v", child)
 	}
 	if !child.ErrorFlags.DivZero {

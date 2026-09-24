@@ -10,10 +10,10 @@ import (
 
 // mcpScript negotiates MCP and then exchanges a message.
 //
-// The authentication key differs every run, so the script cannot name it. It
-// uses "0" and relies on both servers rejecting the message the same way: what
-// is being compared is the negotiation itself, which is the part a client
-// depends on.
+// The authentication key differs every run, so the script cannot name
+// it. It uses "0" and relies on both servers rejecting the message
+// the same way: what is being compared is the negotiation itself,
+// which is the part a client depends on.
 var mcpScript = Script{
 	"#$#mcp version: 2.1 to: 2.1",
 	`#$#mcp-negotiate-can 0 package: "org-fuzzball-simpleedit" min-version: "1.0" max-version: "1.0"`,
@@ -56,15 +56,16 @@ func TestMCPNegotiationMatchesFuzzball(t *testing.T) {
 	}
 }
 
-// authKey matches the eight hex digits of an authentication key or data tag.
+// authKey matches the eight hex digits of an authentication key or
+// data tag.
 var authKey = regexp.MustCompile(`\b[0-9A-F]{8}\b`)
 
-// maskKeys replaces the per-connection keys, which are random by design and
-// differ on every run, with a fixed string.
+// maskKeys replaces the per-connection keys, which are random by
+// design and differ on every run, with a fixed string.
 //
-// The key's presence and position are what matter — a client reads it out of
-// the opening message and quotes it back on everything after — and those are
-// still compared.
+// The key's presence and position are what matter — a client reads
+// it out of the opening message and quotes it back on everything
+// after — and those are still compared.
 func maskKeys(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {

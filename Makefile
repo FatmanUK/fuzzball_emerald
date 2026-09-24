@@ -111,8 +111,56 @@ test-short: ## Run only the tests that need no database
 vet: ## Run go vet
 	$(GO) vet ./...
 
+# --- formatting -------------------------------------------------------------
+
+# gofmt does not wrap anything, so a column limit needs a second pass.
+# tools/reflow does the parts a line-wrapper cannot: it reflows comment
+# *paragraphs* rather than single lines, moves one-line function bodies
+# out, splits composite literals a field per line, and breaks long
+# conditions after their operators. See CLAUDE.md for why golines is not
+# used.
+GOSRC = find . -name '*.go' -not -path './fuzzball/*' -print0
+
+.PHONY: fmt
+fmt: ## Format Go source and rewrap comments to 70 columns
+	@$(GOSRC) | xargs -0 gofmt -w
+	@$(GO) run ./tools/reflow -w .
+	@$(GOSRC) | xargs -0 gofmt -w
+
+.PHONY: fmt-check
+fmt-check: ## Fail if any Go source is unformatted
+	@out=$$($(GOSRC) | xargs -0 gofmt -l); \
+	if [ -n "$$out" ]; then \
+		echo "gofmt needed:"; echo "$$out"; exit 1; fi
+	@$(GO) run ./tools/reflow -l . >/dev/null \
+		|| { echo "run 'make fmt': comments need rewrapping"; exit 1; }
+
+# width-check holds the 70-column rule on *new* work only. The tree still
+# carries about 2,900 long lines, nearly all string literals whose
+# splitting would cost more than it saves -- see CLAUDE.md. Checking only
+# what a change adds keeps the rule enforceable without a mass rewrite.
+#
+# RANGE defaults to the uncommitted work, which is what you want before
+# committing. CI passes a commit range instead:
+#
+#   make width-check RANGE=HEAD~1..HEAD
+#
+# It is deliberately not a branch comparison: mother and vmother share no
+# history, so diffing against the base would report the whole tree.
+RANGE ?= HEAD
+
+.PHONY: width-check
+width-check: ## Fail if new Go lines exceed 70 columns (RANGE=...)
+	@long=$$(git diff --unified=0 $(RANGE) -- '*.go' \
+		| grep -E '^\+[^+]' | sed 's/^+//' \
+		| expand -t8 | awk 'length > 70'); \
+	if [ -n "$$long" ]; then \
+		echo "these added lines exceed 70 columns (tab=8):"; \
+		echo "$$long"; exit 1; fi
+	@echo "no new lines over 70 columns in $(RANGE)"
+
 .PHONY: check
-check: vet test ## Vet and test
+check: vet fmt-check test ## Vet, check formatting, and test
 
 .PHONY: cover
 cover: ## Write an HTML coverage report

@@ -1,8 +1,8 @@
-// Package tlsline serves the raw TLS line protocol that existing MUCK clients
-// speak.
+// Package tlsline serves the raw TLS line protocol that existing MUCK
+// clients speak.
 //
-// There is no cleartext listener and no STARTTLS: a connection is encrypted
-// from its first byte or it does not exist.
+// There is no cleartext listener and no STARTTLS: a connection is
+// encrypted from its first byte or it does not exist.
 package tlsline
 
 import (
@@ -21,12 +21,12 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 )
 
-// readLimit bounds a single line of input, so a client cannot make the server
-// buffer without limit by never sending a newline.
+// readLimit bounds a single line of input, so a client cannot make
+// the server buffer without limit by never sending a newline.
 const readLimit = 8192
 
-// handshakeTimeout bounds how long a connection may take to complete TLS,
-// which stops an idle opener from holding a slot indefinitely.
+// handshakeTimeout bounds how long a connection may take to complete
+// TLS, which stops an idle opener from holding a slot indefinitely.
 const handshakeTimeout = 20 * time.Second
 
 // Server listens for TLS connections.
@@ -34,8 +34,8 @@ type Server struct {
 	game *game.Server
 	log  *slog.Logger
 	ln   net.Listener
-	// gate refuses connections before the handshake. It may be nil, which
-	// admits everything.
+	// gate refuses connections before the handshake. It may be
+	// nil, which admits everything.
 	gate *admit.Gate
 }
 
@@ -51,8 +51,8 @@ func New(addr string, cfg *tls.Config, g *game.Server, log *slog.Logger, gate *a
 	return &Server{game: g, log: log, ln: ln, gate: gate}, nil
 }
 
-// Addr reports where the listener is bound, which a test needs when it asked
-// for port 0.
+// Addr reports where the listener is bound, which a test needs when
+// it asked for port 0.
 func (s *Server) Addr() net.Addr { return s.ln.Addr() }
 
 // Serve accepts connections until ctx is cancelled.
@@ -68,7 +68,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil // a clean shutdown
 			}
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			if ne, ok := err.(net.Error); ok &&
+				ne.Timeout() {
 				continue
 			}
 			return err
@@ -86,17 +87,18 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 
 	host := hostOf(conn.RemoteAddr())
 
-	// Refused before the handshake: a peer opening connections faster than
-	// it should must not be able to make the server do the expensive part
-	// of accepting them.
+	// Refused before the handshake: a peer opening connections
+	// faster than it should must not be able to make the server
+	// do the expensive part of accepting them.
 	if v := s.gate.Admit(host); v != admit.Allowed {
 		s.log.Warn("refused a connection", "host", host, "reason", string(v))
 		return
 	}
 	defer s.gate.Release(host)
 
-	// Complete the handshake before doing anything else, so a connection
-	// that never negotiates cannot occupy a descriptor.
+	// Complete the handshake before doing anything else, so a
+	// connection that never negotiates cannot occupy a
+	// descriptor.
 	if tc, ok := conn.(*tls.Conn); ok {
 		if err := tc.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil {
 			return
@@ -116,7 +118,8 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 	}
 	defer s.game.Disconnect(d)
 
-	// The decoder strips telnet control sequences and reports window sizes.
+	// The decoder strips telnet control sequences and reports
+	// window sizes.
 	dec := session.NewDecoder(func(ws session.WindowSize) {
 		s.game.Resize(d, ws)
 	})
@@ -130,8 +133,9 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 			if _, err := bw.Write(session.EncodeLine(text)); err != nil {
 				return false
 			}
-			// Flush per line: a MUCK is interactive, and holding
-			// output back to fill a buffer would be felt.
+			// Flush per line: a MUCK is interactive, and
+			// holding output back to fill a buffer would
+			// be felt.
 			return bw.Flush() == nil
 		}
 		for {
@@ -142,9 +146,10 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 					return
 				}
 			case <-d.Done():
-				// Deliver whatever is still queued, so a
-				// parting message is not lost to the race
-				// between it and the disconnect.
+				// Deliver whatever is still queued,
+				// so a parting message is not lost to
+				// the race between it and the
+				// disconnect.
 				for _, text := range d.Drain() {
 					if !write(text) {
 						break
@@ -204,7 +209,8 @@ func (s *Server) readLoop(conn net.Conn, d *session.Descriptor, dec *session.Dec
 	}
 }
 
-// hostOf renders a remote address for logging and WHO, without the port.
+// hostOf renders a remote address for logging and WHO, without the
+// port.
 func hostOf(addr net.Addr) string {
 	host, _, err := net.SplitHostPort(addr.String())
 	if err != nil {

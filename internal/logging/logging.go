@@ -1,9 +1,10 @@
 // Package logging configures the server's structured logger.
 //
-// Fuzzball 7 wrote a dozen separate log files under logs/, chosen by the
-// file_log_* tune parameters. Emerald writes one structured stream and tags
-// each record with the channel the old server would have used, so operators
-// can split it back apart with whatever they already run.
+// Fuzzball 7 wrote a dozen separate log files under logs/, chosen by
+// the file_log_* tune parameters. Emerald writes one structured
+// stream and tags each record with the channel the old server would
+// have used, so operators can split it back apart with whatever they
+// already run.
 package logging
 
 import (
@@ -14,7 +15,8 @@ import (
 )
 
 // Channel names the log stream a record belongs to. They mirror the
-// file_log_* parameters so existing operational habits still transfer.
+// file_log_* parameters so existing operational habits still
+// transfer.
 type Channel string
 
 const (
@@ -26,14 +28,16 @@ const (
 	Sanity   Channel = "sanity"   // database consistency
 	Muf      Channel = "muf"      // MUF diagnostics
 
-	// Security is the one channel with no file_log_* ancestor. Fuzzball
-	// scattered these records through its status log, where a failed login
-	// sat between a flush report and a compile warning; collecting them
-	// gives an operator something to alert on.
+	// Security is the one channel with no file_log_* ancestor.
+	// Fuzzball scattered these records through its status log,
+	// where a failed login sat between a flush report and a
+	// compile warning; collecting them gives an operator
+	// something to alert on.
 	//
-	// What belongs here is anything an intruder would have to do, or anything
-	// that changes who may do what: authentication attempts, password
-	// changes, and the commands only a wizard or God may run.
+	// What belongs here is anything an intruder would have to do,
+	// or anything that changes who may do what: authentication
+	// attempts, password changes, and the commands only a wizard
+	// or God may run.
 	Security Channel = "security"
 )
 

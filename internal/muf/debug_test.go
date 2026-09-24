@@ -15,13 +15,14 @@ func TestValueTextRendersLikeUpstream(t *testing.T) {
 	}{
 		{Str("hi"), `"hi"`},
 		{Str(""), `""`},
-		// Cut at twenty-nine characters, with an underscore marking it.
+		// Cut at twenty-nine characters, with an underscore
+		// marking it.
 		{Str(long), `"` + long[:29] + `"_`},
 		{Int(42), "42"},
 		{Int(-1), "-1"},
 		{Obj(ref.Ref(58)), "#58"},
-		// A float always shows a decimal point, so it cannot be mistaken
-		// for an integer.
+		// A float always shows a decimal point, so it cannot
+		// be mistaken for an integer.
 		{Float(3), "3.0"},
 		{Float(1.5), "1.5"},
 		{Arr(NewList([]Value{Int(1), Int(2)})), "2{...}"},
@@ -33,9 +34,9 @@ func TestValueTextRendersLikeUpstream(t *testing.T) {
 	}
 }
 
-// TestDebugLineShape pins the layout: the stack sits in parentheses before
-// the instruction, reading bottom to top, because upstream builds the line
-// backwards.
+// TestDebugLineShape pins the layout: the stack sits in parentheses
+// before the instruction, reading bottom to top, because upstream
+// builds the line backwards.
 func TestDebugLineShape(t *testing.T) {
 	f := &Frame{
 		Prog:  &Program{Ref: ref.Ref(58)},
@@ -48,7 +49,8 @@ func TestDebugLineShape(t *testing.T) {
 	}
 }
 
-// TestDebugLineTruncatesTheStack checks the eight-item cut and its marker.
+// TestDebugLineTruncatesTheStack checks the eight-item cut and its
+// marker.
 func TestDebugLineTruncatesTheStack(t *testing.T) {
 	f := &Frame{Prog: &Program{Ref: ref.Ref(1)}, PID: 1}
 	for i := 0; i < 12; i++ {

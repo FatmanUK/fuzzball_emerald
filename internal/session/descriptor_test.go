@@ -40,10 +40,11 @@ func TestCloseIsIdempotent(t *testing.T) {
 	d.Close()
 }
 
-// TestSendAndCloseDoNotRace is the regression test for a real bug: Send runs
-// on the world goroutine while Close may run on a transport's, and an earlier
-// version closed the output channel in Close. Closing a channel out from under
-// a sender is a data race, and sending on a closed channel panics outright.
+// TestSendAndCloseDoNotRace is the regression test for a real bug:
+// Send runs on the world goroutine while Close may run on a
+// transport's, and an earlier version closed the output channel in
+// Close. Closing a channel out from under a sender is a data race,
+// and sending on a closed channel panics outright.
 func TestSendAndCloseDoNotRace(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
@@ -76,8 +77,8 @@ func TestSendAndCloseDoNotRace(t *testing.T) {
 
 func TestOverflowClosesRatherThanBlocking(t *testing.T) {
 	d := newDescriptor(1, TransportLine, "host", time.Now(), MCPPackages())
-	// Nobody is draining, so the buffer fills and the descriptor is dropped
-	// rather than the sender stalling.
+	// Nobody is draining, so the buffer fills and the descriptor
+	// is dropped rather than the sender stalling.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -103,8 +104,9 @@ func TestDrainReturnsBufferedOutput(t *testing.T) {
 	d.Send("one")
 	d.Send("two")
 	d.Close()
-	// A parting message queued just before the close must still be
-	// recoverable, which is what lets "Goodbye." reach the client.
+	// A parting message queued just before the close must still
+	// be recoverable, which is what lets "Goodbye." reach the
+	// client.
 	got := d.Drain()
 	if len(got) != 2 || got[0] != "one" || got[1] != "two" {
 		t.Errorf("Drain() = %v, want [one two]", got)

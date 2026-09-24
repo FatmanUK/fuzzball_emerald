@@ -93,23 +93,23 @@ func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
 
 	w.Used(target)
 
-	// Exits are deliberately not listed. Upstream's look_room gives the
-	// name, the description and the contents and stops there; a world that
-	// wants an "obvious exits" line supplies it from its own programs, as
-	// the starter world does.
+	// Exits are deliberately not listed. Upstream's look_room
+	// gives the name, the description and the contents and stops
+	// there; a world that wants an "obvious exits" line supplies
+	// it from its own programs, as the starter world does.
 	if o.Type() == ref.TypeRoom {
 		s.listContents(w, who, target)
 		return
 	}
-	// A container's contents are listed too, so a player can see what is
-	// inside a thing they are examining.
+	// A container's contents are listed too, so a player can see
+	// what is inside a thing they are examining.
 	if o.Type() == ref.TypeThing || o.Type() == ref.TypePlayer {
 		s.listContents(w, who, target)
 	}
 }
 
-// listContents lists what is in a container, skipping the viewer and anything
-// dark they may not see.
+// listContents lists what is in a container, skipping the viewer and
+// anything dark they may not see.
 func (s *Server) listContents(w *world.World, who, container ref.Ref) {
 	var names []string
 	for _, r := range w.Contents(container) {
@@ -149,13 +149,14 @@ func (s *Server) canSee(w *world.World, who, target ref.Ref) bool {
 
 // controls reports whether a player may modify an object.
 //
-// The test is made on whoever owns the asking object, not the object itself,
-// so a puppet controls exactly what its owner does — which is what lets a
-// program running as a thing touch its owner's things.
+// The test is made on whoever owns the asking object, not the object
+// itself, so a puppet controls exactly what its owner does — which
+// is what lets a program running as a thing touch its owner's things.
 //
-// A wizard controls everything, with one exception: while strict_god_priv is
-// set, only God may touch God's objects. Without that a wizard could edit
-// God's programs and so give themselves God's powers.
+// A wizard controls everything, with one exception: while
+// strict_god_priv is set, only God may touch God's objects. Without
+// that a wizard could edit God's programs and so give themselves
+// God's powers.
 func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
 	o := w.Get(target)
 	if o == nil {
@@ -167,7 +168,8 @@ func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
 		return false
 	}
 	if p.Flags.IsWizard() {
-		if w.Tune.Bool("strict_god_priv") && o.Owner == ref.God && owner != ref.God {
+		if w.Tune.Bool("strict_god_priv") &&
+			o.Owner == ref.God && owner != ref.God {
 			return false
 		}
 		return true

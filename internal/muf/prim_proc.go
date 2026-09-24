@@ -8,11 +8,11 @@ import (
 )
 
 // PID, ISPID?, FORCE_LEVEL, INSTANCES and SUPPLICANT are ports of
-// prim_pid, prim_ispidp, prim_force_level (src/p_misc.c), prim_instances
-// (src/p_db.c) and prim_supplicant (src/p_db.c). All five are unconditional —
-// upstream has no mlev floor on any of them — and none needs a lock or
-// object argument checked, so they stay in one file rather than following
-// prim_lock.go's split.
+// prim_pid, prim_ispidp, prim_force_level (src/p_misc.c),
+// prim_instances (src/p_db.c) and prim_supplicant (src/p_db.c). All
+// five are unconditional — upstream has no mlev floor on any of
+// them — and none needs a lock or object argument checked, so they
+// stay in one file rather than following prim_lock.go's split.
 func init() {
 	register("PID", func(f *Frame) (*Result, error) {
 		return nil, f.Push(Int(int64(f.PID)))
@@ -58,7 +58,8 @@ func init() {
 			return nil, err
 		}
 
-		if v.Type != TypeObject || !h.Valid(v.Ref) || h.ObjType(v.Ref) != ref.TypeProgram {
+		if v.Type != TypeObject || !h.Valid(v.Ref) ||
+			h.ObjType(v.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid program object.")
 		}
 
@@ -71,9 +72,10 @@ func init() {
 }
 
 // CANCALL? is a port of prim_cancallp (src/p_misc.c). Everything but
-// argument validation — compiling prog on demand, the target's own mucker
-// level, ownership/Linkable, and the public's own mlev floor — lives in
-// Host.CanCall, since it needs the world and the compiler cache.
+// argument validation — compiling prog on demand, the target's own
+// mucker level, ownership/Linkable, and the public's own mlev floor
+// — lives in Host.CanCall, since it needs the world and the
+// compiler cache.
 func init() {
 	register("CANCALL?", func(f *Frame) (*Result, error) {
 		nameV, err := f.Pop()
@@ -90,12 +92,15 @@ func init() {
 			return nil, err
 		}
 
-		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
+			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid program dbref argument. (1)")
 		}
-		// A MUF "" literal is upstream's NULL PROG_STRING, which this check
-		// rejects the same way ParseLock's own null-vs-empty case does — see
-		// mufHost.ParseLock's doc comment for the general shape of this gap.
+		// A MUF "" literal is upstream's NULL PROG_STRING,
+		// which this check rejects the same way ParseLock's
+		// own null-vs-empty case does — see
+		// mufHost.ParseLock's doc comment for the general
+		// shape of this gap.
 		if nameV.Type != TypeString || nameV.Str == "" {
 			return nil, errf("Invalid string argument. Must be non-null. (2)")
 		}
@@ -105,10 +110,11 @@ func init() {
 	})
 }
 
-// KILL is a port of prim_kill (src/p_misc.c). Killing the running program's
-// own pid is a special case, upstream's do_abort_silent: it is not an error
-// at all, just an immediate, unreported end to the program, which is why it
-// is signalled with errSilentAbort rather than an ordinary *Error.
+// KILL is a port of prim_kill (src/p_misc.c). Killing the running
+// program's own pid is a special case, upstream's do_abort_silent: it
+// is not an error at all, just an immediate, unreported end to the
+// program, which is why it is signalled with errSilentAbort rather
+// than an ordinary *Error.
 func init() {
 	register("KILL", func(f *Frame) (*Result, error) {
 		v, err := f.Pop()
@@ -129,10 +135,12 @@ func init() {
 			return nil, err
 		}
 
-		// Capitalised "Denied" is upstream's own wording here, unlike every
-		// other "Permission denied." message this codebase reproduces —
-		// preserved verbatim rather than normalised.
-		if f.MLevel() < 3 && !h.ControlsProcess(f.progUID(h), pid) {
+		// Capitalised "Denied" is upstream's own wording
+		// here, unlike every other "Permission denied."
+		// message this codebase reproduces — preserved
+		// verbatim rather than normalised.
+		if f.MLevel() < 3 &&
+			!h.ControlsProcess(f.progUID(h), pid) {
 			return nil, errf("Permission Denied.")
 		}
 
@@ -140,18 +148,19 @@ func init() {
 	})
 }
 
-// FORK is a port of prim_fork (src/p_misc.c). The frame-duplicating half is
-// fork() in fork.go, a pure function tested on its own; this primitive is
-// just the PC adjustment fork() leaves to its caller, the child's own "0"
-// marker, and forwarding to the host to register it. Unlike KILL's mlev
-// check, FORK's own "if (mlev < 3) abort_interp(...)" is a genuine
-// unconditional floor with no ownership escape hatch, so it is left to
-// primMLevel (mlev_gen.go already records "FORK": 3) and the dispatcher's
-// own generic message, the same convention every other primitive with an
-// unconditional floor uses — see prim.go's primitive() — rather than
-// duplicated here with upstream's own differently-worded, differently-cased
-// literal, which the dispatcher's gate would pre-empt before this function
-// ever ran anyway.
+// FORK is a port of prim_fork (src/p_misc.c). The frame-duplicating
+// half is fork() in fork.go, a pure function tested on its own; this
+// primitive is just the PC adjustment fork() leaves to its caller,
+// the child's own "0" marker, and forwarding to the host to register
+// it. Unlike KILL's mlev check, FORK's own "if (mlev < 3)
+// abort_interp(...)" is a genuine unconditional floor with no
+// ownership escape hatch, so it is left to primMLevel (mlev_gen.go
+// already records "FORK": 3) and the dispatcher's own generic
+// message, the same convention every other primitive with an
+// unconditional floor uses — see prim.go's primitive() — rather
+// than duplicated here with upstream's own differently-worded,
+// differently-cased literal, which the dispatcher's gate would
+// pre-empt before this function ever ran anyway.
 func init() {
 	register("FORK", func(f *Frame) (*Result, error) {
 		h, err := f.needHost()
@@ -173,10 +182,11 @@ func init() {
 	})
 }
 
-// QUEUE is a port of prim_queue (src/p_misc.c): schedule prog to run after
-// secs seconds, with str as its stack argument. Like FORK's, QUEUE's own
-// "if (mlev < 3)" is an unconditional floor left to primMLevel
-// ("QUEUE": 3) and the dispatcher's generic message, not duplicated here.
+// QUEUE is a port of prim_queue (src/p_misc.c): schedule prog to run
+// after secs seconds, with str as its stack argument. Like FORK's,
+// QUEUE's own "if (mlev < 3)" is an unconditional floor left to
+// primMLevel ("QUEUE": 3) and the dispatcher's generic message, not
+// duplicated here.
 func init() {
 	register("QUEUE", func(f *Frame) (*Result, error) {
 		strV, err := f.Pop()
@@ -201,42 +211,47 @@ func init() {
 			return nil, err
 		}
 
-		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
+			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid program dbref argument (2).")
 		}
 
-		// strV.Str is read regardless of strV.Type, the same way upstream
-		// reads oper1->data.string without checking oper1->type is even a
-		// string — any other type's Str field is Go's zero value "" anyway,
-		// which is what upstream's own NULL-string idiom already means here.
+		// strV.Str is read regardless of strV.Type, the same
+		// way upstream reads oper1->data.string without
+		// checking oper1->type is even a string — any other
+		// type's Str field is Go's zero value "" anyway,
+		// which is what upstream's own NULL-string idiom
+		// already means here.
 		pid := h.Queue(f.Descr, progV.Ref, secsV.Num, strV.Str)
 		return nil, f.Push(Int(int64(pid)))
 	})
 }
 
-// FORCE, FORCEDBY and FORCEDBY_ARRAY are ports of prim_force, prim_forcedby
-// and prim_forcedby_array (src/p_misc.c). All three abort mlev<4 with
-// upstream's own "Wizbit only primitive." — a different, non-generic literal
-// from most other level-4 primitives' "Permission denied.  Requires
-// Wizbit.", discovered via golden when FORCE was ported — so, unlike FORK's
-// and QUEUE's unconditional floors, this is checked here explicitly rather
-// than left to primMLevel and the dispatcher's own generic wording; see
-// gen_mlev.py's CUSTOM_ABORT_MESSAGE for the other two modules with their
-// own distinct variants.
+// FORCE, FORCEDBY and FORCEDBY_ARRAY are ports of prim_force,
+// prim_forcedby and prim_forcedby_array (src/p_misc.c). All three
+// abort mlev<4 with upstream's own "Wizbit only primitive." — a
+// different, non-generic literal from most other level-4 primitives'
+// "Permission denied. Requires Wizbit.", discovered via golden when
+// FORCE was ported — so, unlike FORK's and QUEUE's unconditional
+// floors, this is checked here explicitly rather than left to
+// primMLevel and the dispatcher's own generic wording; see
+// gen_mlev.py's CUSTOM_ABORT_MESSAGE for the other two modules with
+// their own distinct variants.
 //
-// FORCE needs none of @force's own ownership-escaping checks that let a
-// non-wizard force an XForcible, F-locked object — mlev 4 already means the
-// calling program has full wizard authority. What remains beyond the mlev
-// gate is the interp recursion guard, the command string's own validity,
-// the God-forcing gate, and forwarding to the host for the forcelist
-// bookkeeping and the actual run.
+// FORCE needs none of @force's own ownership-escaping checks that let
+// a non-wizard force an XForcible, F-locked object — mlev 4 already
+// means the calling program has full wizard authority. What remains
+// beyond the mlev gate is the interp recursion guard, the command
+// string's own validity, the God-forcing gate, and forwarding to the
+// host for the forcelist bookkeeping and the actual run.
 //
 // The trailing caller-stack sanity check prim_force itself does after
-// running the command — walking fr->caller for anything that is not a
-// TYPE_PROGRAM and silently aborting if so — is not reproduced. It guards
-// against upstream's own internal call-stack bookkeeping somehow surviving a
-// nested process_command, which has no analog in this interpreter's frame
-// model; there is nothing here that could leave it in that state.
+// running the command — walking fr->caller for anything that is not
+// a TYPE_PROGRAM and silently aborting if so — is not reproduced.
+// It guards against upstream's own internal call-stack bookkeeping
+// somehow surviving a nested process_command, which has no analog in
+// this interpreter's frame model; there is nothing here that could
+// leave it in that state.
 func init() {
 	register("FORCE", func(f *Frame) (*Result, error) {
 		cmdV, err := f.Pop()
@@ -265,7 +280,8 @@ func init() {
 			return nil, err
 		}
 
-		if victimV.Type != TypeObject || !h.Valid(victimV.Ref) ||
+		if victimV.Type != TypeObject ||
+			!h.Valid(victimV.Ref) ||
 			(h.ObjType(victimV.Ref) != ref.TypePlayer && h.ObjType(victimV.Ref) != ref.TypeThing) {
 			return nil, errf("Invalid player or thing argument (1).")
 		}
@@ -277,7 +293,8 @@ func init() {
 			return nil, errf("Carriage returns not allowed in command string. (2).")
 		}
 
-		if victimV.Ref == ref.God && h.Owner(f.Prog.Ref) != ref.God {
+		if victimV.Ref == ref.God &&
+			h.Owner(f.Prog.Ref) != ref.God {
 			return nil, errf("Cannot force god (1).")
 		}
 
@@ -313,20 +330,21 @@ func init() {
 	})
 }
 
-// GETPIDS is a port of prim_getpids (src/p_db.c). Its own "if (mlev < 3)" is
-// an unconditional floor, but with the same kind of non-generic wording
-// FORCE's family turned out to have — "Permission denied.  Requires Mucker
-// Level 3.", not the dispatcher's bare "Permission denied." — so it too is
-// checked here rather than left to primMLevel; see gen_mlev.py's
-// CUSTOM_ABORT_MESSAGE.
+// GETPIDS is a port of prim_getpids (src/p_db.c). Its own "if (mlev <
+// 3)" is an unconditional floor, but with the same kind of
+// non-generic wording FORCE's family turned out to have —
+// "Permission denied. Requires Mucker Level 3.", not the dispatcher's
+// bare "Permission denied." — so it too is checked here rather than
+// left to primMLevel; see gen_mlev.py's CUSTOM_ABORT_MESSAGE.
 //
-// Upstream's own post-processing — appending fr->pid only when the argument
-// is exactly the calling program's own ref, not upstream's "ref < 0"
-// wildcard too — has a real equivalent here, and golden caught it: Host.
-// GetPIDs excludes the calling frame's own pid from every match (the same
-// way upstream's timequeue never holds a still-running foreground process
-// at all), and only this explicit step adds it back, exactly mirroring
-// prim_getpids' own "if (program == ref) push fr->pid".
+// Upstream's own post-processing — appending fr->pid only when the
+// argument is exactly the calling program's own ref, not upstream's
+// "ref < 0" wildcard too — has a real equivalent here, and golden
+// caught it: Host. GetPIDs excludes the calling frame's own pid from
+// every match (the same way upstream's timequeue never holds a
+// still-running foreground process at all), and only this explicit
+// step adds it back, exactly mirroring prim_getpids' own "if (program
+// == ref) push fr->pid".
 func init() {
 	register("GETPIDS", func(f *Frame) (*Result, error) {
 		v, err := f.Pop()
@@ -359,26 +377,28 @@ func init() {
 	})
 }
 
-// GETPIDINFO is a port of prim_getpidinfo (src/p_db.c) and get_pidinfo
-// (src/timequeue.c). Its own mlev check is conditional — "mlev < 3 &&
-// oper1->data.number != fr->pid", a program may always inspect its own
-// pid — so it stays out of mlev_gen.go's generated table, via the fr->pid
-// exemption this session's generator fix added, and is hand-checked here,
-// the same shape as KILL's.
+// GETPIDINFO is a port of prim_getpidinfo (src/p_db.c) and
+// get_pidinfo (src/timequeue.c). Its own mlev check is conditional
+// — "mlev < 3 && oper1->data.number != fr->pid", a program may
+// always inspect its own pid — so it stays out of mlev_gen.go's
+// generated table, via the fr->pid exemption this session's generator
+// fix added, and is hand-checked here, the same shape as KILL's.
 //
-// Both branches build the same 14-key dictionary, but the self branch reads
-// straight off the live *Frame*, matching prim_getpidinfo's own inline
-// construction, while the other-pid branch reads Host.PIDInfo, this port's
-// equivalent of get_pidinfo. Deliberately reproduced quirks, not bugs:
-// self's CALLED_DATA is hardcoded to "" and its NEXTRUN to 0, exactly as
-// upstream's own prim_getpidinfo hardcodes them; other-pid's MLEVEL is
-// hardcoded to 0, exactly as upstream's own get_pidinfo hardcodes it (its own
-// documented TODO, not an Emerald gap). CPU is always 0.0 in both branches —
-// Emerald does not profile programs, the same divergence examine's
-// "Cumulative runtime" line already documents. TYPE is always "MUF": unlike
-// upstream's separate MUF/MPI timequeue and MUF-event queue, procQueue holds
-// only muf.Frame processes, an EVENT_WAITFOR-blocked one included, so there
-// is no second queue for an other-pid lookup to fall back to.
+// Both branches build the same 14-key dictionary, but the self branch
+// reads straight off the live *Frame*, matching prim_getpidinfo's own
+// inline construction, while the other-pid branch reads Host.PIDInfo,
+// this port's equivalent of get_pidinfo. Deliberately reproduced
+// quirks, not bugs: self's CALLED_DATA is hardcoded to "" and its
+// NEXTRUN to 0, exactly as upstream's own prim_getpidinfo hardcodes
+// them; other-pid's MLEVEL is hardcoded to 0, exactly as upstream's
+// own get_pidinfo hardcodes it (its own documented TODO, not an
+// Emerald gap). CPU is always 0.0 in both branches — Emerald does
+// not profile programs, the same divergence examine's "Cumulative
+// runtime" line already documents. TYPE is always "MUF": unlike
+// upstream's separate MUF/MPI timequeue and MUF-event queue,
+// procQueue holds only muf.Frame processes, an EVENT_WAITFOR-blocked
+// one included, so there is no second queue for an other-pid lookup
+// to fall back to.
 func init() {
 	register("GETPIDINFO", func(f *Frame) (*Result, error) {
 		v, err := f.Pop()
@@ -434,19 +454,20 @@ func init() {
 	})
 }
 
-// WATCHPID is a port of prim_watchpid (src/p_misc.c). Its mlev check is
-// unconditional but has non-generic wording, "Mucker level 3 required."
-// unlike every other level-3 floor in this file's "Permission denied.
-// Requires Mucker Level 3." — added to gen_mlev.py's CUSTOM_ABORT_MESSAGE
-// alongside FORCE's family.
+// WATCHPID is a port of prim_watchpid (src/p_misc.c). Its mlev check
+// is unconditional but has non-generic wording, "Mucker level 3
+// required." unlike every other level-3 floor in this file's
+// "Permission denied. Requires Mucker Level 3." — added to
+// gen_mlev.py's CUSTOM_ABORT_MESSAGE alongside FORCE's family.
 //
-// When pid names a live process, Host.WatchPID does the bookkeeping and
-// this returns having pushed nothing further, matching upstream's own
-// prim_watchpid, which leaves the stack empty either way. When it does not,
-// the PROC.EXIT.<pid> event is queued directly on this frame — needing no
-// Host call, since upstream's own else branch never touches another
-// process either — so that a later EVENT_WAITFOR filtering on it returns
-// immediately instead of blocking forever on a pid that can never finish.
+// When pid names a live process, Host.WatchPID does the bookkeeping
+// and this returns having pushed nothing further, matching upstream's
+// own prim_watchpid, which leaves the stack empty either way. When it
+// does not, the PROC.EXIT.<pid> event is queued directly on this
+// frame — needing no Host call, since upstream's own else branch
+// never touches another process either — so that a later
+// EVENT_WAITFOR filtering on it returns immediately instead of
+// blocking forever on a pid that can never finish.
 func init() {
 	register("WATCHPID", func(f *Frame) (*Result, error) {
 		v, err := f.Pop()

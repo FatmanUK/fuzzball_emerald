@@ -13,26 +13,27 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// LoadReport describes what a Load did, so the server can log it and tests can
-// assert on it.
+// LoadReport describes what a Load did, so the server can log it and
+// tests can assert on it.
 type LoadReport struct {
 	Objects    int
 	Properties int
 	Programs   int
 	Tune       int
-	// ChainsRepaired counts containers whose contents or exits list did not
-	// agree with what the objects in them claimed, and so was rebuilt from
-	// the location column.
+	// ChainsRepaired counts containers whose contents or exits
+	// list did not agree with what the objects in them claimed,
+	// and so was rebuilt from the location column.
 	ChainsRepaired int
 }
 
-// Load reads the whole database into w. It runs once, at boot; after that the
-// in-memory graph serves every read.
+// Load reads the whole database into w. It runs once, at boot; after
+// that the in-memory graph serves every read.
 func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 	var rep LoadReport
 	db := s.db.WithContext(ctx)
 
-	// Objects first, so properties and destinations have somewhere to go.
+	// Objects first, so properties and destinations have
+	// somewhere to go.
 	byRef := make(map[ref.Ref]*world.Object)
 	var batch []Object
 	err := db.Model(&Object{}).Order("ref").FindInBatches(&batch, 1000,
@@ -58,9 +59,10 @@ func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 				p := &propBatch[i]
 				o := byRef[ref.Ref(p.Ref)]
 				if o == nil {
-					// A property whose object is gone is
-					// dropped rather than resurrecting a
-					// phantom object.
+					// A property whose object is
+					// gone is dropped rather than
+					// resurrecting a phantom
+					// object.
 					s.log.Warn("property with no object",
 						"ref", ref.Ref(p.Ref), "path", p.Path)
 					continue
@@ -90,8 +92,9 @@ func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 	}
 	for _, p := range tuneRows {
 		if err := w.Tune.SetString(p.Name, p.Value); err != nil {
-			// A stored parameter that no longer exists, or no longer
-			// parses, must not stop the server from booting.
+			// A stored parameter that no longer exists,
+			// or no longer parses, must not stop the
+			// server from booting.
 			s.log.Warn("ignoring stored tune parameter",
 				"name", p.Name, "value", p.Value, "error", err)
 			continue
@@ -99,8 +102,9 @@ func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 		rep.Tune++
 	}
 
-	// The ref ceiling is stored so a world whose highest objects were all
-	// recycled still hands out fresh refs rather than reusing them.
+	// The ref ceiling is stored so a world whose highest objects
+	// were all recycled still hands out fresh refs rather than
+	// reusing them.
 	var top Meta
 	if err := db.First(&top, "key = ?", metaTop).Error; err == nil {
 		if n, convErr := strconv.ParseInt(top.Value, 10, 32); convErr == nil {
@@ -118,8 +122,9 @@ func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 	return rep, nil
 }
 
-// LoadPrograms reads MUF source into a callback. Program text is not needed to
-// serve a look or a move, so it is loaded separately from the object graph.
+// LoadPrograms reads MUF source into a callback. Program text is not
+// needed to serve a look or a move, so it is loaded separately from
+// the object graph.
 func (s *Store) LoadPrograms(ctx context.Context, fn func(ref.Ref, string) error) (int, error) {
 	n := 0
 	var batch []Program
@@ -145,10 +150,10 @@ func (s *Store) SaveProgram(ctx context.Context, r ref.Ref, source string) error
 }
 
 func fromRow(r *Object) *world.Object {
-	// The internal flags do not survive a load, exactly as db_read_object
-	// drops them: they describe a live session, not the object. Without
-	// this a crash mid-edit would leave a program permanently claiming
-	// someone else is editing it.
+	// The internal flags do not survive a load, exactly as
+	// db_read_object drops them: they describe a live session,
+	// not the object. Without this a crash mid-edit would leave a
+	// program permanently claiming someone else is editing it.
 	flags := ref.Flags(r.Flags) &^ ref.DumpMask
 	if flags.Type() == ref.TypeProgram {
 		flags &^= ref.Internal

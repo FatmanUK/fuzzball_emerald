@@ -2,8 +2,8 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 
-// The arithmetic error flags, which a program inspects rather than being
-// aborted by.
+// The arithmetic error flags, which a program inspects rather than
+// being aborted by.
 
 // errorNames are the flags in the order is_set? numbers them.
 var errorNames = []string{"DIV_ZERO", "NAN", "IMAGINARY", "FBOUNDS", "IBOUNDS"}
@@ -37,7 +37,8 @@ func init() {
 	register("ERROR_STR", errorText(errorDescriptions))
 }
 
-// errorText builds ERROR_NAME and ERROR_STR, which look a flag up by number.
+// errorText builds ERROR_NAME and ERROR_STR, which look a flag up by
+// number.
 func errorText(table []string) primFunc {
 	return func(f *Frame) (*Result, error) {
 		n, err := f.popInt()

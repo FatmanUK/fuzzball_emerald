@@ -2,13 +2,14 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 
-// primFunc implements one primitive. Returning a non-nil Result stops the
-// interpreter; most primitives return nil and let it advance.
+// primFunc implements one primitive. Returning a non-nil Result stops
+// the interpreter; most primitives return nil and let it advance.
 type primFunc func(f *Frame) (*Result, error)
 
-// prims maps a primitive's number to its implementation. A number with no
-// entry is a primitive the compiler knows but this server does not yet run,
-// which is reported as such rather than silently doing nothing.
+// prims maps a primitive's number to its implementation. A number
+// with no entry is a primitive the compiler knows but this server
+// does not yet run, which is reported as such rather than silently
+// doing nothing.
 var prims = map[int]primFunc{}
 
 // register installs a primitive by name.
@@ -20,21 +21,21 @@ func register(name string, fn primFunc) {
 	prims[n] = fn
 }
 
-// Implemented reports how many primitives have implementations, which the
-// server logs at startup so the gap is visible.
+// Implemented reports how many primitives have implementations, which
+// the server logs at startup so the gap is visible.
 func Implemented() int { return len(prims) + len(dispatched) }
 
-// Dispatched reports whether a primitive is one the compiler emits as an
-// instruction rather than registering — see registry.go's own dispatched
-// table. Such a primitive works, but is answered by Frame.primitive instead
-// of appearing in prims.
+// Dispatched reports whether a primitive is one the compiler emits as
+// an instruction rather than registering — see registry.go's own
+// dispatched table. Such a primitive works, but is answered by
+// Frame.primitive instead of appearing in prims.
 func Dispatched(n int) bool { return dispatched[n] }
 
 // primitive runs one primitive by number.
 func (f *Frame) primitive(n int) (*Result, error) {
-	// The control-flow instructions the compiler emits as primitives are
-	// handled here rather than in the table, because they move the program
-	// counter themselves.
+	// The control-flow instructions the compiler emits as
+	// primitives are handled here rather than in the table,
+	// because they move the program counter themselves.
 	switch n {
 	case InExit:
 		f.ret()
@@ -71,8 +72,9 @@ func (f *Frame) primitive(n int) (*Result, error) {
 	case InCatch, InCatchDetailed:
 		return nil, f.enterCatch(n == InCatchDetailed)
 	case InRead:
-		// The program stops here; the scheduler resumes it with the
-		// line the player types, which READ leaves on the stack.
+		// The program stops here; the scheduler resumes it
+		// with the line the player types, which READ leaves
+		// on the stack.
 		f.Block = BlockReason{Kind: BlockRead}
 		f.PC++
 		blocked := Blocked
@@ -101,11 +103,13 @@ func (f *Frame) primitive(n int) (*Result, error) {
 			events = append(events, v.String())
 		}
 
-		// Emerald has no periodic scan equivalent to upstream's own
-		// muf_event_process — delivery happens synchronously wherever
-		// AddEvent is called — so a match already queued before this
-		// EVENT_WAITFOR runs (WATCHPID on an already-dead pid, most
-		// commonly) is served here instead of at the next tick.
+		// Emerald has no periodic scan equivalent to
+		// upstream's own muf_event_process — delivery
+		// happens synchronously wherever AddEvent is called
+		// — so a match already queued before this
+		// EVENT_WAITFOR runs (WATCHPID on an already-dead
+		// pid, most commonly) is served here instead of at
+		// the next tick.
 		if ev, ok := f.popEvent(events); ok {
 			if err := f.Push(ev.Data); err != nil {
 				return nil, err
@@ -123,11 +127,12 @@ func (f *Frame) primitive(n int) (*Result, error) {
 		return &blocked, nil
 	}
 
-	// Privileged primitives are gated by the program's mucker level.
-	// Without this a program at level 1 could read passwords, change
-	// ownership and boot connections.
+	// Privileged primitives are gated by the program's mucker
+	// level. Without this a program at level 1 could read
+	// passwords, change ownership and boot connections.
 	if need := PrimMLevel(n); need > 0 && f.MLevel() < need {
-		// Upstream names the wizard bit when that is what is missing.
+		// Upstream names the wizard bit when that is what is
+		// missing.
 		if need >= 4 {
 			return nil, errf("Permission denied.  Requires Wizbit.")
 		}
@@ -139,8 +144,8 @@ func (f *Frame) primitive(n int) (*Result, error) {
 		return nil, errf("%s is not implemented yet", PrimName(n))
 	}
 
-	// A primitive that does not move the program counter itself just runs
-	// and falls through to the next instruction.
+	// A primitive that does not move the program counter itself
+	// just runs and falls through to the next instruction.
 	before := f.PC
 	res, err := fn(f)
 	if err != nil {
@@ -165,7 +170,8 @@ func (f *Frame) enterCatch(detailed bool) error {
 		return f.Push(Str(err.Msg))
 	}
 
-	// CATCH_DETAILED hands the handler a dictionary describing the failure.
+	// CATCH_DETAILED hands the handler a dictionary describing
+	// the failure.
 	d := NewDict()
 	d.Set(Str("error"), Str(err.Msg))
 	d.Set(Str("instr"), Str(err.Prim))
@@ -182,7 +188,8 @@ func (f *Frame) beginCountingFor() error {
 		return err
 	}
 	start, end, step := vals[0], vals[1], vals[2]
-	if start.Type != TypeInteger || end.Type != TypeInteger || step.Type != TypeInteger {
+	if start.Type != TypeInteger || end.Type != TypeInteger ||
+		step.Type != TypeInteger {
 		return errf("FOR needs three integers")
 	}
 	if step.Num == 0 {
@@ -215,8 +222,9 @@ func (f *Frame) beginForeach() error {
 	return nil
 }
 
-// forIterate pushes the next iteration's values and a flag saying whether the
-// loop continues. The compiler follows it with a conditional jump out.
+// forIterate pushes the next iteration's values and a flag saying
+// whether the loop continues. The compiler follows it with a
+// conditional jump out.
 func (f *Frame) forIterate() error {
 	if len(f.fors) == 0 {
 		return errf("loop iteration outside a loop")

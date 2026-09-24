@@ -10,19 +10,20 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestImportRoundTripKeepsAPlayerConnectable walks the whole path an imported
-// world takes before anyone can log in:
+// TestImportRoundTripKeepsAPlayerConnectable walks the whole path an
+// imported world takes before anyone can log in:
 //
 //	dump → World → Flush → Postgres → Load → PlayerNamed → Verify
 //
-// Nothing covered that end to end, and a bug lived in the gap: a dump with no
-// muf/ directory beside it returned early from importer.Load before marking
-// the world dirty, so Flush wrote no objects. The import reported success,
-// the database held only tune parameters, and the world's own player could
-// not connect — "Either that player does not exist, or has a different
-// password."
+// Nothing covered that end to end, and a bug lived in the gap: a dump
+// with no muf/ directory beside it returned early from importer.Load
+// before marking the world dirty, so Flush wrote no objects. The
+// import reported success, the database held only tune parameters,
+// and the world's own player could not connect — "Either that
+// player does not exist, or has a different password."
 //
-// minimal.db is the fixture precisely because it has no muf/ directory.
+// minimal.db is the fixture precisely because it has no muf/
+// directory.
 func TestImportRoundTripKeepsAPlayerConnectable(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
@@ -37,7 +38,8 @@ func TestImportRoundTripKeepsAPlayerConnectable(t *testing.T) {
 		t.Fatalf("writing the world: %v", err)
 	}
 
-	// Load it back the way the server does at boot, into a fresh world.
+	// Load it back the way the server does at boot, into a fresh
+	// world.
 	loaded := world.New()
 	rep, err := st.Load(ctx, loaded)
 	if err != nil {
@@ -60,8 +62,9 @@ func TestImportRoundTripKeepsAPlayerConnectable(t *testing.T) {
 		t.Errorf("player %v is a %v", player, o.Type())
 	}
 
-	// The dump carries a bare base64 MD5, which the importer tags and the
-	// verifier accepts, flagging it for upgrade on first login.
+	// The dump carries a bare base64 MD5, which the importer tags
+	// and the verifier accepts, flagging it for upgrade on first
+	// login.
 	res2 := password.Verify(o.PasswordHash, "potrzebie")
 	if !res2.OK {
 		t.Errorf("the imported password does not verify (stored %q)", o.PasswordHash)
@@ -70,9 +73,10 @@ func TestImportRoundTripKeepsAPlayerConnectable(t *testing.T) {
 		t.Error("a legacy MD5 password should be flagged for upgrade")
 	}
 
-	// The description survived too, so properties round-tripped as well as
-	// the objects themselves.
-	if v, ok := loaded.GetProp(player, "_/de"); !ok || v.Str == "" {
+	// The description survived too, so properties round-tripped
+	// as well as the objects themselves.
+	if v, ok := loaded.GetProp(player, "_/de"); !ok ||
+		v.Str == "" {
 		t.Errorf("the player's description did not survive: %+v", v)
 	}
 }

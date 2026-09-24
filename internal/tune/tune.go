@@ -1,11 +1,12 @@
-// Package tune holds the @tune parameter table and the live values a running
-// server reads from it.
+// Package tune holds the @tune parameter table and the live values a
+// running server reads from it.
 //
-// Parameter names are a public API, not labels: the MUF primitives SYSPARM,
-// SETSYSPARM and SYSPARM_ARRAY look them up by string at runtime, so renaming
-// one silently breaks third-party MUF. Names are preserved verbatim from
-// Fuzzball 7 except where the plan records a deliberate divergence, and those
-// carry a LegacyName so the old spelling keeps resolving.
+// Parameter names are a public API, not labels: the MUF primitives
+// SYSPARM, SETSYSPARM and SYSPARM_ARRAY look them up by string at
+// runtime, so renaming one silently breaks third-party MUF. Names are
+// preserved verbatim from Fuzzball 7 except where the plan records a
+// deliberate divergence, and those carry a LegacyName so the old
+// spelling keeps resolving.
 package tune
 
 import (
@@ -46,8 +47,8 @@ func (t Type) String() string {
 	}
 }
 
-// Value holds a parameter value. Only the field matching the parameter's Type
-// is meaningful.
+// Value holds a parameter value. Only the field matching the
+// parameter's Type is meaningful.
 type Value struct {
 	Str  string
 	Span time.Duration
@@ -65,30 +66,32 @@ type Param struct {
 	Type    Type
 	Default Value
 
-	// ReadMLev and WriteMLev are the mucker levels needed to see and to
-	// change the parameter.
+	// ReadMLev and WriteMLev are the mucker levels needed to see
+	// and to change the parameter.
 	ReadMLev  int
 	WriteMLev int
 
-	// GodOnly marks parameters that upstream gated behind MLEV_GOD, which
-	// collapses to MLEV_WIZARD unless the server is built with GOD_PRIV.
+	// GodOnly marks parameters that upstream gated behind
+	// MLEV_GOD, which collapses to MLEV_WIZARD unless the server
+	// is built with GOD_PRIV.
 	GodOnly bool
 
-	// Nullable marks string parameters that accept an empty value.
+	// Nullable marks string parameters that accept an empty
+	// value.
 	Nullable bool
 
 	// ObjType constrains a dbref parameter to one object type.
 	ObjType    ref.ObjType
 	HasObjType bool
 
-	// LegacyName is the Fuzzball 7 spelling, when Emerald renamed this
-	// parameter. Lookups by the old name still resolve, so existing MUF
-	// keeps working.
+	// LegacyName is the Fuzzball 7 spelling, when Emerald renamed
+	// this parameter. Lookups by the old name still resolve, so
+	// existing MUF keeps working.
 	LegacyName string
 
-	// Inert, when non-empty, explains why this parameter no longer affects
-	// the server. It is still readable and settable so MUF that consults it
-	// does not break.
+	// Inert, when non-empty, explains why this parameter no
+	// longer affects the server. It is still readable and
+	// settable so MUF that consults it does not break.
 	Inert string
 }
 
@@ -105,16 +108,17 @@ var byName = func() map[string]*Param {
 	return m
 }()
 
-// Lookup finds a parameter by name, case-insensitively. It resolves legacy
-// names too. The bool reports whether the name was found.
+// Lookup finds a parameter by name, case-insensitively. It resolves
+// legacy names too. The bool reports whether the name was found.
 func Lookup(name string) (*Param, bool) {
 	p, ok := byName[strings.ToLower(strings.TrimSpace(name))]
 	return p, ok
 }
 
-// DroppedReplacement reports whether name is a Fuzzball 7 parameter that
-// Emerald deliberately does not implement, and names the environment variable
-// that replaced it. An empty replacement means the concept is simply gone.
+// DroppedReplacement reports whether name is a Fuzzball 7 parameter
+// that Emerald deliberately does not implement, and names the
+// environment variable that replaced it. An empty replacement means
+// the concept is simply gone.
 func DroppedReplacement(name string) (string, bool) {
 	env, ok := droppedParams[strings.ToLower(strings.TrimSpace(name))]
 	return env, ok
@@ -127,12 +131,13 @@ func Params() []Param {
 	return out
 }
 
-// Set is a live table of parameter values. It is not safe for concurrent use;
-// the world goroutine owns it.
+// Set is a live table of parameter values. It is not safe for
+// concurrent use; the world goroutine owns it.
 type Set struct {
 	vals map[string]Value
-	// dflt tracks which parameters still hold their default, which is what
-	// decides the leading '%' when a dump header is written.
+	// dflt tracks which parameters still hold their default,
+	// which is what decides the leading '%' when a dump header is
+	// written.
 	dflt map[string]bool
 }
 
@@ -149,8 +154,9 @@ func NewSet() *Set {
 	return s
 }
 
-// Params returns every parameter, ordered by name. It is a method as well as
-// a package function so callers holding only a Set can enumerate.
+// Params returns every parameter, ordered by name. It is a method as
+// well as a package function so callers holding only a Set can
+// enumerate.
 func (s *Set) Params() []Param { return Params() }
 
 // Get returns the current value of a parameter.
@@ -163,7 +169,8 @@ func (s *Set) Get(name string) (Value, bool) {
 	return v, ok
 }
 
-// IsDefault reports whether a parameter still holds its default value.
+// IsDefault reports whether a parameter still holds its default
+// value.
 func (s *Set) IsDefault(name string) bool {
 	p, ok := Lookup(name)
 	if !ok {
@@ -172,14 +179,23 @@ func (s *Set) IsDefault(name string) bool {
 	return s.dflt[p.Name]
 }
 
-// Typed accessors. Each panics if the named parameter does not exist or is of
-// the wrong type, because every call site names a compile-time constant and a
-// mismatch is a bug in the server, not bad input.
+// Typed accessors. Each panics if the named parameter does not exist
+// or is of the wrong type, because every call site names a
+// compile-time constant and a mismatch is a bug in the server, not
+// bad input.
 
-func (s *Set) String(name string) string { return s.must(name, TypeString).Str }
-func (s *Set) Bool(name string) bool     { return s.must(name, TypeBoolean).Bool }
-func (s *Set) Int(name string) int64     { return s.must(name, TypeInteger).Num }
-func (s *Set) Ref(name string) ref.Ref   { return s.must(name, TypeDbref).Ref }
+func (s *Set) String(name string) string {
+	return s.must(name, TypeString).Str
+}
+func (s *Set) Bool(name string) bool {
+	return s.must(name, TypeBoolean).Bool
+}
+func (s *Set) Int(name string) int64 {
+	return s.must(name, TypeInteger).Num
+}
+func (s *Set) Ref(name string) ref.Ref {
+	return s.must(name, TypeDbref).Ref
+}
 func (s *Set) Duration(name string) time.Duration {
 	return s.must(name, TypeTimespan).Span
 }
@@ -195,7 +211,8 @@ func (s *Set) must(name string, want Type) Value {
 	return s.vals[p.Name]
 }
 
-// SetValue stores a pre-parsed value, marking the parameter non-default.
+// SetValue stores a pre-parsed value, marking the parameter
+// non-default.
 func (s *Set) SetValue(name string, v Value) error {
 	p, ok := Lookup(name)
 	if !ok {
@@ -217,8 +234,8 @@ func (s *Set) Reset(name string) error {
 	return nil
 }
 
-// SetString parses a textual value the way @tune and a dump header do, then
-// stores it.
+// SetString parses a textual value the way @tune and a dump header
+// do, then stores it.
 func (s *Set) SetString(name, raw string) error {
 	p, ok := Lookup(name)
 	if !ok {
@@ -295,8 +312,9 @@ func (p *Param) Format(v Value) string {
 	return ""
 }
 
-// ParseTimespan reads Fuzzball's "  0d  4:00:00" timespan form. A bare number
-// of seconds is also accepted, which is what MUF SETSYSPARM tends to pass.
+// ParseTimespan reads Fuzzball's " 0d 4:00:00" timespan form. A bare
+// number of seconds is also accepted, which is what MUF SETSYSPARM
+// tends to pass.
 func ParseTimespan(raw string) (time.Duration, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -324,7 +342,8 @@ func ParseTimespan(raw string) (time.Duration, error) {
 		return 0, fmt.Errorf("bad timespan %q", raw)
 	}
 	units := []time.Duration{time.Hour, time.Minute, time.Second}
-	// Right-align: "5:00" is minutes and seconds, not hours and minutes.
+	// Right-align: "5:00" is minutes and seconds, not hours and
+	// minutes.
 	units = units[len(units)-len(fields):]
 	for i, f := range fields {
 		n, err := strconv.ParseInt(strings.TrimSpace(f), 10, 64)
@@ -336,7 +355,8 @@ func ParseTimespan(raw string) (time.Duration, error) {
 	return total, nil
 }
 
-// FormatTimespan renders a duration in Fuzzball's dump form, e.g. " 90d  0:00:00".
+// FormatTimespan renders a duration in Fuzzball's dump form, e.g. "
+// 90d 0:00:00".
 func FormatTimespan(d time.Duration) string {
 	secs := int64(d / time.Second)
 	days := secs / 86400

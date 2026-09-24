@@ -8,12 +8,12 @@ import (
 
 // Violation is one problem found in the object graph.
 //
-// The message is upstream's, because these reports are read by people who
-// already know what Fuzzball's say, and because a database salvaged by hand
-// is followed by a re-run that has to be comparable.
+// The message is upstream's, because these reports are read by people
+// who already know what Fuzzball's say, and because a database
+// salvaged by hand is followed by a re-run that has to be comparable.
 type Violation struct {
-	// Ref is the object at fault. It may not exist, which is itself the
-	// finding in some cases.
+	// Ref is the object at fault. It may not exist, which is
+	// itself the finding in some cases.
 	Ref ref.Ref
 	// Problem completes the sentence "Object <name> ...!".
 	Problem string
@@ -21,22 +21,25 @@ type Violation struct {
 
 // Check walks the whole object graph looking for inconsistency.
 //
-// Findings and progress notes are handed to the callbacks as the scan reaches
-// them, rather than collected and returned, because a scan of a large database
-// takes long enough that an operator wants to see it moving.
+// Findings and progress notes are handed to the callbacks as the scan
+// reaches them, rather than collected and returned, because a scan of
+// a large database takes long enough that an operator wants to see it
+// moving.
 //
-// This checks the in-memory graph rather than Postgres, because the in-memory
-// graph is what the game runs on: the store is a write-behind copy of it, and
-// a check made against the copy would pass while the running world was broken.
-// Whether the store agrees with memory is a different question, and one the
-// flush already answers by writing the whole of every changed object.
+// This checks the in-memory graph rather than Postgres, because the
+// in-memory graph is what the game runs on: the store is a
+// write-behind copy of it, and a check made against the copy would
+// pass while the running world was broken. Whether the store agrees
+// with memory is a different question, and one the flush already
+// answers by writing the whole of every changed object.
 func (w *World) Check(note func(string), report func(Violation)) {
 	violate := func(r ref.Ref, problem string) {
 		report(Violation{Ref: r, Problem: problem})
 	}
 
-	// Progress is reported in blocks, as upstream does, so the numbers in a
-	// transcript line up with the ones people are used to seeing.
+	// Progress is reported in blocks, as upstream does, so the
+	// numbers in a transcript line up with the ones people are
+	// used to seeing.
 	const block = 10000
 	for r := ref.Ref(0); r < w.top; r++ {
 		if r%block == 0 {
@@ -68,8 +71,9 @@ func (w *World) checkObject(o *Object, report func(ref.Ref, string)) {
 		case owner.Type() != ref.TypePlayer:
 			report(o.Ref, "has a non-player object as its owner.")
 		}
-		// The global environment is the one object allowed to be
-		// nowhere: it is the root that everything else hangs from.
+		// The global environment is the one object allowed to
+		// be nowhere: it is the root that everything else
+		// hangs from.
 		if !w.Valid(o.Location) &&
 			!(o.Ref == ref.GlobalEnvironment && o.Location == ref.Nothing) {
 			report(o.Ref, "has an invalid object as its location")
@@ -91,8 +95,10 @@ func (w *World) checkObject(o *Object, report func(ref.Ref, string)) {
 
 	switch o.Type() {
 	case ref.TypeRoom:
-		// A drop-to may be HOME, or a room or thing to drop into.
-		if !w.Valid(o.Dropto) && o.Dropto != ref.Nothing && o.Dropto != ref.Home {
+		// A drop-to may be HOME, or a room or thing to drop
+		// into.
+		if !w.Valid(o.Dropto) && o.Dropto != ref.Nothing &&
+			o.Dropto != ref.Home {
 			report(o.Ref, "has its dropto set to an invalid object")
 		} else if d := w.Get(o.Dropto); d != nil &&
 			d.Type() != ref.TypeThing && d.Type() != ref.TypeRoom {
@@ -115,24 +121,27 @@ func (w *World) checkObject(o *Object, report func(ref.Ref, string)) {
 		}
 	case ref.TypeExit:
 		for _, d := range o.Dest {
-			if !w.Valid(d) && d != ref.Home && d != ref.Nil {
+			if !w.Valid(d) && d != ref.Home &&
+				d != ref.Nil {
 				report(o.Ref, "has an invalid object as one of its link destinations")
 			}
 		}
 	case ref.TypeGarbage:
-		if n := w.Get(o.Next); n != nil && n.Type() != ref.TypeGarbage {
+		if n := w.Get(o.Next); n != nil &&
+			n.Type() != ref.TypeGarbage {
 			report(o.Ref, "has a non-garbage object as the 'next' object in the garbage chain")
 		}
 	case ref.TypeProgram:
-		// Nothing type-specific: a program's source is checked by
-		// compiling it, not by looking at the object.
+		// Nothing type-specific: a program's source is
+		// checked by compiling it, not by looking at the
+		// object.
 	default:
 		report(o.Ref, "has an unknown object type, and its flags may also be corrupt")
 	}
 }
 
-// holdsChains reports whether an object is one that may have contents and
-// exits at all. Programs, exits and garbage may not.
+// holdsChains reports whether an object is one that may have contents
+// and exits at all. Programs, exits and garbage may not.
 func holdsChains(o *Object) bool {
 	switch o.Type() {
 	case ref.TypeProgram, ref.TypeExit, ref.TypeGarbage:
@@ -141,7 +150,8 @@ func holdsChains(o *Object) bool {
 	return true
 }
 
-// emptyChainProblem names the complaint for a type that should have no chain.
+// emptyChainProblem names the complaint for a type that should have
+// no chain.
 func emptyChainProblem(o *Object, which string) string {
 	switch o.Type() {
 	case ref.TypeExit:
@@ -153,8 +163,8 @@ func emptyChainProblem(o *Object, which string) string {
 	}
 }
 
-// checkContentsList walks an object's contents, which must all be non-exits
-// that agree about where they are.
+// checkContentsList walks an object's contents, which must all be
+// non-exits that agree about where they are.
 func (w *World) checkContentsList(o *Object, report func(ref.Ref, string)) {
 	if !holdsChains(o) {
 		if o.Contents != ref.Nothing {
@@ -166,12 +176,14 @@ func (w *World) checkContentsList(o *Object, report func(ref.Ref, string)) {
 	at, limit := o.Contents, w.Len()+1
 	for {
 		m := w.Get(at)
-		if m == nil || m.Location != o.Ref || m.Type() == ref.TypeExit {
+		if m == nil || m.Location != o.Ref ||
+			m.Type() == ref.TypeExit {
 			break
 		}
 		if limit--; limit == 0 {
-			// The walk outlasted the database, so the chain must
-			// loop. Which link closes it is a separate finding.
+			// The walk outlasted the database, so the
+			// chain must loop. Which link closes it is a
+			// separate finding.
 			w.checkNextChain(o.Contents, report)
 			report(o.Ref, "is the containing object, and has a loop in its contents chain")
 			return
@@ -194,7 +206,8 @@ func (w *World) checkContentsList(o *Object, report func(ref.Ref, string)) {
 	}
 }
 
-// checkExitsList is the same for the exits chain, which must hold only exits.
+// checkExitsList is the same for the exits chain, which must hold
+// only exits.
 func (w *World) checkExitsList(o *Object, report func(ref.Ref, string)) {
 	if !holdsChains(o) {
 		if o.Exits != ref.Nothing {
@@ -206,7 +219,8 @@ func (w *World) checkExitsList(o *Object, report func(ref.Ref, string)) {
 	at, limit := o.Exits, w.Len()+1
 	for {
 		m := w.Get(at)
-		if m == nil || m.Location != o.Ref || m.Type() != ref.TypeExit {
+		if m == nil || m.Location != o.Ref ||
+			m.Type() != ref.TypeExit {
 			break
 		}
 		if limit--; limit == 0 {
@@ -232,8 +246,8 @@ func (w *World) checkExitsList(o *Object, report func(ref.Ref, string)) {
 	}
 }
 
-// checkNextChain finds the link that closes a loop, so a report names the
-// object that has to be cut rather than only the container.
+// checkNextChain finds the link that closes a loop, so a report names
+// the object that has to be cut rather than only the container.
 func (w *World) checkNextChain(head ref.Ref, report func(ref.Ref, string)) {
 	seen := map[ref.Ref]bool{}
 	at := head
@@ -252,14 +266,15 @@ func (w *World) checkNextChain(head ref.Ref, report func(ref.Ref, string)) {
 	}
 }
 
-// findOrphans looks for objects nothing points at, and for objects more than
-// one thing points at.
+// findOrphans looks for objects nothing points at, and for objects
+// more than one thing points at.
 //
-// Every object should appear exactly once across all the contents, exits and
-// next links in the database — the global environment and the head of the
-// recycle chain excepted, which are roots. An object appearing twice means two
-// containers believe they hold it; an object appearing nowhere has been
-// dropped out of the graph and is unreachable.
+// Every object should appear exactly once across all the contents,
+// exits and next links in the database — the global environment and
+// the head of the recycle chain excepted, which are roots. An object
+// appearing twice means two containers believe they hold it; an
+// object appearing nowhere has been dropped out of the graph and is
+// unreachable.
 func (w *World) findOrphans(report func(ref.Ref, string)) {
 	seen := make(map[ref.Ref]bool, w.Len())
 	seen[ref.GlobalEnvironment] = true

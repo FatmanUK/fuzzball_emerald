@@ -2,8 +2,8 @@ package mpi
 
 import "strings"
 
-// The object and world introspection functions: what an object is, what it
-// holds, who owns it, who is connected.
+// The object and world introspection functions: what an object is,
+// what it holds, who owns it, who is connected.
 func init() {
 	register("TYPE", func(env *Env, _ *Func, args []string) (string, error) {
 		obj := env.lookup(args[0])
@@ -13,9 +13,9 @@ func init() {
 		return env.Host.TypeName(obj), nil
 	})
 
-	// {name} renders a player as "*Name"; {fullname} always gives the
-	// stored name, which for a player includes nothing extra but for
-	// anything else is the same string.
+	// {name} renders a player as "*Name"; {fullname} always gives
+	// the stored name, which for a player includes nothing extra
+	// but for anything else is the same string.
 	register("FULLNAME", func(env *Env, _ *Func, args []string) (string, error) {
 		obj := env.lookup(args[0])
 		if !env.Host.Valid(obj) {
@@ -64,7 +64,8 @@ func init() {
 		}
 		var out []Ref
 		for _, r := range env.Host.Contents(obj) {
-			if want != "" && env.Host.TypeName(r) != want {
+			if want != "" &&
+				env.Host.TypeName(r) != want {
 				continue
 			}
 			out = append(out, r)
@@ -93,8 +94,9 @@ func init() {
 		if err != nil {
 			return "", errf("CONTROLS", "Match failed. (arg1)")
 		}
-		// The second argument names whose authority to test; without one
-		// it is the object the message's permissions come from.
+		// The second argument names whose authority to test;
+		// without one it is the object the message's
+		// permissions come from.
 		who := env.Host.Owner(env.Perms)
 		if len(args) > 1 {
 			other, err := env.resolve("CONTROLS", args, 1)
@@ -106,8 +108,9 @@ func init() {
 		return boolOf(env.Host.Controls(who, obj)), nil
 	})
 
-	// {contains} walks outwards from the object, so a thing inside a thing
-	// inside a room still counts; {holds} tests only the direct location.
+	// {contains} walks outwards from the object, so a thing
+	// inside a thing inside a room still counts; {holds} tests
+	// only the direct location.
 	register("CONTAINS", func(env *Env, _ *Func, args []string) (string, error) {
 		inner, err := env.resolve("CONTAINS", args, 0)
 		if err != nil {
@@ -119,7 +122,8 @@ func init() {
 				return "", errf("CONTAINS", "Match failed (2).")
 			}
 		}
-		for i := 0; i < maxEnvDepth && inner != nothing && inner != outer; i++ {
+		for i := 0; i < maxEnvDepth && inner != nothing &&
+			inner != outer; i++ {
 			inner = env.Host.Location(inner)
 		}
 		return boolOf(inner == outer), nil
@@ -202,9 +206,10 @@ func init() {
 				return "", errf("TESTLOCK", "Match failed. (arg3)")
 			}
 		}
-		// A lock is read out of a property, so the same restrictions apply
-		// as to reading one directly: system properties never, and hidden
-		// ones only for a blessed message.
+		// A lock is read out of a property, so the same
+		// restrictions apply as to reading one directly:
+		// system properties never, and hidden ones only for a
+		// blessed message.
 		if hasPropPrefix(args[1], "@__sys__") ||
 			(!env.Blessed && propSegmentStarts(args[1], '@')) {
 			return "", errf("TESTLOCK", "Permission denied. (arg1)")
@@ -240,8 +245,9 @@ func init() {
 		return env.Host.MuckName(), nil
 	})
 	register("SYSPARM", func(env *Env, _ *Func, args []string) (string, error) {
-		// An unknown parameter reads as empty rather than failing, which is
-		// what tune_get_parmstring gives for one the reader may not see.
+		// An unknown parameter reads as empty rather than
+		// failing, which is what tune_get_parmstring gives
+		// for one the reader may not see.
 		v, _ := env.Host.TuneGet(strings.TrimSpace(args[0]))
 		return v, nil
 	})
@@ -281,8 +287,9 @@ func timestamp(pick func(created, modified, used int64, count int) int64) impl {
 	}
 }
 
-// connTime builds {ontime} and {idle}, which report -1 rather than failing
-// for an object that is not connected — or not an object at all.
+// connTime builds {ontime} and {idle}, which report -1 rather than
+// failing for an object that is not connected — or not an object at
+// all.
 func connTime(read func(Host, Ref) int) impl {
 	return func(env *Env, _ *Func, args []string) (string, error) {
 		obj := env.lookup(args[0])
@@ -293,9 +300,9 @@ func connTime(read func(Host, Ref) int) impl {
 	}
 }
 
-// terminalSize builds {width} and {height}. A client that never told the
-// server its size reports zero, and the optional argument is what to say
-// instead — so "{width:79}" is the usual shape.
+// terminalSize builds {width} and {height}. A client that never told
+// the server its size reports zero, and the optional argument is what
+// to say instead — so "{width:79}" is the usual shape.
 func terminalSize(read func(Host, Ref) int) impl {
 	return func(env *Env, _ *Func, args []string) (string, error) {
 		n := read(env.Host, env.Who)
@@ -306,8 +313,8 @@ func terminalSize(read func(Host, Ref) int) impl {
 	}
 }
 
-// neighbours reports whether two objects can see each other: in the same
-// room, or one inside the other.
+// neighbours reports whether two objects can see each other: in the
+// same room, or one inside the other.
 func neighbours(env *Env, a, b Ref) bool {
 	if a == b {
 		return true

@@ -32,9 +32,9 @@ func TestBuildMessageHeaders(t *testing.T) {
 	}
 }
 
-// TestHeaderInjectionIsStripped is the check that matters: a subject and a
-// recipient name are both chosen by a MUF program, so a newline in either
-// must not be able to add headers of its own.
+// TestHeaderInjectionIsStripped is the check that matters: a subject
+// and a recipient name are both chosen by a MUF program, so a newline
+// in either must not be able to add headers of its own.
 func TestHeaderInjectionIsStripped(t *testing.T) {
 	cfg := smtpSettings{fromAddr: "muck@example.com", fromName: "The MUCK"}
 	msg := buildMessage(cfg,
@@ -43,17 +43,18 @@ func TestHeaderInjectionIsStripped(t *testing.T) {
 		"Subject\r\nBcc: other@example.org",
 		"body")
 
-	// The injected text survives as *data* — folded into the value it came
-	// from — which is fine. What must not happen is a new header line, so
-	// the check is on what starts a line rather than on the text appearing
-	// at all.
+	// The injected text survives as *data* — folded into the
+	// value it came from — which is fine. What must not happen
+	// is a new header line, so the check is on what starts a line
+	// rather than on the text appearing at all.
 	head, _, _ := strings.Cut(msg, "\r\n\r\n")
 	for _, line := range strings.Split(head, "\r\n") {
 		if strings.HasPrefix(strings.ToLower(line), "bcc:") {
 			t.Errorf("a header was injected through a name or subject:\n%s", head)
 		}
 	}
-	// And the header block is still exactly the lines buildMessage writes.
+	// And the header block is still exactly the lines
+	// buildMessage writes.
 	if got, want := len(strings.Split(head, "\r\n")), 6; got != want {
 		t.Errorf("header block has %d lines, want %d:\n%s", got, want, head)
 	}

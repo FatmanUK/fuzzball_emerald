@@ -23,8 +23,9 @@ func TestRepairLeavesAHealthyWorldAlone(t *testing.T) {
 	if n := w.RepairChains(); n != 0 {
 		t.Errorf("RepairChains repaired %d containers in a healthy world", n)
 	}
-	// Insertion order is newest-first and must survive untouched; rebuilding
-	// in ref order here would silently reverse every container in the game.
+	// Insertion order is newest-first and must survive untouched;
+	// rebuilding in ref order here would silently reverse every
+	// container in the game.
 	after := w.Contents(room.Ref)
 	if !reflect.DeepEqual(before, after) {
 		t.Errorf("contents order changed: %v -> %v", before, after)
@@ -46,8 +47,9 @@ func TestRepairRebuildsATruncatedChain(t *testing.T) {
 		things = append(things, o.Ref)
 	}
 
-	// Break the chain after the first entry. Everything past the break is
-	// now unreachable, though each object still knows where it lives.
+	// Break the chain after the first entry. Everything past the
+	// break is now unreachable, though each object still knows
+	// where it lives.
 	head := w.Get(room.Contents)
 	head.Next = ref.Nothing
 	if got := len(w.Contents(room.Ref)); got != 1 {
@@ -92,7 +94,8 @@ func TestRepairSeparatesExitsFromContents(t *testing.T) {
 	exit := w.Create("north", ref.TypeExit, ref.God)
 	thing.Location = room.Ref
 	exit.Location = room.Ref
-	// Both threaded onto the contents list, which is wrong for the exit.
+	// Both threaded onto the contents list, which is wrong for
+	// the exit.
 	room.Contents = thing.Ref
 	thing.Next = exit.Ref
 
@@ -112,7 +115,8 @@ func TestRepairDropsAnObjectInAMissingContainer(t *testing.T) {
 	orphan := w.Create("Orphan", ref.TypeThing, ref.God)
 	orphan.Location = ref.Ref(999) // no such object
 
-	// Nothing to repair: there is no container to rebuild a chain for.
+	// Nothing to repair: there is no container to rebuild a chain
+	// for.
 	if n := w.RepairChains(); n != 0 {
 		t.Errorf("RepairChains repaired %d containers, want 0", n)
 	}

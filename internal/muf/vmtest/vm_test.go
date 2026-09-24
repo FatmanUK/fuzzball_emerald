@@ -1,6 +1,8 @@
-// Package vmtest runs compiled MUF, joining the compiler to the interpreter.
+// Package vmtest runs compiled MUF, joining the compiler to the
+// interpreter.
 //
-// It lives apart from both so neither has to import the other for testing.
+// It lives apart from both so neither has to import the other for
+// testing.
 package vmtest
 
 import (
@@ -16,7 +18,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// fakeHost is a minimal world for programs that reach outside themselves.
+// fakeHost is a minimal world for programs that reach outside
+// themselves.
 type fakeHost struct {
 	told  []string
 	props map[string]props.Value
@@ -27,7 +30,9 @@ func newHost() *fakeHost {
 	return &fakeHost{props: map[string]props.Value{}, names: map[ref.Ref]string{}}
 }
 
-func (h *fakeHost) Notify(_ ref.Ref, msg string) { h.told = append(h.told, msg) }
+func (h *fakeHost) Notify(_ ref.Ref, msg string) {
+	h.told = append(h.told, msg)
+}
 func (h *fakeHost) NotifyExcept(_ ref.Ref, _ []ref.Ref, msg string) {
 	h.told = append(h.told, msg)
 }
@@ -38,19 +43,27 @@ func (h *fakeHost) SetName(o ref.Ref, n string) error {
 	return nil
 }
 
-func (h *fakeHost) Location(ref.Ref) ref.Ref      { return ref.GlobalEnvironment }
-func (h *fakeHost) Owner(ref.Ref) ref.Ref         { return ref.God }
-func (h *fakeHost) Home(ref.Ref) ref.Ref          { return ref.GlobalEnvironment }
+func (h *fakeHost) Location(ref.Ref) ref.Ref {
+	return ref.GlobalEnvironment
+}
+func (h *fakeHost) Owner(ref.Ref) ref.Ref { return ref.God }
+func (h *fakeHost) Home(ref.Ref) ref.Ref {
+	return ref.GlobalEnvironment
+}
 func (h *fakeHost) Links(ref.Ref) []ref.Ref       { return nil }
 func (h *fakeHost) Contents(ref.Ref) []ref.Ref    { return nil }
 func (h *fakeHost) Exits(ref.Ref) []ref.Ref       { return nil }
 func (h *fakeHost) MoveTo(ref.Ref, ref.Ref) error { return nil }
 
-func (h *fakeHost) Valid(o ref.Ref) bool        { return o.Ok() }
-func (h *fakeHost) ObjType(ref.Ref) ref.ObjType { return ref.TypeThing }
+func (h *fakeHost) Valid(o ref.Ref) bool { return o.Ok() }
+func (h *fakeHost) ObjType(ref.Ref) ref.ObjType {
+	return ref.TypeThing
+}
 func (h *fakeHost) Flags(ref.Ref) ref.Flags     { return 0 }
 func (h *fakeHost) SetFlags(ref.Ref, ref.Flags) {}
-func (h *fakeHost) Top() ref.Ref                { return ref.Ref(100) }
+func (h *fakeHost) Top() ref.Ref {
+	return ref.Ref(100)
+}
 
 func (h *fakeHost) GetProp(o ref.Ref, p string) (props.Value, bool) {
 	v, ok := h.props[o.String()+"/"+p]
@@ -62,11 +75,19 @@ func (h *fakeHost) SetProp(o ref.Ref, p string, v props.Value) {
 func (h *fakeHost) RemoveProp(o ref.Ref, p string) {
 	delete(h.props, o.String()+"/"+p)
 }
-func (h *fakeHost) PropChildren(ref.Ref, string) []string { return nil }
+func (h *fakeHost) PropChildren(ref.Ref, string) []string {
+	return nil
+}
 
-func (h *fakeHost) Match(ref.Ref, string) ref.Ref    { return ref.Nothing }
-func (h *fakeHost) MatchPlayer(string) ref.Ref       { return ref.Nothing }
-func (h *fakeHost) MatchPlayerPrefix(string) ref.Ref { return ref.Nothing }
+func (h *fakeHost) Match(ref.Ref, string) ref.Ref {
+	return ref.Nothing
+}
+func (h *fakeHost) MatchPlayer(string) ref.Ref {
+	return ref.Nothing
+}
+func (h *fakeHost) MatchPlayerPrefix(string) ref.Ref {
+	return ref.Nothing
+}
 
 func (h *fakeHost) Create(ref.ObjType, string, ref.Ref, ref.Ref) (ref.Ref, error) {
 	return ref.Ref(50), nil
@@ -80,13 +101,17 @@ func (h *fakeHost) Timestamps(ref.Ref) (int64, int64, int64, int32) {
 	return 1, 2, 3, 4
 }
 
-func (h *fakeHost) CheckPassword(ref.Ref, string) bool { return false }
-func (h *fakeHost) SetPassword(ref.Ref, string) error  { return nil }
+func (h *fakeHost) CheckPassword(ref.Ref, string) bool {
+	return false
+}
+func (h *fakeHost) SetPassword(ref.Ref, string) error { return nil }
 
 func (h *fakeHost) Connections(ref.Ref) int   { return 1 }
 func (h *fakeHost) Descriptors(ref.Ref) []int { return []int{1} }
 
-func (h *fakeHost) Online() []ref.Ref        { return []ref.Ref{ref.God} }
+func (h *fakeHost) Online() []ref.Ref {
+	return []ref.Ref{ref.God}
+}
 func (h *fakeHost) DescrPlayer(int) ref.Ref  { return ref.God }
 func (h *fakeHost) DescrSize(int) (int, int) { return 80, 24 }
 
@@ -96,22 +121,32 @@ func (h *fakeHost) ParseProp(ref.Ref, string, string, bool) (string, error) {
 func (h *fakeHost) ParseMPI(ref.Ref, string, string, bool) (string, error) {
 	return "", nil
 }
-func (h *fakeHost) BlessProp(ref.Ref, string, bool)    {}
-func (h *fakeHost) IsPropBlessed(ref.Ref, string) bool { return false }
-func (h *fakeHost) Controls(ref.Ref, ref.Ref) bool     { return false }
-func (h *fakeHost) CompiledSize(ref.Ref) int           { return 0 }
-func (h *fakeHost) Compile(ref.Ref) (int, error)       { return 0, nil }
-func (h *fakeHost) Uncompile(ref.Ref)                  {}
-func (h *fakeHost) ProgramLines(ref.Ref) []string      { return nil }
-func (h *fakeHost) SetProgramLines(ref.Ref, []string)  {}
-func (h *fakeHost) ToadPlayer(ref.Ref, ref.Ref)        {}
-func (h *fakeHost) TuneRefersTo(ref.Ref) bool          { return false }
-func (h *fakeHost) DumpNow()                           {}
-func (h *fakeHost) TimerCount(int) int                 { return 0 }
-func (h *fakeHost) TimerStart(int, string, int64)      {}
-func (h *fakeHost) TimerStop(int, string)              {}
+func (h *fakeHost) BlessProp(ref.Ref, string, bool) {}
+func (h *fakeHost) IsPropBlessed(ref.Ref, string) bool {
+	return false
+}
+func (h *fakeHost) Controls(ref.Ref, ref.Ref) bool {
+	return false
+}
+func (h *fakeHost) CompiledSize(ref.Ref) int { return 0 }
+func (h *fakeHost) Compile(ref.Ref) (int, error) {
+	return 0, nil
+}
+func (h *fakeHost) Uncompile(ref.Ref)                 {}
+func (h *fakeHost) ProgramLines(ref.Ref) []string     { return nil }
+func (h *fakeHost) SetProgramLines(ref.Ref, []string) {}
+func (h *fakeHost) ToadPlayer(ref.Ref, ref.Ref)       {}
+func (h *fakeHost) TuneRefersTo(ref.Ref) bool {
+	return false
+}
+func (h *fakeHost) DumpNow()                      {}
+func (h *fakeHost) TimerCount(int) int            { return 0 }
+func (h *fakeHost) TimerStart(int, string, int64) {}
+func (h *fakeHost) TimerStop(int, string)         {}
 
-func (h *fakeHost) SendEvent(int, string, muf.Value) bool { return false }
+func (h *fakeHost) SendEvent(int, string, muf.Value) bool {
+	return false
+}
 
 func (h *fakeHost) NewPlayer(string, string) (ref.Ref, error) {
 	return ref.Nothing, nil
@@ -125,8 +160,12 @@ func (h *fakeHost) CopyObject(ref.Ref, bool) (ref.Ref, error) {
 	return ref.Nothing, nil
 }
 
-func (h *fakeHost) SMTPConfigured() bool                             { return false }
-func (h *fakeHost) SMTPModesValid() (bool, bool)                     { return true, true }
+func (h *fakeHost) SMTPConfigured() bool {
+	return false
+}
+func (h *fakeHost) SMTPModesValid() (bool, bool) {
+	return true, true
+}
 func (h *fakeHost) SendMail(string, string, string, string, ref.Ref) {}
 
 func (h *fakeHost) ParsePropEx(ref.Ref, string, []muf.MPIVar, bool) (string, []muf.MPIVar, error) {
@@ -137,89 +176,197 @@ func (h *fakeHost) Interp(int, int, ref.Ref, ref.Ref, string) (muf.Value, bool) 
 	return muf.Value{}, false
 }
 
-// The MCP methods are stubs: this host has no connections, so a program that
-// reaches for one gets the same answer as a player with no MCP-capable client.
+// The MCP methods are stubs: this host has no connections, so a
+// program that reaches for one gets the same answer as a player with
+// no MCP-capable client.
 func (h *fakeHost) MCPMinLevel() int                   { return 1 }
 func (h *fakeHost) MCPSupports(int, string) (int, int) { return 0, 0 }
 func (h *fakeHost) MCPSend(int, string, string, []muf.MCPArg) error {
 	return nil
 }
-func (h *fakeHost) MCPBind(ref.Ref, string, string, int) error   { return nil }
-func (h *fakeHost) MCPRegister(string, int, int, int, int) error { return nil }
+func (h *fakeHost) MCPBind(ref.Ref, string, string, int) error {
+	return nil
+}
+func (h *fakeHost) MCPRegister(string, int, int, int, int) error {
+	return nil
+}
 
-func (h *fakeHost) GUINew(int, *muf.Frame) (string, error) { return "", nil }
-func (h *fakeHost) GUIDialog(string) (int, bool)           { return 0, false }
-func (h *fakeHost) GUIClose(string) bool                   { return false }
+func (h *fakeHost) GUINew(int, *muf.Frame) (string, error) {
+	return "", nil
+}
+func (h *fakeHost) GUIDialog(string) (int, bool) {
+	return 0, false
+}
+func (h *fakeHost) GUIClose(string) bool {
+	return false
+}
 func (h *fakeHost) GUIValue(string, string, int) (string, bool) {
 	return "", false
 }
-func (h *fakeHost) GUIValueLines(string, string) ([]string, bool) { return nil, false }
+func (h *fakeHost) GUIValueLines(string, string) ([]string, bool) {
+	return nil, false
+}
 func (h *fakeHost) GUIValues(string) ([]string, [][]string, bool) {
 	return nil, nil, false
 }
 func (h *fakeHost) GUISetValue(string, string, []string) {}
 
-func (h *fakeHost) Now() time.Time        { return time.Unix(1_700_000_000, 0).UTC() }
+func (h *fakeHost) Now() time.Time {
+	return time.Unix(1_700_000_000, 0).UTC()
+}
 func (h *fakeHost) Uptime() time.Duration { return time.Hour }
 func (h *fakeHost) Version() string       { return "test" }
 
 func (h *fakeHost) TestLock(int, int, ref.Ref, *boolexp.Expr, ref.Ref, ref.Ref) (bool, error) {
 	return false, nil
 }
-func (h *fakeHost) Locked(int, int, ref.Ref, ref.Ref) (bool, error) { return false, nil }
-func (h *fakeHost) MaxInterpRecursion() int                         { return 8 }
+func (h *fakeHost) Locked(int, int, ref.Ref, ref.Ref) (bool, error) {
+	return false, nil
+}
+func (h *fakeHost) MaxInterpRecursion() int {
+	return 8
+}
 
-func (h *fakeHost) LockString(ref.Ref) string                        { return "*UNLOCKED*" }
-func (h *fakeHost) SetLockString(int, ref.Ref, ref.Ref, string) bool { return true }
-func (h *fakeHost) ParseLock(int, ref.Ref, string) *boolexp.Expr     { return nil }
-func (h *fakeHost) UnparseLock(ref.Ref, *boolexp.Expr) string        { return "" }
-func (h *fakeHost) PrettyLock(ref.Ref, *boolexp.Expr) string         { return "*UNLOCKED*" }
+func (h *fakeHost) LockString(ref.Ref) string {
+	return "*UNLOCKED*"
+}
+func (h *fakeHost) SetLockString(int, ref.Ref, ref.Ref, string) bool {
+	return true
+}
+func (h *fakeHost) ParseLock(int, ref.Ref, string) *boolexp.Expr {
+	return nil
+}
+func (h *fakeHost) UnparseLock(ref.Ref, *boolexp.Expr) string {
+	return ""
+}
+func (h *fakeHost) PrettyLock(ref.Ref, *boolexp.Expr) string {
+	return "*UNLOCKED*"
+}
 
-func (h *fakeHost) ForceLevel() int                              { return 0 }
-func (h *fakeHost) IsPID(int) bool                               { return false }
-func (h *fakeHost) Instances(ref.Ref) int                        { return 0 }
-func (h *fakeHost) CanCall(int, ref.Ref, ref.Ref, string) bool   { return false }
-func (h *fakeHost) ControlsProcess(ref.Ref, int) bool            { return false }
-func (h *fakeHost) KillPID(int) bool                             { return false }
-func (h *fakeHost) Fork(*muf.Frame) int                          { return 0 }
-func (h *fakeHost) Queue(int, ref.Ref, int64, string) int        { return 0 }
+func (h *fakeHost) ForceLevel() int {
+	return 0
+}
+func (h *fakeHost) IsPID(int) bool {
+	return false
+}
+func (h *fakeHost) Instances(ref.Ref) int {
+	return 0
+}
+func (h *fakeHost) CanCall(int, ref.Ref, ref.Ref, string) bool {
+	return false
+}
+func (h *fakeHost) ControlsProcess(ref.Ref, int) bool {
+	return false
+}
+func (h *fakeHost) KillPID(int) bool {
+	return false
+}
+func (h *fakeHost) Fork(*muf.Frame) int {
+	return 0
+}
+func (h *fakeHost) Queue(int, ref.Ref, int64, string) int {
+	return 0
+}
 func (h *fakeHost) Force(int, ref.Ref, ref.Ref, ref.Ref, string) {}
-func (h *fakeHost) ForcedBy() ref.Ref                            { return ref.Nothing }
-func (h *fakeHost) ForcedByArray() []ref.Ref                     { return nil }
-func (h *fakeHost) GetPIDs(ref.Ref, int) []int                   { return nil }
-func (h *fakeHost) PIDInfo(int) (muf.PIDInfo, bool)              { return muf.PIDInfo{}, false }
-func (h *fakeHost) WatchPID(int, int) bool                       { return false }
-func (h *fakeHost) SetDescrSize(int, int, int) bool              { return false }
-func (h *fakeHost) DescrIdle(int) int                            { return -1 }
-func (h *fakeHost) DescrOnTime(int) int                          { return -1 }
-func (h *fakeHost) DescrHost(int) (string, bool)                 { return "", false }
-func (h *fakeHost) DescrUser(int) (string, bool)                 { return "", false }
-func (h *fakeHost) DescrBoot(int) bool                           { return false }
-func (h *fakeHost) DescrNotify(int, string) bool                 { return false }
-func (h *fakeHost) DescrFlush(int) int                           { return 0 }
-func (h *fakeHost) DescrBufSize(int) int                         { return -1 }
-func (h *fakeHost) DescrLeastIdle(ref.Ref) int                   { return -1 }
-func (h *fakeHost) DescrMostIdle(ref.Ref) int                    { return -1 }
-func (h *fakeHost) NextDescr(int) int                            { return 0 }
-func (h *fakeHost) FirstDescr(ref.Ref) int                       { return 0 }
-func (h *fakeHost) LastDescr(ref.Ref) int                        { return 0 }
-func (h *fakeHost) SetUser(int, ref.Ref) bool                    { return false }
-func (h *fakeHost) TuneGet(string) (string, bool)                { return "", false }
-func (h *fakeHost) TuneReadMLevel(string) (int, bool)            { return 0, false }
-func (h *fakeHost) TuneWriteMLevel(string) (int, bool)           { return 0, false }
-func (h *fakeHost) TuneSet(string, string) (bool, error)         { return false, nil }
-func (h *fakeHost) TuneList(string, int) []muf.TuneEntry         { return nil }
-func (h *fakeHost) TuneBool(string) bool                         { return false }
-func (h *fakeHost) TuneInt(string) int64                         { return 0 }
-func (h *fakeHost) TuneSpan(string) time.Duration                { return 0 }
-func (h *fakeHost) NameOK(string, ref.ObjType) bool              { return true }
-func (h *fakeHost) UserLog(ref.Ref, ref.Ref, string)             {}
-func (h *fakeHost) IsIgnoring(ref.Ref, ref.Ref) bool             { return false }
-func (h *fakeHost) IgnoreAdd(ref.Ref, ref.Ref)                   {}
-func (h *fakeHost) IgnoreDel(ref.Ref, ref.Ref)                   {}
-func (h *fakeHost) Stats(ref.Ref) [7]int                         { return [7]int{} }
+func (h *fakeHost) ForcedBy() ref.Ref {
+	return ref.Nothing
+}
+func (h *fakeHost) ForcedByArray() []ref.Ref {
+	return nil
+}
+func (h *fakeHost) GetPIDs(ref.Ref, int) []int {
+	return nil
+}
+func (h *fakeHost) PIDInfo(int) (muf.PIDInfo, bool) {
+	return muf.PIDInfo{}, false
+}
+func (h *fakeHost) WatchPID(int, int) bool {
+	return false
+}
+func (h *fakeHost) SetDescrSize(int, int, int) bool {
+	return false
+}
+func (h *fakeHost) DescrIdle(int) int {
+	return -1
+}
+func (h *fakeHost) DescrOnTime(int) int {
+	return -1
+}
+func (h *fakeHost) DescrHost(int) (string, bool) {
+	return "", false
+}
+func (h *fakeHost) DescrUser(int) (string, bool) {
+	return "", false
+}
+func (h *fakeHost) DescrBoot(int) bool {
+	return false
+}
+func (h *fakeHost) DescrNotify(int, string) bool {
+	return false
+}
+func (h *fakeHost) DescrFlush(int) int {
+	return 0
+}
+func (h *fakeHost) DescrBufSize(int) int {
+	return -1
+}
+func (h *fakeHost) DescrLeastIdle(ref.Ref) int {
+	return -1
+}
+func (h *fakeHost) DescrMostIdle(ref.Ref) int {
+	return -1
+}
+func (h *fakeHost) NextDescr(int) int {
+	return 0
+}
+func (h *fakeHost) FirstDescr(ref.Ref) int {
+	return 0
+}
+func (h *fakeHost) LastDescr(ref.Ref) int {
+	return 0
+}
+func (h *fakeHost) SetUser(int, ref.Ref) bool {
+	return false
+}
+func (h *fakeHost) TuneGet(string) (string, bool) {
+	return "", false
+}
+func (h *fakeHost) TuneReadMLevel(string) (int, bool) {
+	return 0, false
+}
+func (h *fakeHost) TuneWriteMLevel(string) (int, bool) {
+	return 0, false
+}
+func (h *fakeHost) TuneSet(string, string) (bool, error) {
+	return false, nil
+}
+func (h *fakeHost) TuneList(string, int) []muf.TuneEntry {
+	return nil
+}
+func (h *fakeHost) TuneBool(string) bool {
+	return false
+}
+func (h *fakeHost) TuneInt(string) int64 {
+	return 0
+}
+func (h *fakeHost) TuneSpan(string) time.Duration {
+	return 0
+}
+func (h *fakeHost) NameOK(string, ref.ObjType) bool {
+	return true
+}
+func (h *fakeHost) UserLog(ref.Ref, ref.Ref, string) {}
+func (h *fakeHost) IsIgnoring(ref.Ref, ref.Ref) bool {
+	return false
+}
+func (h *fakeHost) IgnoreAdd(ref.Ref, ref.Ref) {}
+func (h *fakeHost) IgnoreDel(ref.Ref, ref.Ref) {}
+func (h *fakeHost) Stats(ref.Ref) [7]int {
+	return [7]int{}
+}
 
-// run compiles and executes a program, returning the frame and the host.
+// run compiles and executes a program, returning the frame and the
+// host.
 func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
 	t.Helper()
 	p, err := compiler.Compile(src, compiler.Options{MLevel: 3})
@@ -240,7 +387,8 @@ func run(t *testing.T, src string) (*muf.Frame, *fakeHost) {
 	return f, h
 }
 
-// runFails requires the program to fail with a message containing want.
+// runFails requires the program to fail with a message containing
+// want.
 func runFails(t *testing.T, src, want string) {
 	t.Helper()
 	p, err := compiler.Compile(src, compiler.Options{MLevel: 3})
@@ -259,10 +407,10 @@ func runFails(t *testing.T, src, want string) {
 // stack returns the final stack as strings, minus the argument the
 // interpreter puts there before a program starts.
 //
-// A MUF program is handed its command's argument on the stack, so an empty
-// argument still leaves one value below whatever the program produced.
-// TestProgramStartsWithItsArgument covers that directly; every other test
-// looks past it.
+// A MUF program is handed its command's argument on the stack, so an
+// empty argument still leaves one value below whatever the program
+// produced. TestProgramStartsWithItsArgument covers that directly;
+// every other test looks past it.
 func stack(f *muf.Frame) []string {
 	depth := f.Depth()
 	out := make([]string, 0, depth)
@@ -301,8 +449,9 @@ func TestArithmetic(t *testing.T) {
 
 func TestDivisionByBadTypeFails(t *testing.T) {
 	// Integer division by zero is not a failure; see
-	// TestDivisionByZeroYieldsZeroAndAFlag. Dividing by a non-number is.
-	// Upstream's wording, which programs and players read.
+	// TestDivisionByZeroYieldsZeroAndAFlag. Dividing by a
+	// non-number is. Upstream's wording, which programs and
+	// players read.
 	runFails(t, `: main 1 "x" / ;`, "Invalid argument type.")
 }
 
@@ -314,8 +463,8 @@ func TestStackOperations(t *testing.T) {
 	wantStack(t, ": main 1 2 3 rot ;", "2 3 1")
 	wantStack(t, ": main 1 2 nip ;", "2")
 	wantStack(t, ": main 1 2 tuck ;", "2 1 2")
-	// depth counts the command argument the interpreter pushed, so three
-	// values pushed here read as four.
+	// depth counts the command argument the interpreter pushed,
+	// so three values pushed here read as four.
 	wantStack(t, ": main 1 2 3 depth ;", "1 2 3 4")
 	wantStack(t, ": main 1 2 3 2 pick ;", "1 2 3 2")
 }
@@ -352,7 +501,8 @@ func TestConditionals(t *testing.T) {
 func TestVariables(t *testing.T) {
 	wantStack(t, ": main var x 5 x ! x @ ;", "5")
 	wantStack(t, ": main 7 var! n n @ ;", "7")
-	// A scoped variable is private to its procedure, so both may use "n".
+	// A scoped variable is private to its procedure, so both may
+	// use "n".
 	wantStack(t, ": a 1 var! n n @ ; : main a 2 var! n n @ + ;", "3")
 }
 
@@ -403,17 +553,18 @@ func TestTryCatch(t *testing.T) {
 	wantStack(t, ": main 0 try 111 catch pop 999 endcatch ;", "111")
 }
 
-// TestTryRestoresTheStack checks that catching unwinds what the guarded block
-// left behind, rather than handing the handler a half-built stack.
+// TestTryRestoresTheStack checks that catching unwinds what the
+// guarded block left behind, rather than handing the handler a
+// half-built stack.
 func TestTryRestoresTheStack(t *testing.T) {
 	wantStack(t, `: main 42 0 try 1 2 3 "x" 0 / catch pop endcatch ;`, "42")
 }
 
 // TestKillOwnPIDEndsProgramSilentlyAndUncatchably checks upstream's
-// ERROR_DIE_NOW special case end to end: a program that KILLs its own pid
-// stops immediately — reaching neither the notify after it nor an open TRY's
-// catch block — and Run reports it as a plain, unreported Done rather than
-// an error.
+// ERROR_DIE_NOW special case end to end: a program that KILLs its own
+// pid stops immediately — reaching neither the notify after it nor
+// an open TRY's catch block — and Run reports it as a plain,
+// unreported Done rather than an error.
 func TestKillOwnPIDEndsProgramSilentlyAndUncatchably(t *testing.T) {
 	f, h := run(t, `: main
   0 try
@@ -438,10 +589,12 @@ func TestNotify(t *testing.T) {
 	}
 }
 
-// TestNotifySplitsOnCarriageReturns covers MUF's in-string line separator.
+// TestNotifySplitsOnCarriageReturns covers MUF's in-string line
+// separator.
 func TestNotifySplitsOnCarriageReturns(t *testing.T) {
 	_, h := run(t, `: main me @ "one\rtwo" notify ;`)
-	if len(h.told) != 2 || h.told[0] != "one" || h.told[1] != "two" {
+	if len(h.told) != 2 || h.told[0] != "one" ||
+		h.told[1] != "two" {
 		t.Errorf("told = %v, want [one two]", h.told)
 	}
 }
@@ -464,9 +617,10 @@ func TestStackUnderflowIsReported(t *testing.T) {
 	runFails(t, ": main pop 1 + ;", "stack underflow")
 }
 
-// TestProgramStartsWithItsArgument pins a detail that is easy to miss and that
-// programs depend on: interp() pushes the command's argument before the
-// program runs, so "depth" is one higher than what the program itself pushed.
+// TestProgramStartsWithItsArgument pins a detail that is easy to miss
+// and that programs depend on: interp() pushes the command's argument
+// before the program runs, so "depth" is one higher than what the
+// program itself pushed.
 func TestProgramStartsWithItsArgument(t *testing.T) {
 	p, err := compiler.Compile(": main depth ;", compiler.Options{MLevel: 3})
 	if err != nil {
@@ -488,9 +642,9 @@ func TestProgramStartsWithItsArgument(t *testing.T) {
 	}
 }
 
-// TestDivisionByZeroYieldsZeroAndAFlag covers a difference the golden harness
-// found: MUF does not abort on integer division by zero. The result is zero
-// and a flag the program can read with is_set?.
+// TestDivisionByZeroYieldsZeroAndAFlag covers a difference the golden
+// harness found: MUF does not abort on integer division by zero. The
+// result is zero and a flag the program can read with is_set?.
 func TestDivisionByZeroYieldsZeroAndAFlag(t *testing.T) {
 	wantStack(t, ": main 1 0 / ;", "0")
 	wantStack(t, ": main 1 0 % ;", "0")
@@ -500,8 +654,8 @@ func TestDivisionByZeroYieldsZeroAndAFlag(t *testing.T) {
 }
 
 func TestUnimplementedPrimitiveIsReported(t *testing.T) {
-	// A primitive the compiler knows but the interpreter does not must say
-	// so, rather than silently doing nothing.
+	// A primitive the compiler knows but the interpreter does not
+	// must say so, rather than silently doing nothing.
 	runFails(t, ": main CHECKARGS ;", "not implemented yet")
 }
 
@@ -518,8 +672,8 @@ func TestRunawayProgramIsStopped(t *testing.T) {
 	}
 }
 
-// TestSlicingYields checks that a long-running program hands control back
-// rather than monopolising the goroutine it runs on.
+// TestSlicingYields checks that a long-running program hands control
+// back rather than monopolising the goroutine it runs on.
 func TestSlicingYields(t *testing.T) {
 	p, err := compiler.Compile(": main var i 0 i ! begin i @ 1 + i ! i @ 10000 >= until i @ ;",
 		compiler.Options{MLevel: 3})

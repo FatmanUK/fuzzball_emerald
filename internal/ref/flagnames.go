@@ -2,14 +2,15 @@ package ref
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 
-// flagNames maps a flag's spellings to its bit, in the order upstream's
-// str_to_flag tests them.
+// flagNames maps a flag's spellings to its bit, in the order
+// upstream's str_to_flag tests them.
 //
-// A name given is matched as a *prefix* of one of these, not for equality:
-// "d" is the DARK flag because "dark" is the first entry it prefixes, and
-// "m" is MUCKER for the same reason. The order therefore decides what an
-// ambiguous abbreviation means, so it is upstream's own rather than
-// alphabetical — and a lookup must walk the list rather than hash it.
+// A name given is matched as a *prefix* of one of these, not for
+// equality: "d" is the DARK flag because "dark" is the first entry it
+// prefixes, and "m" is MUCKER for the same reason. The order
+// therefore decides what an ambiguous abbreviation means, so it is
+// upstream's own rather than alphabetical — and a lookup must walk
+// the list rather than hash it.
 var flagNames = []struct {
 	spellings []string
 	bit       Flags
@@ -37,8 +38,8 @@ var flagNames = []struct {
 	{[]string{"zombie"}, Zombie},
 }
 
-// FlagNamed resolves a flag name, or any unambiguous prefix of one, to its
-// bit — upstream's str_to_flag.
+// FlagNamed resolves a flag name, or any unambiguous prefix of one,
+// to its bit — upstream's str_to_flag.
 func FlagNamed(name string) (Flags, bool) {
 	name = ascii.Fold(name)
 	if name == "" {
@@ -46,7 +47,8 @@ func FlagNamed(name string) (Flags, bool) {
 	}
 	for _, f := range flagNames {
 		for _, s := range f.spellings {
-			if len(name) <= len(s) && s[:len(name)] == name {
+			if len(name) <= len(s) &&
+				s[:len(name)] == name {
 				return f.bit, true
 			}
 		}
@@ -54,15 +56,15 @@ func FlagNamed(name string) (Flags, bool) {
 	return 0, false
 }
 
-// HasNamed reports whether an object carries a named flag — upstream's
-// has_flag, which both MUF's FLAG? and MPI's {flag?} call.
+// HasNamed reports whether an object carries a named flag —
+// upstream's has_flag, which both MUF's FLAG? and MPI's {flag?} call.
 //
-// Two things about it are easy to get wrong. It knows only *flags*: a type
-// name or a mucker level is not one, so "{flag?:me,player}" is false even
-// for a player, and PLAYER? is the primitive that answers that. And plain
-// "wizard" asks whether the object's wizard powers are actually in effect,
-// so a quelled wizard is not one — "truewizard" is the spelling that reads
-// the bit itself.
+// Two things about it are easy to get wrong. It knows only *flags*: a
+// type name or a mucker level is not one, so "{flag?:me,player}" is
+// false even for a player, and PLAYER? is the primitive that answers
+// that. And plain "wizard" asks whether the object's wizard powers
+// are actually in effect, so a quelled wizard is not one —
+// "truewizard" is the spelling that reads the bit itself.
 //
 // A leading '!' inverts the test, and may be repeated.
 func (flags Flags) HasNamed(name string) bool {
@@ -85,8 +87,9 @@ func (flags Flags) HasNamed(name string) bool {
 	return result != negated
 }
 
-// isPrefixFold reports whether given is a prefix of full, ignoring case —
-// upstream's string_prefix, whose argument order is the other way round.
+// isPrefixFold reports whether given is a prefix of full, ignoring
+// case — upstream's string_prefix, whose argument order is the
+// other way round.
 func isPrefixFold(full, given string) bool {
 	given = ascii.Fold(given)
 	return given != "" && len(given) <= len(full) && full[:len(given)] == given

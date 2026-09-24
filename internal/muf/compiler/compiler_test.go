@@ -53,7 +53,8 @@ func TestReservedVariables(t *testing.T) {
 }
 
 // TestEntryPointIsLastProcedure pins a convention that is easy to get
-// backwards: a program starts at the last procedure it defines, not the first.
+// backwards: a program starts at the last procedure it defines, not
+// the first.
 func TestEntryPointIsLastProcedure(t *testing.T) {
 	p := compile(t, ": first 1 pop ; : second 2 pop ; : third 3 pop ;")
 	if got := p.Code[p.Start].Proc.Name; got != "third" {
@@ -109,7 +110,8 @@ func TestLoopJumpsBackwards(t *testing.T) {
 }
 
 func TestBreakAndContinue(t *testing.T) {
-	// Both must resolve to real addresses rather than being left at zero.
+	// Both must resolve to real addresses rather than being left
+	// at zero.
 	p := compile(t, ": main begin 1 if break else continue then repeat ;")
 	for i, in := range p.Code {
 		if in.Type == muf.TypeJmp && in.Num == 0 {
@@ -119,7 +121,8 @@ func TestBreakAndContinue(t *testing.T) {
 }
 
 func TestProcedureArguments(t *testing.T) {
-	// "type:name" documents the type; the variable is what follows the colon.
+	// "type:name" documents the type; the variable is what
+	// follows the colon.
 	p := compile(t, ": greet[ str:who int:times -- str:result ] who @ pop times @ pop \"\" ; : main \"x\" 1 greet pop ;")
 	proc := p.Code[p.Procs["greet"]].Proc
 	if proc.Args != 2 {
@@ -133,14 +136,16 @@ func TestProcedureArguments(t *testing.T) {
 	}
 }
 
-// TestScopedVariablesArePerProcedure covers a rule that bit the port: VAR and
-// VAR! inside a procedure declare a scoped variable, so two procedures may
-// each declare the same name. Only at the top level does VAR create a global.
+// TestScopedVariablesArePerProcedure covers a rule that bit the port:
+// VAR and VAR! inside a procedure declare a scoped variable, so two
+// procedures may each declare the same name. Only at the top level
+// does VAR create a global.
 func TestScopedVariablesArePerProcedure(t *testing.T) {
 	compile(t, ": one 1 var! pos pos @ pop ; : two 2 var! pos pos @ pop ;")
 	compile(t, ": one var pos ; : two var pos ;")
 
-	// At the top level VAR is a global, so a repeat really is a clash.
+	// At the top level VAR is a global, so a repeat really is a
+	// clash.
 	mustFail(t, "var pos var pos : main ;", "already declared")
 	// And VAR! has nothing to store from.
 	mustFail(t, "var! pos : main ;", "outside a procedure")
@@ -170,9 +175,10 @@ func TestDefinitionsExpand(t *testing.T) {
 	}
 }
 
-// TestDefinitionsShadowEverything pins where expansion happens. Upstream
-// expands in the tokenizer, so a definition replaces a name before the
-// compiler ever considers whether it is a variable or a primitive.
+// TestDefinitionsShadowEverything pins where expansion happens.
+// Upstream expands in the tokenizer, so a definition replaces a name
+// before the compiler ever considers whether it is a variable or a
+// primitive.
 func TestDefinitionsShadowEverything(t *testing.T) {
 	p := compile(t, "$define pop 42 $enddef : main pop pop ;")
 	ints := 0
@@ -186,8 +192,8 @@ func TestDefinitionsShadowEverything(t *testing.T) {
 	}
 }
 
-// TestBackslashEscapesExpansion covers the escape a program uses to name
-// something a definition would otherwise replace.
+// TestBackslashEscapesExpansion covers the escape a program uses to
+// name something a definition would otherwise replace.
 func TestBackslashEscapesExpansion(t *testing.T) {
 	p := compile(t, "$define pop 42 $enddef : main \\pop ;")
 	for _, in := range p.Code {
@@ -235,8 +241,9 @@ func TestConditionalCompilation(t *testing.T) {
 	}
 }
 
-// TestConditionalComparison covers "$ifdef name=value", which compares what
-// the name expands to rather than only testing that it exists.
+// TestConditionalComparison covers "$ifdef name=value", which
+// compares what the name expands to rather than only testing that it
+// exists.
 func TestConditionalComparison(t *testing.T) {
 	src := "$define KIND alpha $enddef : main $ifdef KIND=alpha 111 $else 222 $endif pop ;"
 	p := compile(t, src)
@@ -274,7 +281,8 @@ func TestMacrosExpand(t *testing.T) {
 	}
 	found := false
 	for _, in := range p.Code {
-		if in.Type == muf.TypePrimitive && muf.PrimName(int(in.Num)) == "+" {
+		if in.Type == muf.TypePrimitive &&
+			muf.PrimName(int(in.Num)) == "+" {
 			found = true
 		}
 	}
@@ -334,8 +342,8 @@ func TestLiteralsCompile(t *testing.T) {
 	}
 }
 
-// TestQuotedStringsAreNotNumbers checks that a literal keeps its type even
-// when its contents look like something else.
+// TestQuotedStringsAreNotNumbers checks that a literal keeps its type
+// even when its contents look like something else.
 func TestQuotedStringsAreNotNumbers(t *testing.T) {
 	p := compile(t, `: main "123" pop ;`)
 	for _, in := range p.Code {

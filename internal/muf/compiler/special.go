@@ -7,8 +7,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 )
 
-// specialWords are the reserved words, from special() in src/compile.c. They
-// are matched before primitives, so none of these can be a primitive name.
+// specialWords are the reserved words, from special() in
+// src/compile.c. They are matched before primitives, so none of these
+// can be a primitive name.
 var specialWords = map[string]bool{
 	":": true, ";": true,
 	"if": true, "else": true, "then": true,
@@ -20,14 +21,16 @@ var specialWords = map[string]bool{
 	"lvar": true, "var!": true, "var": true,
 }
 
-func isSpecial(word string) bool { return specialWords[ascii.Fold(word)] }
+func isSpecial(word string) bool {
+	return specialWords[ascii.Fold(word)]
+}
 
 // special compiles a reserved word.
 func (c *compiler) special(word string) error {
 	w := ascii.Fold(word)
 
-	// Everything but a procedure header and a declaration needs to be
-	// inside a procedure.
+	// Everything but a procedure header and a declaration needs
+	// to be inside a procedure.
 	switch w {
 	case ":", "lvar", "var", "var!", "public", "wizcall":
 	default:
@@ -86,9 +89,12 @@ func (c *compiler) special(word string) error {
 	return nil
 }
 
-func (c *compiler) pushCtrl(ct control) { c.ctrl = append(c.ctrl, ct) }
+func (c *compiler) pushCtrl(ct control) {
+	c.ctrl = append(c.ctrl, ct)
+}
 
-// innermost returns the open control structure, or zero when there is none.
+// innermost returns the open control structure, or zero when there is
+// none.
 func (c *compiler) innermost() controlKind {
 	if len(c.ctrl) == 0 {
 		return 0
@@ -96,8 +102,8 @@ func (c *compiler) innermost() controlKind {
 	return c.ctrl[len(c.ctrl)-1].kind
 }
 
-// popCtrl removes the innermost control structure, which must be one of the
-// kinds given.
+// popCtrl removes the innermost control structure, which must be one
+// of the kinds given.
 func (c *compiler) popCtrl(want ...controlKind) (control, bool) {
 	if len(c.ctrl) == 0 {
 		return control{}, false
@@ -113,7 +119,9 @@ func (c *compiler) popCtrl(want ...controlKind) (control, bool) {
 }
 
 // patch points a jump at the given address.
-func (c *compiler) patch(at, target int) { c.code[at].Num = int64(target) }
+func (c *compiler) patch(at, target int) {
+	c.code[at].Num = int64(target)
+}
 
 // beginProc starts a ':' definition.
 func (c *compiler) beginProc() error {
@@ -129,7 +137,8 @@ func (c *compiler) beginProc() error {
 	}
 
 	name := tok.text
-	// "name[ a b -- c ]" declares arguments, which become scoped variables.
+	// "name[ a b -- c ]" declares arguments, which become scoped
+	// variables.
 	declaresArgs := strings.HasSuffix(name, "[")
 	if declaresArgs {
 		name = strings.TrimSuffix(name, "[")
@@ -158,10 +167,12 @@ func (c *compiler) beginProc() error {
 	return nil
 }
 
-// procArgs reads the "a b -- c ]" argument list after a "name[" header.
+// procArgs reads the "a b -- c ]" argument list after a "name["
+// header.
 //
-// Names before the "--" become scoped variables holding the arguments; the
-// part after it documents what the procedure returns and is not compiled.
+// Names before the "--" become scoped variables holding the
+// arguments; the part after it documents what the procedure returns
+// and is not compiled.
 func (c *compiler) procArgs(proc *muf.Proc) error {
 	seenDashes := false
 	for {
@@ -183,9 +194,10 @@ func (c *compiler) procArgs(proc *muf.Proc) error {
 		case seenDashes:
 			// Return values are documentation only.
 		default:
-			// An argument may be written "type:name", where the
-			// type is documentation. The name is what follows the
-			// first colon; a bare "type:" declares nothing.
+			// An argument may be written "type:name",
+			// where the type is documentation. The name
+			// is what follows the first colon; a bare
+			// "type:" declares nothing.
 			name := tok.text
 			if _, after, found := strings.Cut(name, ":"); found {
 				name = after
@@ -230,8 +242,8 @@ func (c *compiler) doElse() error {
 	}
 	jump := c.emit(muf.Inst{Type: muf.TypeJmp})
 	eef, _ := c.popCtrl(ctrlIf)
-	// The IF jumps past the ELSE's jump, to the first instruction of the
-	// false branch.
+	// The IF jumps past the ELSE's jump, to the first instruction
+	// of the false branch.
 	c.patch(eef.addr, c.here())
 	c.pushCtrl(control{kind: ctrlElse, addr: jump, line: c.line})
 	return nil
@@ -249,9 +261,10 @@ func (c *compiler) doThen() error {
 
 // beginFor opens a FOR or FOREACH loop.
 //
-// Both compile to the same shape: the setup primitive, then an iterator that
-// pushes the next value, then a conditional jump out of the loop. The loop
-// start is the iterator, so each pass re-enters there.
+// Both compile to the same shape: the setup primitive, then an
+// iterator that pushes the next value, then a conditional jump out of
+// the loop. The loop start is the iterator, so each pass re-enters
+// there.
 func (c *compiler) beginFor(setup int) error {
 	c.emit(muf.Inst{Type: muf.TypePrimitive, Num: int64(setup)})
 	iter := c.emit(muf.Inst{Type: muf.TypePrimitive, Num: int64(muf.InForIter)})
@@ -280,8 +293,8 @@ func (c *compiler) closeLoop(conditional bool) error {
 	if loop.kind == ctrlFor {
 		c.emit(muf.Inst{Type: muf.TypePrimitive, Num: int64(muf.InForPop)})
 	}
-	// Everything that jumped out of the loop lands after it, past the
-	// FORPOP so the iterator is cleaned up first.
+	// Everything that jumped out of the loop lands after it, past
+	// the FORPOP so the iterator is cleaned up first.
 	for _, at := range loop.exits {
 		c.patch(at, c.here())
 	}
@@ -326,24 +339,27 @@ func (c *compiler) doContinue() error {
 // enclosingLoop returns the index of the innermost loop, or -1.
 func (c *compiler) enclosingLoop() int {
 	for i := len(c.ctrl) - 1; i >= 0; i-- {
-		if k := c.ctrl[i].kind; k == ctrlBegin || k == ctrlFor {
+		if k := c.ctrl[i].kind; k == ctrlBegin ||
+			k == ctrlFor {
 			return i
 		}
 	}
 	return -1
 }
 
-// unwindTrys emits a TRYPOP for each TRY block open inside the loop, so
-// leaving the loop early does not leave a catch handler installed.
+// unwindTrys emits a TRYPOP for each TRY block open inside the loop,
+// so leaving the loop early does not leave a catch handler installed.
 func (c *compiler) unwindTrys(loop int) {
 	for i := loop + 1; i < len(c.ctrl); i++ {
-		if c.ctrl[i].kind == ctrlTry || c.ctrl[i].kind == ctrlCatch {
+		if c.ctrl[i].kind == ctrlTry ||
+			c.ctrl[i].kind == ctrlCatch {
 			c.emit(muf.Inst{Type: muf.TypePrimitive, Num: int64(muf.InTryPop)})
 		}
 	}
 }
 
-// noteTry records that a TRY was opened, for the loop that encloses it.
+// noteTry records that a TRY was opened, for the loop that encloses
+// it.
 func (c *compiler) noteTry(delta int) {
 	if loop := c.enclosingLoop(); loop >= 0 {
 		c.ctrl[loop].trys += delta
@@ -355,8 +371,8 @@ func (c *compiler) doCatch(detailed bool) error {
 	if c.innermost() != ctrlTry {
 		return c.unterminated("CATCH", "no TRY found for CATCH")
 	}
-	// The guarded block ran without raising: discard the handler and jump
-	// past it.
+	// The guarded block ran without raising: discard the handler
+	// and jump past it.
 	c.emit(muf.Inst{Type: muf.TypePrimitive, Num: int64(muf.InTryPop)})
 	jump := c.emit(muf.Inst{Type: muf.TypeJmp})
 
@@ -384,8 +400,9 @@ func (c *compiler) doEndCatch() error {
 	return nil
 }
 
-// unterminated reports the specific mismatch upstream would, naming the block
-// that is actually open rather than only the word that failed.
+// unterminated reports the specific mismatch upstream would, naming
+// the block that is actually open rather than only the word that
+// failed.
 func (c *compiler) unterminated(word, fallback string) error {
 	switch c.innermost() {
 	case ctrlTry:
@@ -421,13 +438,13 @@ func (c *compiler) declare(table *[]string, word string) error {
 
 // declareVar handles VAR and VAR!.
 //
-// Inside a procedure both declare a *scoped* variable, private to that
-// procedure, which is why two procedures may each declare a "pos". Only at the
-// top level does VAR create a program global, and VAR! is an error there
-// because it has nothing to store.
+// Inside a procedure both declare a *scoped* variable, private to
+// that procedure, which is why two procedures may each declare a
+// "pos". Only at the top level does VAR create a program global, and
+// VAR! is an error there because it has nothing to store.
 //
-// VAR! additionally stores the top of the stack into the new variable, which
-// is the idiom for naming a procedure's arguments.
+// VAR! additionally stores the top of the stack into the new
+// variable, which is the idiom for naming a procedure's arguments.
 func (c *compiler) declareVar(store bool) error {
 	tok, ok, err := c.next()
 	if err != nil {
@@ -466,8 +483,8 @@ func (c *compiler) declareVar(store bool) error {
 	return nil
 }
 
-// declarePublic exposes the last-defined procedure under a name other programs
-// can CALL.
+// declarePublic exposes the last-defined procedure under a name other
+// programs can CALL.
 func (c *compiler) declarePublic(wizOnly bool) error {
 	tok, ok, err := c.next()
 	if err != nil {

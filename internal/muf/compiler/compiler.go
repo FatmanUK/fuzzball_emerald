@@ -25,31 +25,33 @@ func (e *Error) Error() string {
 
 // Options configure a compile.
 type Options struct {
-	// Ref is the program object being compiled, which "__PROG__" expands to.
+	// Ref is the program object being compiled, which "__PROG__"
+	// expands to.
 	Ref ref.Ref
 	// MLevel is the mucker level the program runs at.
 	MLevel int
 
-	// Defines supplies compile-time definitions held in the database: the
-	// _defs/ propdir on #0 and on the program's owner. Fuzzball reads them
-	// itself; the compiler takes them as input so it needs no world.
+	// Defines supplies compile-time definitions held in the
+	// database: the _defs/ propdir on #0 and on the program's
+	// owner. Fuzzball reads them itself; the compiler takes them
+	// as input so it needs no world.
 	Defines map[string]string
 
-	// Macros is the MUF editor's macro table, which a program reaches by
-	// prefixing a name with '.'.
+	// Macros is the MUF editor's macro table, which a program
+	// reaches by prefixing a name with '.'.
 	Macros map[string]string
 
-	// Include resolves a $include target to the definitions that object
-	// exposes in its _defs/ propdir. Targets are usually registered names
-	// such as "$lib/alias", which the caller looks up; the compiler needs
-	// no world of its own.
+	// Include resolves a $include target to the definitions that
+	// object exposes in its _defs/ propdir. Targets are usually
+	// registered names such as "$lib/alias", which the caller
+	// looks up; the compiler needs no world of its own.
 	//
-	// It also answers $iflib. When nil, every $include is skipped and every
-	// $iflib is false.
+	// It also answers $iflib. When nil, every $include is skipped
+	// and every $iflib is false.
 	Include func(target string) (map[string]string, bool)
 
-	// MuckName and Version fill the __muckname and __version built-ins,
-	// whose values come from the running server.
+	// MuckName and Version fill the __muckname and __version
+	// built-ins, whose values come from the running server.
 	MuckName string
 	Version  string
 }
@@ -57,14 +59,15 @@ type Options struct {
 // control is an open control structure awaiting its closing word.
 type control struct {
 	kind controlKind
-	// addr is the instruction that needs patching, or the loop's start.
+	// addr is the instruction that needs patching, or the loop's
+	// start.
 	addr int
 	line int
-	// exits collects the jumps a WHILE or BREAK made, patched when the loop
-	// closes.
+	// exits collects the jumps a WHILE or BREAK made, patched
+	// when the loop closes.
 	exits []int
-	// trys counts TRY blocks opened inside this loop, so BREAK, CONTINUE and
-	// WHILE can unwind them.
+	// trys counts TRY blocks opened inside this loop, so BREAK,
+	// CONTINUE and WHILE can unwind them.
 	trys int
 }
 
@@ -82,8 +85,8 @@ const (
 func (k controlKind) String() string {
 	switch k {
 	case ctrlIf, ctrlElse:
-		// Named for the pair, as upstream's messages are: an open IF is
-		// reported as an unterminated IF-THEN.
+		// Named for the pair, as upstream's messages are: an
+		// open IF is reported as an unterminated IF-THEN.
 		return "IF-THEN"
 	case ctrlBegin, ctrlFor:
 		return "loop"
@@ -102,8 +105,9 @@ type compiler struct {
 
 	code []muf.Inst
 
-	// vars, lvars and svars are the three variable scopes. svars belong to
-	// the procedure being compiled and reset at each ':'.
+	// vars, lvars and svars are the three variable scopes. svars
+	// belong to the procedure being compiled and reset at each
+	// ':'.
 	vars  []string
 	lvars []string
 	svars []string
@@ -111,29 +115,33 @@ type compiler struct {
 	procs       map[string]int
 	publics     map[string]*muf.Public
 	publicOrder []string
-	// procOrder keeps declaration order, so a program with no PUBLIC entry
-	// starts at its last procedure as upstream does.
+	// procOrder keeps declaration order, so a program with no
+	// PUBLIC entry starts at its last procedure as upstream does.
 	procOrder []string
 
-	// curProc is the procedure being compiled, nil at the top level.
+	// curProc is the procedure being compiled, nil at the top
+	// level.
 	curProc *muf.Proc
-	// procStart is where the current procedure's header instruction sits.
+	// procStart is where the current procedure's header
+	// instruction sits.
 	procStart int
 
 	ctrl []control
 
-	// defs holds $define substitutions, as the text they expand to.
+	// defs holds $define substitutions, as the text they expand
+	// to.
 	defs map[string]string
 
 	// pending is a pushback queue, which macro expansion feeds.
 	pending []token
 
-	// conds tracks open $ifdef blocks whose taken branch is being compiled,
-	// so $else and $endif know what they close.
+	// conds tracks open $ifdef blocks whose taken branch is being
+	// compiled, so $else and $endif know what they close.
 	conds []bool
 
-	// notes collects messages a directive asked to show the compiler, and
-	// props the program properties a directive asked to set.
+	// notes collects messages a directive asked to show the
+	// compiler, and props the program properties a directive
+	// asked to set.
 	notes []string
 	props []propSet
 
@@ -158,15 +166,17 @@ func Compile(src string, opts Options) (*muf.Program, error) {
 	return c.finish()
 }
 
-// init installs the reserved variables and the compile-time definitions, in
-// the order init_defs does: the server's built-ins first, then what the
-// database supplies, so a world can override a built-in.
+// init installs the reserved variables and the compile-time
+// definitions, in the order init_defs does: the server's built-ins
+// first, then what the database supplies, so a world can override a
+// built-in.
 func (c *compiler) init() error {
 	c.vars = append(c.vars, reservedVars()...)
 
 	install := func(name, body string) error {
-		// Definitions are kept as text: expansion re-lexes them, so a
-		// definition that produces a string literal stays one literal.
+		// Definitions are kept as text: expansion re-lexes
+		// them, so a definition that produces a string
+		// literal stays one literal.
 		if _, err := lexTokens(body, 0); err != nil {
 			return fmt.Errorf("built-in definition %s: %w", name, err)
 		}
@@ -192,8 +202,8 @@ func (c *compiler) init() error {
 	}
 	for name, body := range c.opts.Defines {
 		if err := install(name, body); err != nil {
-			// A malformed definition in the database must not stop
-			// every program from compiling.
+			// A malformed definition in the database must
+			// not stop every program from compiling.
 			c.notes = append(c.notes,
 				"ignoring the stored definition "+name+": "+err.Error())
 		}
@@ -201,24 +211,26 @@ func (c *compiler) init() error {
 	return nil
 }
 
-func reservedVars() []string { return []string{"me", "loc", "trigger", "command"} }
+func reservedVars() []string {
+	return []string{"me", "loc", "trigger", "command"}
+}
 
 // errf builds a compile error at the current line.
 func (c *compiler) errf(format string, args ...any) error {
 	return &Error{Line: c.line, Msg: fmt.Sprintf(format, args...)}
 }
 
-// maxSubstitutions bounds macro and define expansion, from SUBSTITUTIONS in
-// src/compile.c. It is what stops a definition that names itself from looping
-// forever.
+// maxSubstitutions bounds macro and define expansion, from
+// SUBSTITUTIONS in src/compile.c. It is what stops a definition that
+// names itself from looping forever.
 const maxSubstitutions = 20
 
 // next returns the next token, expanding definitions and macros.
 //
-// Expansion happens here rather than when a word is compiled, matching
-// upstream's next_token. That ordering is observable: a definition shadows a
-// procedure, a variable and a primitive alike, because none of them are ever
-// consulted for a name that expanded.
+// Expansion happens here rather than when a word is compiled,
+// matching upstream's next_token. That ordering is observable: a
+// definition shadows a procedure, a variable and a primitive alike,
+// because none of them are ever consulted for a name that expanded.
 func (c *compiler) next() (token, bool, error) {
 	subs := 0
 	for {
@@ -232,8 +244,9 @@ func (c *compiler) next() (token, bool, error) {
 			return tok, true, nil
 		}
 
-		// A leading backslash escapes expansion, so a program can name
-		// something that a definition would otherwise have replaced.
+		// A leading backslash escapes expansion, so a program
+		// can name something that a definition would
+		// otherwise have replaced.
 		if len(tok.text) > 1 && tok.text[0] == beginEscape {
 			tok.text = tok.text[1:]
 			return tok, true, nil
@@ -255,8 +268,8 @@ func (c *compiler) next() (token, bool, error) {
 	}
 }
 
-// expansion looks a token up as a definition or a macro, returning the text it
-// stands for.
+// expansion looks a token up as a definition or a macro, returning
+// the text it stands for.
 func (c *compiler) expansion(word string) (string, bool) {
 	if word == "" {
 		return "", false
@@ -330,10 +343,11 @@ func (c *compiler) run() error {
 // word compiles one token.
 //
 // The order the cases are tried in matters and follows next_word in
-// src/compile.c: a name that is both a procedure and a primitive resolves to
-// the procedure, and a variable shadows both.
+// src/compile.c: a name that is both a procedure and a primitive
+// resolves to the procedure, and a variable shadows both.
 func (c *compiler) word(tok token) error {
-	// A quoted literal is always a string, whatever it looks like.
+	// A quoted literal is always a string, whatever it looks
+	// like.
 	if tok.isString {
 		c.emit(muf.Inst{Type: muf.TypeString, Str: tok.text})
 		return nil
@@ -344,8 +358,8 @@ func (c *compiler) word(tok token) error {
 		return nil
 	}
 
-	// Directives and macros are handled before anything else, because they
-	// change what the following tokens mean.
+	// Directives and macros are handled before anything else,
+	// because they change what the following tokens mean.
 	if word[0] == beginDirective {
 		return c.directive(word)
 	}
@@ -394,8 +408,8 @@ func (c *compiler) word(tok token) error {
 	return c.errf("Unrecognized word %s.", word)
 }
 
-// quoted compiles 'name, which pushes a procedure's address rather than
-// calling it.
+// quoted compiles 'name, which pushes a procedure's address rather
+// than calling it.
 func (c *compiler) quoted(name string) error {
 	addr, ok := c.procs[ascii.Fold(name)]
 	if !ok {
@@ -415,8 +429,8 @@ func indexOf(names []string, want string) (int, bool) {
 	return -1, false
 }
 
-// parseInt reads an integer literal. MUF integers are decimal and may be
-// signed; a bare "-" or "+" is a primitive, not a number.
+// parseInt reads an integer literal. MUF integers are decimal and may
+// be signed; a bare "-" or "+" is a primitive, not a number.
 func parseInt(s string) (int64, bool) {
 	if s == "" || s == "-" || s == "+" {
 		return 0, false
@@ -428,8 +442,8 @@ func parseInt(s string) (int64, bool) {
 	return n, true
 }
 
-// parseFloat reads a float literal. A token is only a float when it has a
-// decimal point or an exponent, so "3" stays an integer.
+// parseFloat reads a float literal. A token is only a float when it
+// has a decimal point or an exponent, so "3" stays an integer.
 func parseFloat(s string) (float64, bool) {
 	if !strings.ContainsAny(s, ".eE") {
 		return 0, false

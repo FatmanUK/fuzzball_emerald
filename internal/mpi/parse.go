@@ -25,14 +25,15 @@ const (
 	defaultMaxInstr = 2048
 )
 
-// Env is what an evaluation runs against: the objects involved, the variables
-// in scope, and the world it may reach.
+// Env is what an evaluation runs against: the objects involved, the
+// variables in scope, and the world it may reach.
 type Env struct {
-	// Who is the player the message is for, What the object carrying it,
-	// and Perms the object whose permissions apply.
+	// Who is the player the message is for, What the object
+	// carrying it, and Perms the object whose permissions apply.
 	Who, What, Perms Ref
 
-	// Blessed grants wizard permissions, which a blessed property has.
+	// Blessed grants wizard permissions, which a blessed property
+	// has.
 	Blessed bool
 	// Descr is the connection this is being evaluated for.
 	Descr int
@@ -40,20 +41,20 @@ type Env struct {
 	// Host reaches the world.
 	Host Host
 
-	// MaxInstructions bounds how many function calls one evaluation may
-	// make. Zero uses the default.
+	// MaxInstructions bounds how many function calls one
+	// evaluation may make. Zero uses the default.
 	MaxInstructions int
 
 	vars  []variable
 	depth int
 	instr int
 
-	// funcs holds the macros {func} defines, keyed by upper-cased name.
-	// They live only as long as one evaluation.
+	// funcs holds the macros {func} defines, keyed by upper-cased
+	// name. They live only as long as one evaluation.
 	funcs map[string]string
 
-	// notes collects the messages a failing call produces, which upstream
-	// sends to the player as it goes.
+	// notes collects the messages a failing call produces, which
+	// upstream sends to the player as it goes.
 	notes []string
 }
 
@@ -63,8 +64,8 @@ type variable struct {
 	value string
 }
 
-// Ref is a database reference. It is an alias so this package does not depend
-// on the world's own type for what is only an identifier.
+// Ref is a database reference. It is an alias so this package does
+// not depend on the world's own type for what is only an identifier.
 type Ref = int32
 
 // Host is what MPI can reach outside itself.
@@ -76,7 +77,8 @@ type Host interface {
 	// SetPropStr writes one, and DelProp removes one.
 	SetPropStr(obj Ref, path, val string)
 	DelProp(obj Ref, path string)
-	// PropChildren lists the names directly under a property path.
+	// PropChildren lists the names directly under a property
+	// path.
 	PropChildren(obj Ref, path string) []string
 	// BlessProp sets or clears a property's blessed flag.
 	BlessProp(obj Ref, path string, blessed bool)
@@ -85,49 +87,55 @@ type Host interface {
 	Owner(obj Ref) Ref
 	Contents(obj Ref) []Ref
 	// Parent is one step out in the environment tree, upstream's
-	// getparent: a property search walks it until something answers.
+	// getparent: a property search walks it until something
+	// answers.
 	Parent(obj Ref) Ref
 	// Valid reports whether a ref names a live object.
 	Valid(obj Ref) bool
-	// IsPlayer reports whether it is a player, and Online whether they are
-	// connected.
+	// IsPlayer reports whether it is a player, and Online whether
+	// they are connected.
 	IsPlayer(obj Ref) bool
 	Online(obj Ref) bool
 	// Match resolves a name the way a player's command would.
 	Match(who Ref, name string) Ref
-	// Notify sends a line to an object's connections, and NotifyExcept to
-	// everything in a room but the objects named.
+	// Notify sends a line to an object's connections, and
+	// NotifyExcept to everything in a room but the objects named.
 	Notify(obj Ref, msg string)
 	NotifyExcept(room Ref, except []Ref, msg string)
 	// Now is the server's clock, as a Unix time.
 	Now() int64
 
-	// TypeName is an object's type as one of upstream's own words —
-	// "Room", "Exit", "Thing", "Player", "Program", "Bad" — for {type}.
+	// TypeName is an object's type as one of upstream's own words
+	// — "Room", "Exit", "Thing", "Player", "Program", "Bad" —
+	// for {type}.
 	TypeName(obj Ref) string
-	// FlagString is the letters examine prints for an object's flags, and
-	// HasFlag tests one by name or letter.
+	// FlagString is the letters examine prints for an object's
+	// flags, and HasFlag tests one by name or letter.
 	FlagString(obj Ref) string
 	HasFlag(obj Ref, flag string) bool
-	// Exits and Links list what an object holds and points at: an exit's
-	// destinations, a room's drop-to, or a thing's or player's home.
+	// Exits and Links list what an object holds and points at: an
+	// exit's destinations, a room's drop-to, or a thing's or
+	// player's home.
 	Exits(obj Ref) []Ref
 	Links(obj Ref) []Ref
 	// Value is an object's currency, for {money}.
 	Value(obj Ref) int
-	// Timestamps is when an object was made, last changed and last used,
-	// and how often — {created}, {modified}, {lastused}, {usecount}.
+	// Timestamps is when an object was made, last changed and
+	// last used, and how often — {created}, {modified},
+	// {lastused}, {usecount}.
 	Timestamps(obj Ref) (created, modified, used int64, count int)
 
-	// Controls reports whether who has ownership-level authority over
-	// target, and Locked whether player is locked out of thing.
+	// Controls reports whether who has ownership-level authority
+	// over target, and Locked whether player is locked out of
+	// thing.
 	Controls(who, target Ref) bool
 	Locked(descr int, player, thing Ref) bool
 	// TestLock evaluates a lock expression written as text.
 	TestLock(descr int, player, thing Ref, lock string) (bool, error)
 
-	// OnlinePlayers lists who is connected, and Idle and OnTime report how
-	// long one connection has been quiet and how long it has been open.
+	// OnlinePlayers lists who is connected, and Idle and OnTime
+	// report how long one connection has been quiet and how long
+	// it has been open.
 	OnlinePlayers() []Ref
 	Idle(obj Ref) int
 	OnTime(obj Ref) int
@@ -135,21 +143,24 @@ type Host interface {
 	Width(obj Ref) int
 	Height(obj Ref) int
 
-	// TuneGet reads an @tune parameter as its formatted string, and
-	// MuckName is the server's name — {sysparm} and {muckname}.
+	// TuneGet reads an @tune parameter as its formatted string,
+	// and MuckName is the server's name — {sysparm} and
+	// {muckname}.
 	TuneGet(name string) (string, bool)
 	MuckName() string
-	// PronounSub substitutes the pronoun directives in a string for an
-	// object's gender.
+	// PronounSub substitutes the pronoun directives in a string
+	// for an object's gender.
 	PronounSub(obj Ref, text string) string
 
-	// Force runs a command as another object, Kill removes a process, and
-	// RunMUF runs a program and returns what it left on its stack. All
-	// three are blessed-only, checked by the functions rather than here.
+	// Force runs a command as another object, Kill removes a
+	// process, and RunMUF runs a program and returns what it left
+	// on its stack. All three are blessed-only, checked by the
+	// functions rather than here.
 	Force(descr int, who Ref, command string)
 	Kill(pid int) bool
 	RunMUF(descr int, player, prog Ref, arg string) (string, error)
-	// Delay schedules a message to be evaluated later, for {delay}.
+	// Delay schedules a message to be evaluated later, for
+	// {delay}.
 	Delay(descr int, player, what, perms Ref, seconds int, text string, blessed bool)
 }
 
@@ -171,20 +182,21 @@ func errf(fn, format string, args ...any) *Error {
 	return &Error{Func: fn, Msg: fmt.Sprintf(format, args...)}
 }
 
-// Eval evaluates a message, reporting any failure to the player and yielding
-// empty text.
+// Eval evaluates a message, reporting any failure to the player and
+// yielding empty text.
 //
-// That is upstream's behaviour and it matters: an MPI error in a description
-// must not abort the program or command that was reading it. Parse is the
-// inner form, which propagates the error so nested calls can stop.
+// That is upstream's behaviour and it matters: an MPI error in a
+// description must not abort the program or command that was reading
+// it. Parse is the inner form, which propagates the error so nested
+// calls can stop.
 func Eval(env *Env, in string) string {
 	out, err := Parse(env, in)
 	if err == nil {
 		return out
 	}
-	// The "how" variable names what is being evaluated, and prefixes the
-	// message. It is empty unless the caller set one, which leaves the
-	// leading space upstream also produces.
+	// The "how" variable names what is being evaluated, and
+	// prefixes the message. It is empty unless the caller set
+	// one, which leaves the leading space upstream also produces.
 	how, _ := env.Var("how")
 	env.Host.Notify(env.Who, how+" "+err.Error())
 	return ""
@@ -207,8 +219,9 @@ func Parse(env *Env, in string) (string, error) {
 
 		switch {
 		case c == escape && i+1 < len(in):
-			// An escape passes the next character through, with two
-			// spellings that mean something else.
+			// An escape passes the next character
+			// through, with two spellings that mean
+			// something else.
 			i++
 			switch in[i] {
 			case 'r':
@@ -220,8 +233,9 @@ func Parse(env *Env, in string) (string, error) {
 			}
 
 		case c == litChar:
-			// A backtick toggles literalness rather than being
-			// output, so a run of text can hold braces.
+			// A backtick toggles literalness rather than
+			// being output, so a run of text can hold
+			// braces.
 			literal = !literal
 
 		case !literal && c == leadChar:
@@ -245,13 +259,14 @@ func Parse(env *Env, in string) (string, error) {
 	return out.String(), nil
 }
 
-// evalCall evaluates the call starting at in[start], which is its '{'. It
-// returns what the call produced and the index just past its '}'.
+// evalCall evaluates the call starting at in[start], which is its
+// '{'. It returns what the call produced and the index just past its
+// '}'.
 func (env *Env) evalCall(in string, start int) (string, int, error) {
 	i := start + 1
 
-	// The name runs until a delimiter. A '&' prefix names a variable rather
-	// than a function.
+	// The name runs until a delimiter. A '&' prefix names a
+	// variable rather than a function.
 	nameStart := i
 	for i < len(in) && in[i] != leadChar && in[i] != argStart &&
 		in[i] != argEnd && !isSpace(in[i]) {
@@ -259,8 +274,8 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 	}
 	name := in[nameStart:i]
 
-	// The limit allows one extra character for the '&', which is not part
-	// of the name being looked up.
+	// The limit allows one extra character for the '&', which is
+	// not part of the name being looked up.
 	limit := maxFuncNameLen
 	if strings.HasPrefix(name, "&") {
 		limit++
@@ -275,8 +290,8 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 		return "", 0, err
 	}
 
-	// A variable reference takes the variable's value as its first
-	// argument and behaves as {sublist} otherwise.
+	// A variable reference takes the variable's value as its
+	// first argument and behaves as {sublist} otherwise.
 	varName := ""
 	if strings.HasPrefix(name, "&") {
 		varName = name[1:]
@@ -299,8 +314,9 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 	}
 
 	if !known {
-		// A name the built-in table does not hold may still be a macro —
-		// one {func} defined, or one stored in a property.
+		// A name the built-in table does not hold may still
+		// be a macro — one {func} defined, or one stored in
+		// a property.
 		body, found := env.macro(name)
 		if !found {
 			return "", 0, errf(name, "Unrecognized function.")
@@ -370,11 +386,12 @@ func (env *Env) charge(name string) error {
 	return nil
 }
 
-// splitArgs reads a call's comma-separated arguments, starting just past the
-// ':'. It returns them unevaluated and the index past the closing '}'.
+// splitArgs reads a call's comma-separated arguments, starting just
+// past the ':'. It returns them unevaluated and the index past the
+// closing '}'.
 //
-// Nesting and literalness are respected, so a comma inside a nested call or a
-// backtick-quoted run does not separate arguments.
+// Nesting and literalness are respected, so a comma inside a nested
+// call or a backtick-quoted run does not separate arguments.
 func splitArgs(in string, start int) ([]string, int, error) {
 	var args []string
 	var cur strings.Builder
@@ -430,7 +447,8 @@ func (env *Env) Var(name string) (string, bool) {
 	return "", false
 }
 
-// SetVar binds a variable, replacing any existing one of the same name.
+// SetVar binds a variable, replacing any existing one of the same
+// name.
 func (env *Env) SetVar(name, value string) error {
 	for i := range env.vars {
 		if upper(env.vars[i].name) == upper(name) {
@@ -445,8 +463,8 @@ func (env *Env) SetVar(name, value string) error {
 	return nil
 }
 
-// PopVar removes the most recently bound variable, which the looping functions
-// do when they finish.
+// PopVar removes the most recently bound variable, which the looping
+// functions do when they finish.
 func (env *Env) PopVar() {
 	if len(env.vars) > 0 {
 		env.vars = env.vars[:len(env.vars)-1]

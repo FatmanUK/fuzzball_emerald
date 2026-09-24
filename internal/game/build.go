@@ -11,8 +11,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// requireBuilder reports whether the player may use construction commands,
-// telling them if not.
+// requireBuilder reports whether the player may use construction
+// commands, telling them if not.
 func (s *Server) requireBuilder(c *ctx) bool {
 	if c.w.Get(c.who).Flags.CanBuild() {
 		return true
@@ -21,15 +21,16 @@ func (s *Server) requireBuilder(c *ctx) bool {
 	return false
 }
 
-// requireWizard reports whether the player has wizard powers, telling them if
-// not.
+// requireWizard reports whether the player has wizard powers, telling
+// them if not.
 func (s *Server) requireWizard(c *ctx) bool {
 	if c.w.Get(c.who).Flags.IsWizard() {
 		return true
 	}
 	c.tell("Permission denied.")
-	// Audited rather than merely refused: one of these is a typo, and a
-	// run of them from one player is someone trying the doors.
+	// Audited rather than merely refused: one of these is a typo,
+	// and a run of them from one player is someone trying the
+	// doors.
 	s.securityLog().Warn("refused a wizard command",
 		"player", c.who.String(), "name", nameOf(c.w, c.who),
 		"command", c.verb)
@@ -38,8 +39,8 @@ func (s *Server) requireWizard(c *ctx) bool {
 
 // resolveControlled finds an object the player may modify.
 func (s *Server) resolveControlled(c *ctx, name string) (ref.Ref, bool) {
-	// Player() is included so a wizard can name someone who is elsewhere in
-	// the game, which @teleport and @set both need.
+	// Player() is included so a wizard can name someone who is
+	// elsewhere in the game, which @teleport and @set both need.
 	r := match.New(c.w, c.who, name).Everything().Player().Result()
 	switch r {
 	case ref.Nothing:
@@ -68,9 +69,9 @@ func (s *Server) cmdCreate(c *ctx) {
 		return
 	}
 
-	// A thing costs money to make and is worth a fraction of what was
-	// paid, which is what gives objects a value at all. Paying more than
-	// the minimum endows the object with more.
+	// A thing costs money to make and is worth a fraction of what
+	// was paid, which is what gives objects a value at all.
+	// Paying more than the minimum endows the object with more.
 	cost := leadingInt(strings.TrimSpace(costArg))
 	if cost < 0 {
 		c.tell("You can't create an object for less than nothing!")
@@ -125,16 +126,16 @@ func (s *Server) cmdDig(c *ctx) {
 	}
 	c.tell("Room %s created.", unparse(c.w, c.who, o.Ref))
 
-	// A room that could not be parented where it was asked to go still
-	// exists, at the default parent, and is reported that way rather than
-	// failing the whole command.
+	// A room that could not be parented where it was asked to go
+	// still exists, at the default parent, and is reported that
+	// way rather than failing the whole command.
 	if p := strings.TrimSpace(parentName); p != "" {
 		c.tell("Trying to set parent...")
 		r := match.New(c.w, c.who, p).Absolute().Registered().Here().Result()
 		switch {
 		case !noisyMatch(c, p, r):
-			// The matcher has already said what went wrong; this
-			// says what happened as a result.
+			// The matcher has already said what went
+			// wrong; this says what happened as a result.
 			c.tell("Parent set to default.")
 		case !s.canLinkTo(c.w, c.who, r) || r == o.Ref:
 			c.tell("Permission denied.  Parent set to default.")
@@ -182,8 +183,8 @@ func (s *Server) cmdOpen(c *ctx) {
 	}
 	c.tell("Exit %s opened.", unparse(c.w, c.who, o.Ref))
 
-	// Linking costs again, and is reported separately: an exit that was
-	// opened but could not be linked still exists.
+	// Linking costs again, and is reported separately: an exit
+	// that was opened but could not be linked still exists.
 	if hasDest {
 		c.tell("Trying to link...")
 		if !s.payFor(c.w, c.who, int(c.w.Tune.Int("link_cost"))) {
@@ -217,8 +218,8 @@ func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
 	case ref.Home, ref.Nil:
 		return r, true
 	}
-	// Anyone may link to a room or thing flagged to allow it, or to
-	// anything they control.
+	// Anyone may link to a room or thing flagged to allow it, or
+	// to anything they control.
 	o := c.w.Get(r)
 	linkable := o.Flags&ref.LinkOK != 0 ||
 		(o.Type() == ref.TypeRoom || o.Type() == ref.TypeThing) && o.Flags&ref.Abode != 0
@@ -298,8 +299,8 @@ func (s *Server) cmdName(c *ctx) {
 		return
 	}
 
-	// Renaming a player needs the same checks as creating one, and the
-	// player's own password, which @name does not take.
+	// Renaming a player needs the same checks as creating one,
+	// and the player's own password, which @name does not take.
 	if c.w.Get(target).Type() == ref.TypePlayer {
 		if err := validPlayerName(c.w, newName); err != nil {
 			c.send(err.Error())
@@ -333,14 +334,15 @@ func (s *Server) cmdDescribe(c *ctx) {
 // settableFlags lists the names @set accepts, in the order upstream's
 // str_to_flag tests them.
 //
-// Matching is by prefix, so "X" reaches XFORCIBLE and "dark" and "d" are the
-// same flag. The order is load-bearing for single letters: "n" is the second
-// mucker bit because "nucker" is tested before nothing else claims the letter,
-// and "t" is the wizard bit through "truewizard".
+// Matching is by prefix, so "X" reaches XFORCIBLE and "dark" and "d"
+// are the same flag. The order is load-bearing for single letters:
+// "n" is the second mucker bit because "nucker" is tested before
+// nothing else claims the letter, and "t" is the wizard bit through
+// "truewizard".
 //
-// Internal flags are deliberately absent, except INTERACTIVE, which upstream
-// exposes: they describe live server state rather than anything an operator
-// should write.
+// Internal flags are deliberately absent, except INTERACTIVE, which
+// upstream exposes: they describe live server state rather than
+// anything an operator should write.
 var settableFlags = []struct {
 	names []string
 	bit   ref.Flags
@@ -426,8 +428,9 @@ func (s *Server) cmdSet(c *ctx) {
 	clear := strings.HasPrefix(rest, "!")
 	flagName := ascii.Fold(strings.TrimSpace(strings.TrimPrefix(rest, "!")))
 
-	// Mucker levels are named where a flag would be, and are read before
-	// the flag table so "M2" is a level rather than a prefix of "mucker".
+	// Mucker levels are named where a flag would be, and are read
+	// before the flag table so "M2" is a level rather than a
+	// prefix of "mucker".
 	if flagName == "4" || flagName == "m4" {
 		c.tell("To set Mucker Level 4, set the Wizard bit and another Mucker bit.")
 		return
@@ -437,31 +440,37 @@ func (s *Server) cmdSet(c *ctx) {
 		if !s.requireWizard(c) {
 			return
 		}
-		// Level zero, and clearing any level, both come to the same
-		// thing: remove both bits.
-		if flagName == "0" || flagName == "m0" || ascii.HasPrefix("mucker", flagName) && clear {
+		// Level zero, and clearing any level, both come to
+		// the same thing: remove both bits.
+		if flagName == "0" || flagName == "m0" ||
+			ascii.HasPrefix("mucker", flagName) &&
+				clear {
 			clear = true
 		}
 	} else {
 		var known bool
 		bit, known = strToFlag(flagName)
-		// @set refuses two names that str_to_flag resolves: "truewizard"
-		// is the wizard bit under another name, and "nucker" is half a
-		// mucker level. Both would set something other than they say.
-		if !known || ascii.HasPrefix("truewizard", flagName) ||
+		// @set refuses two names that str_to_flag resolves:
+		// "truewizard" is the wizard bit under another name,
+		// and "nucker" is half a mucker level. Both would set
+		// something other than they say.
+		if !known ||
+			ascii.HasPrefix("truewizard", flagName) ||
 			ascii.HasPrefix("nucker", flagName) {
 			c.tell("I don't recognize that flag.")
 			return
 		}
-		if wizardOnlyFlags[bit] && !c.w.Get(c.who).Flags.IsWizard() {
+		if wizardOnlyFlags[bit] &&
+			!c.w.Get(c.who).Flags.IsWizard() {
 			c.tell("Permission denied.")
 			return
 		}
 	}
 
 	o := c.w.Get(target)
-	// Setting either mucker bit replaces the level rather than adding to
-	// it, so a level is never assembled out of two commands.
+	// Setting either mucker bit replaces the level rather than
+	// adding to it, so a level is never assembled out of two
+	// commands.
 	if bit&(ref.Mucker|ref.SMucker) != 0 {
 		o.Flags &^= ref.Mucker | ref.SMucker
 	}
@@ -483,8 +492,9 @@ func (s *Server) cmdSet(c *ctx) {
 	}
 }
 
-// parseMLevel reads the names @set accepts for a mucker level, returning the
-// bits it sets. "mucker" is level 2, and negated is level 0.
+// parseMLevel reads the names @set accepts for a mucker level,
+// returning the bits it sets. "mucker" is level 2, and negated is
+// level 0.
 func parseMLevel(name string, negated bool) (ref.Flags, bool) {
 	switch name {
 	case "0", "m0":
@@ -545,13 +555,15 @@ func (s *Server) cmdFind(c *ctx) {
 	pattern := strings.TrimSpace(c.arg)
 	found := 0
 	c.w.Each(func(o *world.Object) bool {
-		if o.Owner != c.who && !c.w.Get(c.who).Flags.IsWizard() {
+		if o.Owner != c.who &&
+			!c.w.Get(c.who).Flags.IsWizard() {
 			return true
 		}
 		if o.Type() == ref.TypeGarbage {
 			return true
 		}
-		if pattern != "" && !match.StringMatch(o.Name, pattern) {
+		if pattern != "" &&
+			!match.StringMatch(o.Name, pattern) {
 			return true
 		}
 		c.send(unparse(c.w, c.who, o.Ref))
@@ -588,8 +600,10 @@ func (s *Server) cmdTeleport(c *ctx) {
 		c.tell("That destination doesn't exist.")
 		return
 	}
-	// Only a wizard may drop things into somewhere they do not control.
-	if !s.controls(c.w, c.who, dest) && c.w.Get(dest).Flags&ref.JumpOK == 0 {
+	// Only a wizard may drop things into somewhere they do not
+	// control.
+	if !s.controls(c.w, c.who, dest) &&
+		c.w.Get(dest).Flags&ref.JumpOK == 0 {
 		c.tell("You can't teleport there.")
 		return
 	}
@@ -632,8 +646,9 @@ func (s *Server) cmdRecycle(c *ctx) {
 	c.tell("%s recycled.", name)
 }
 
-// evictEditors throws anyone editing a program out of the editor before it is
-// recycled, so nobody is left typing into a session whose program has gone.
+// evictEditors throws anyone editing a program out of the editor
+// before it is recycled, so nobody is left typing into a session
+// whose program has gone.
 func (s *Server) evictEditors(w *world.World, program ref.Ref) {
 	for who, e := range s.editors {
 		if e.program != program {
@@ -644,8 +659,8 @@ func (s *Server) evictEditors(w *world.World, program ref.Ref) {
 	}
 }
 
-// payFor takes the cost of something out of a player's pocket, reporting
-// whether they could afford it. A wizard pays for nothing.
+// payFor takes the cost of something out of a player's pocket,
+// reporting whether they could afford it. A wizard pays for nothing.
 func (s *Server) payFor(w *world.World, who ref.Ref, cost int) bool {
 	owner := ownerOf(w, who)
 	o := w.Get(owner)
@@ -664,8 +679,8 @@ func (s *Server) payFor(w *world.World, who ref.Ref, cost int) bool {
 }
 
 // endowment is what an object made for a given price is worth, from
-// include/db.h. It is bounded so an admin can stop a rich player minting
-// value by creating expensive objects.
+// include/db.h. It is bounded so an admin can stop a rich player
+// minting value by creating expensive objects.
 func endowment(w *world.World, cost int) int {
 	n := (cost - 5) / 5
 	if max := int(w.Tune.Int("max_object_endowment")); n > max {
@@ -677,8 +692,9 @@ func endowment(w *world.World, cost int) int {
 	return n
 }
 
-// canLinkTo reports whether someone may attach something to a destination:
-// they control it, or it is open to anyone through its LINK_OK or ABODE flag.
+// canLinkTo reports whether someone may attach something to a
+// destination: they control it, or it is open to anyone through its
+// LINK_OK or ABODE flag.
 func (s *Server) canLinkTo(w *world.World, who, where ref.Ref) bool {
 	if s.controls(w, who, where) {
 		return true

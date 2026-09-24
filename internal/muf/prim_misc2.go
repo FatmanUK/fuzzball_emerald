@@ -8,14 +8,15 @@ import (
 )
 
 // EVENT_COUNT, EVENT_EXISTS, EXT-NAME-OK?, READ_WANTS_BLANKS,
-// READ_WANTS_NO_BLANKS, IGNORING?, IGNORE_ADD, IGNORE_DEL, CONVTIME, FMTTIME,
-// STATS, STATS_ARRAY and USERLOG are ports of the more tractable primitives
-// left in src/p_misc.c. Deliberately not ported, each needing substantially
-// more than a primitive port on its own: TIMER_START/TIMER_STOP/EVENT_SEND (a
-// delayed, out-of-band event-delivery scheduler distinct from WATCHPID's own
-// synchronous one), DEBUGGER_BREAK/DEBUG_LINE/DEBUG_ON/DEBUG_OFF (the MUF
-// single-step debugger, unimplemented entirely), and SMTP_SEND (a real SMTP
-// client).
+// READ_WANTS_NO_BLANKS, IGNORING?, IGNORE_ADD, IGNORE_DEL, CONVTIME,
+// FMTTIME, STATS, STATS_ARRAY and USERLOG are ports of the more
+// tractable primitives left in src/p_misc.c. Deliberately not ported,
+// each needing substantially more than a primitive port on its own:
+// TIMER_START/TIMER_STOP/EVENT_SEND (a delayed, out-of-band
+// event-delivery scheduler distinct from WATCHPID's own synchronous
+// one), DEBUGGER_BREAK/DEBUG_LINE/DEBUG_ON/DEBUG_OFF (the MUF
+// single-step debugger, unimplemented entirely), and SMTP_SEND (a
+// real SMTP client).
 func init() {
 	register("EVENT_COUNT", func(f *Frame) (*Result, error) {
 		return nil, f.Push(Int(int64(len(f.PendingEvents))))
@@ -98,9 +99,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// Checked in upstream's own order — oper1 (who) before oper2
-		// (player) — even though the resulting argument numbers are the
-		// other way around.
+		// Checked in upstream's own order — oper1 (who)
+		// before oper2 (player) — even though the resulting
+		// argument numbers are the other way around.
 		if !h.Valid(who) {
 			return nil, errf("Invalid object. (2)")
 		}
@@ -127,9 +128,10 @@ func init() {
 		return nil, f.Push(Int(secs))
 	})
 
-	// FMTTIME is CONVTIME with the format under the caller's control, its
-	// name notwithstanding: it parses a time string rather than rendering
-	// one. TIMEFMT is the primitive that formats.
+	// FMTTIME is CONVTIME with the format under the caller's
+	// control, its name notwithstanding: it parses a time string
+	// rather than rendering one. TIMEFMT is the primitive that
+	// formats.
 	register("FMTTIME", func(f *Frame) (*Result, error) {
 		format, err := f.Pop()
 		if err != nil {
@@ -171,8 +173,8 @@ func init() {
 			return nil, err
 		}
 		s := h.Stats(owner)
-		// Upstream's own reversed build order: garbage, program, player,
-		// thing, exit, room, total.
+		// Upstream's own reversed build order: garbage,
+		// program, player, thing, exit, room, total.
 		vals := make([]Value, 7)
 		for i, idx := range [7]int{6, 5, 4, 3, 2, 1, 0} {
 			vals[i] = Int(int64(s[idx]))
@@ -197,7 +199,8 @@ func init() {
 	})
 }
 
-// objTypeFromTag maps EXT-NAME-OK?'s own single-letter/word type tags.
+// objTypeFromTag maps EXT-NAME-OK?'s own single-letter/word type
+// tags.
 func objTypeFromTag(s string) (ref.ObjType, bool) {
 	switch strings.ToLower(s) {
 	case "e", "exit":
@@ -214,8 +217,8 @@ func objTypeFromTag(s string) (ref.ObjType, bool) {
 	return 0, false
 }
 
-// ignoreEdit builds IGNORE_ADD and IGNORE_DEL, which share their argument
-// shape: player who -- .
+// ignoreEdit builds IGNORE_ADD and IGNORE_DEL, which share their
+// argument shape: player who -- .
 func ignoreEdit(edit func(Host, ref.Ref, ref.Ref)) primFunc {
 	return func(f *Frame) (*Result, error) {
 		if f.MLevel() < 3 {
@@ -233,9 +236,9 @@ func ignoreEdit(edit func(Host, ref.Ref, ref.Ref)) primFunc {
 		if err != nil {
 			return nil, err
 		}
-		// Checked in upstream's own order — oper1 (who) before oper2
-		// (player) — even though the resulting argument numbers are the
-		// other way around.
+		// Checked in upstream's own order — oper1 (who)
+		// before oper2 (player) — even though the resulting
+		// argument numbers are the other way around.
 		if !h.Valid(who) {
 			return nil, errf("Invalid object. (2)")
 		}
@@ -247,13 +250,15 @@ func ignoreEdit(edit func(Host, ref.Ref, ref.Ref)) primFunc {
 	}
 }
 
-// statsArg pops STATS/STATS_ARRAY's shared player-or-NOTHING argument.
+// statsArg pops STATS/STATS_ARRAY's shared player-or-NOTHING
+// argument.
 func statsArg(f *Frame) (ref.Ref, Host, error) {
 	owner, h, err := f.refAndHost()
 	if err != nil {
 		return ref.Nothing, nil, err
 	}
-	if owner != ref.Nothing && (!h.Valid(owner) || h.ObjType(owner) != ref.TypePlayer) {
+	if owner != ref.Nothing &&
+		(!h.Valid(owner) || h.ObjType(owner) != ref.TypePlayer) {
 		return ref.Nothing, nil, errf("non-player argument (1)")
 	}
 	if f.MLevel() < 3 && h.Owner(owner) != f.Caller {
@@ -262,13 +267,14 @@ func statsArg(f *Frame) (ref.Ref, Host, error) {
 	return owner, h, nil
 }
 
-// SMTP_SEND sends an email. It is the one primitive that reaches outside the
-// server entirely, and is wizard-only for that reason.
+// SMTP_SEND sends an email. It is the one primitive that reaches
+// outside the server entirely, and is wizard-only for that reason.
 func init() {
 	register("SMTP_SEND", func(f *Frame) (*Result, error) {
-		// "Permission Denied." with a capital D here, unlike most of the
-		// server — upstream's own, so it is checked inline rather than
-		// left to the generated table.
+		// "Permission Denied." with a capital D here, unlike
+		// most of the server — upstream's own, so it is
+		// checked inline rather than left to the generated
+		// table.
 		if f.MLevel() < 4 {
 			return nil, errf("Permission Denied.")
 		}
@@ -293,9 +299,9 @@ func init() {
 			return nil, err
 		}
 
-		// A server with no relay configured reports so rather than
-		// failing, so a program can offer mail when it is available and
-		// do without when it is not.
+		// A server with no relay configured reports so rather
+		// than failing, so a program can offer mail when it
+		// is available and do without when it is not.
 		if !h.SMTPConfigured() {
 			return nil, f.Push(Int(-1))
 		}
@@ -342,24 +348,25 @@ func init() {
 // The MUF debugger's four primitives.
 //
 // Upstream's debugger has two halves: an instruction tracer, and an
-// interactive prompt a breakpoint drops the player into. The tracer is what
-// DEBUG_ON, DEBUG_OFF and DEBUG_LINE drive, and it is ported — a program
-// flagged DARK prints a line per instruction to whoever controls it. The
-// prompt is not: see DEBUGGER_BREAK.
+// interactive prompt a breakpoint drops the player into. The tracer
+// is what DEBUG_ON, DEBUG_OFF and DEBUG_LINE drive, and it is ported
+// — a program flagged DARK prints a line per instruction to whoever
+// controls it. The prompt is not: see DEBUGGER_BREAK.
 func init() {
 	register("DEBUG_ON", debugFlag(true))
 	register("DEBUG_OFF", debugFlag(false))
 
-	// DEBUG_LINE prints a single trace line, for a program that is tracing
-	// only the part it cares about rather than all of itself. It is
-	// deliberately silent when the program *is* flagged for tracing, since
-	// the line would be printed twice.
+	// DEBUG_LINE prints a single trace line, for a program that
+	// is tracing only the part it cares about rather than all of
+	// itself. It is deliberately silent when the program *is*
+	// flagged for tracing, since the line would be printed twice.
 	register("DEBUG_LINE", func(f *Frame) (*Result, error) {
 		h, err := f.needHost()
 		if err != nil {
 			return nil, err
 		}
-		if h.Flags(f.Prog.Ref).Has(ref.Dark) || !h.Controls(f.Caller, f.Prog.Ref) {
+		if h.Flags(f.Prog.Ref).Has(ref.Dark) ||
+			!h.Controls(f.Caller, f.Prog.Ref) {
 			return nil, nil
 		}
 		if f.PC >= 0 && f.PC < len(f.Prog.Code) {
@@ -368,14 +375,15 @@ func init() {
 		return nil, nil
 	})
 
-	// DEBUGGER_BREAK asks upstream to stop and hand the player a debugger
-	// prompt, where they could step, inspect and continue. Emerald has no
-	// such prompt — it would mean taking over a connection's input, which
-	// nothing else in this server does — so the nearest honest thing is
-	// done instead: tracing is forced on for the rest of this program's
-	// run, so the player sees what a break would have let them step
-	// through. A program that breaks is therefore not suspended, which is
-	// the difference that matters.
+	// DEBUGGER_BREAK asks upstream to stop and hand the player a
+	// debugger prompt, where they could step, inspect and
+	// continue. Emerald has no such prompt — it would mean
+	// taking over a connection's input, which nothing else in
+	// this server does — so the nearest honest thing is done
+	// instead: tracing is forced on for the rest of this
+	// program's run, so the player sees what a break would have
+	// let them step through. A program that breaks is therefore
+	// not suspended, which is the difference that matters.
 	register("DEBUGGER_BREAK", func(f *Frame) (*Result, error) {
 		f.ForceTrace = true
 		f.Traced = true
@@ -383,8 +391,9 @@ func init() {
 	})
 }
 
-// debugFlag builds DEBUG_ON and DEBUG_OFF, which set and clear the running
-// program's DARK flag — which is what "this program is being debugged" means.
+// debugFlag builds DEBUG_ON and DEBUG_OFF, which set and clear the
+// running program's DARK flag — which is what "this program is
+// being debugged" means.
 func debugFlag(on bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		h, err := f.needHost()
@@ -398,9 +407,9 @@ func debugFlag(on bool) primFunc {
 			flags &^= ref.Dark
 		}
 		h.SetFlags(f.Prog.Ref, flags)
-		// Taking effect at once rather than when the frame next resumes
-		// is what makes "debug_on ... debug_off" trace the part between
-		// them and nothing else.
+		// Taking effect at once rather than when the frame
+		// next resumes is what makes "debug_on ... debug_off"
+		// trace the part between them and nothing else.
 		f.Traced = on || f.ForceTrace
 		return nil, nil
 	}

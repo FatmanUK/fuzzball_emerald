@@ -154,8 +154,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// A proplist is "path#" holding a count, and "path#/1".."path#/n"
-		// holding the entries.
+		// A proplist is "path#" holding a count, and
+		// "path#/1".."path#/n" holding the entries.
 		countVal, _ := h.GetProp(obj, path+"#")
 		n := countVal.Num
 		vals := make([]Value, 0, n)
@@ -171,7 +171,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// A reflist is a single string of space-separated dbrefs.
+		// A reflist is a single string of space-separated
+		// dbrefs.
 		v, _ := h.GetProp(obj, path)
 		var vals []Value
 		for _, field := range strings.Fields(v.Str) {
@@ -214,7 +215,8 @@ func itoa64(n int64) string {
 	return Int(n).String()
 }
 
-// edge builds ARRAY_FIRST and ARRAY_LAST, which push a key and a flag.
+// edge builds ARRAY_FIRST and ARRAY_LAST, which push a key and a
+// flag.
 func edge(first bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		a, err := f.popArray()
@@ -275,8 +277,8 @@ const (
 	sortShuffle         = 4
 )
 
-// sortValues orders values the way ARRAY_SORT does: numbers before strings,
-// each ascending unless the flags say otherwise.
+// sortValues orders values the way ARRAY_SORT does: numbers before
+// strings, each ascending unless the flags say otherwise.
 func sortValues(vals []Value, flags int) []Value {
 	out := append([]Value{}, vals...)
 	if flags&sortShuffle != 0 {
@@ -309,8 +311,8 @@ func valueLess(a, b Value, foldCase bool) bool {
 	return xok && !yok
 }
 
-// The remaining array primitives: set operations, searching, nesting, and the
-// property-list forms.
+// The remaining array primitives: set operations, searching, nesting,
+// and the property-list forms.
 
 func init() {
 	register("ARRAY_FINDVAL", searchVals(true))
@@ -453,9 +455,10 @@ func init() {
 		return nil, nil
 	})
 
-	// Pinning controls whether an array is shared or copied on assignment.
-	// Arrays here are copied on write, so a program may set the flag and
-	// read it back but nothing depends on it.
+	// Pinning controls whether an array is shared or copied on
+	// assignment. Arrays here are copied on write, so a program
+	// may set the flag and read it back but nothing depends on
+	// it.
 	register("ARRAY_PIN", passThroughArray)
 	register("ARRAY_UNPIN", passThroughArray)
 	register("ARRAY_DEFAULT_PINNING", func(f *Frame) (*Result, error) {
@@ -464,8 +467,8 @@ func init() {
 	})
 }
 
-// popArrayArg takes an array, naming which argument it was when the type is
-// wrong.
+// popArrayArg takes an array, naming which argument it was when the
+// type is wrong.
 func (f *Frame) popArrayArg(n int, msg string) (*Array, error) {
 	v, err := f.Pop()
 	if err != nil {
@@ -477,7 +480,8 @@ func (f *Frame) popArrayArg(n int, msg string) (*Array, error) {
 	return v.Array, nil
 }
 
-// passThroughArray leaves an array as it is, for the pinning primitives.
+// passThroughArray leaves an array as it is, for the pinning
+// primitives.
 func passThroughArray(f *Frame) (*Result, error) {
 	a, err := f.popArray()
 	if err != nil {
@@ -486,8 +490,8 @@ func passThroughArray(f *Frame) (*Result, error) {
 	return nil, f.Push(Arr(a))
 }
 
-// searchVals builds ARRAY_FINDVAL and ARRAY_EXCLUDEVAL, which return the keys
-// whose values match, or do not.
+// searchVals builds ARRAY_FINDVAL and ARRAY_EXCLUDEVAL, which return
+// the keys whose values match, or do not.
 func searchVals(want bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		target, err := f.Pop()
@@ -509,8 +513,8 @@ func searchVals(want bool) primFunc {
 	}
 }
 
-// matchVals builds ARRAY_MATCHVAL and ARRAY_MATCHKEY, which filter by a
-// SMATCH pattern.
+// matchVals builds ARRAY_MATCHVAL and ARRAY_MATCHKEY, which filter by
+// a SMATCH pattern.
 func matchVals(pick func(*Array) []Value) primFunc {
 	return func(f *Frame) (*Result, error) {
 		pattern, err := f.popStr()
@@ -524,7 +528,8 @@ func matchVals(pick func(*Array) []Value) primFunc {
 		keys, chosen := a.Keys(), pick(a)
 		out := NewDict()
 		for i := range chosen {
-			if chosen[i].Type == TypeString && ascii.SMatch(chosen[i].Str, pattern) {
+			if chosen[i].Type == TypeString &&
+				ascii.SMatch(chosen[i].Str, pattern) {
 				v, _ := a.Get(keys[i])
 				out.Set(keys[i], v)
 			}
@@ -533,8 +538,8 @@ func matchVals(pick func(*Array) []Value) primFunc {
 	}
 }
 
-// setOp builds the n-way set operations, which take a count and that many
-// arrays.
+// setOp builds the n-way set operations, which take a count and that
+// many arrays.
 func setOp(combine func([]*Array) *Array) primFunc {
 	return func(f *Frame) (*Result, error) {
 		n, err := f.popInt()
@@ -593,7 +598,8 @@ func intersectOf(arrays []*Array) *Array {
 	return NewList(sortValues(out, 0))
 }
 
-// differenceOf collects the first array's values that no later one holds.
+// differenceOf collects the first array's values that no later one
+// holds.
 func differenceOf(arrays []*Array) *Array {
 	if len(arrays) == 0 {
 		return NewList(nil)
@@ -642,8 +648,8 @@ func compareArrays(a, b *Array) int {
 	return len(av) - len(bv)
 }
 
-// nested builds the nested get and delete primitives, which walk a path of
-// keys into arrays of arrays.
+// nested builds the nested get and delete primitives, which walk a
+// path of keys into arrays of arrays.
 func nested(fn func(*Array, []Value) (Value, *Array)) primFunc {
 	return func(f *Frame) (*Result, error) {
 		path, err := f.popArray()
@@ -697,7 +703,8 @@ func nestedDel(a *Array, path []Value) (Value, *Array) {
 	return Value{}, c
 }
 
-// nestedSet writes a value at a path of keys, creating the arrays it needs.
+// nestedSet writes a value at a path of keys, creating the arrays it
+// needs.
 func nestedSet(f *Frame) (*Result, error) {
 	path, err := f.popArrayArg(3, "Argument not an array of indexes.")
 	if err != nil {
@@ -725,7 +732,8 @@ func setNested(a *Array, path []Value, val Value) *Array {
 		return c
 	}
 	inner := NewDict()
-	if existing, ok := c.Get(path[0]); ok && existing.Type == TypeArray {
+	if existing, ok := c.Get(path[0]); ok &&
+		existing.Type == TypeArray {
 		inner = existing.Array
 	}
 	c.Set(path[0], Arr(setNested(inner, path[1:], val)))

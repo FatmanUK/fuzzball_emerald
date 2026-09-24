@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// examineScript examines one of each type of object, with and without flags,
-// messages and properties set.
+// examineScript examines one of each type of object, with and without
+// flags, messages and properties set.
 var examineScript = Script{
 	// A room, a player and a program are already in the fixture.
 	"ex here",
@@ -17,8 +17,9 @@ var examineScript = Script{
 	"ex test.muf",
 	"ex test",
 
-	// A thing, dressed up so every part of the report has something to
-	// show: flags, messages, a lock, properties and a home.
+	// A thing, dressed up so every part of the report has
+	// something to show: flags, messages, a lock, properties and
+	// a home.
 	"@create widget",
 	"@set widget=V",
 	"@set widget=D",
@@ -38,8 +39,8 @@ var examineScript = Script{
 	"ex widget=nosuch*",
 	"ex me=/",
 
-	// A second room with an exit and a drop-to, to reach the branches the
-	// fixture's own room does not.
+	// A second room with an exit and a drop-to, to reach the
+	// branches the fixture's own room does not.
 	"@dig Cellar",
 	"@dig Attic=#0",
 	"@dig Vault=nosuchroom",
@@ -89,23 +90,25 @@ func TestExamineMatchesFuzzball(t *testing.T) {
 var (
 	// timestampLine is one of examine's three time fields.
 	timestampLine = regexp.MustCompile(`^(Created:|Modified:|Lastused:)\s+.*$`)
-	// memoryLine is the size report, which counts this server's own
-	// memory. The two lay an object out differently, so the numbers could
-	// not agree even in principle; that the line is there, and where, is
-	// what is compared.
+	// memoryLine is the size report, which counts this server's
+	// own memory. The two lay an object out differently, so the
+	// numbers could not agree even in principle; that the line is
+	// there, and where, is what is compared.
 	memoryLine = regexp.MustCompile(`^Memory used: \d+ bytes$`)
-	// runtimeLine is a program's cumulative runtime, which upstream
-	// profiles and this server does not.
+	// runtimeLine is a program's cumulative runtime, which
+	// upstream profiles and this server does not.
 	runtimeLine = regexp.MustCompile(`^Cumulative runtime: .*$`)
 )
 
-// maskVariable replaces the parts of a report that cannot match between two
-// servers with a fixed string, keeping the line and its position.
+// maskVariable replaces the parts of a report that cannot match
+// between two servers with a fixed string, keeping the line and its
+// position.
 func maskVariable(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {
-		// The oracle's transcript keeps its line endings, so the
-		// carriage return goes before anything is matched.
+		// The oracle's transcript keeps its line endings, so
+		// the carriage return goes before anything is
+		// matched.
 		line = strings.TrimSuffix(line, "\r")
 		switch {
 		case timestampLine.MatchString(line):

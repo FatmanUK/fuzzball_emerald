@@ -6,20 +6,22 @@ import (
 	"time"
 )
 
-// lockCmdScript exercises the @lock family of commands — set, report, clear,
-// aliases, a bad key, and an exit whose own @lock actually gates traversal.
-// The exit links to the fixture's own room (#0), so the player never leaves
-// it and every command stays addressable without a dbref only known after a
-// @create.
+// lockCmdScript exercises the @lock family of commands — set,
+// report, clear, aliases, a bad key, and an exit whose own @lock
+// actually gates traversal. The exit links to the fixture's own room
+// (#0), so the player never leaves it and every command stays
+// addressable without a dbref only known after a @create.
 var lockCmdScript = Script{
-	// No object defaults to the caller; no "=" reports instead of setting.
+	// No object defaults to the caller; no "=" reports instead of
+	// setting.
 	"@lock",
 	"@lock me=me",
 	"@lock",
 	"@lock me=",
 	"@lock",
 
-	// @force_lock/@chown_lock are alternate spellings, not abbreviations.
+	// @force_lock/@chown_lock are alternate spellings, not
+	// abbreviations.
 	"@force_lock me=me",
 	"@flock me",
 	"@chown_lock me=me",
@@ -30,11 +32,12 @@ var lockCmdScript = Script{
 	"@ownlock me=me",
 	"@readlock me=me",
 
-	// A bad key reports the parse failure rather than setting anything.
+	// A bad key reports the parse failure rather than setting
+	// anything.
 	"@lock me=nosuchthingatall",
 
-	// An exit linking back to the room it's in: lock it out, try to pass,
-	// unlock it, try again.
+	// An exit linking back to the room it's in: lock it out, try
+	// to pass, unlock it, try again.
 	"@open down;d=#0",
 	"@lock down",
 	"@lock down=#-1",
@@ -42,8 +45,8 @@ var lockCmdScript = Script{
 	"@lock down=#1",
 	"down",
 
-	// @flock/@ownlock/@readlock refuse to run from inside a @force;
-	// @lock does not.
+	// @flock/@ownlock/@readlock refuse to run from inside a
+	// @force; @lock does not.
 	"@force me=@flock down=me",
 	"@force me=@lock down=me",
 }

@@ -12,30 +12,33 @@ import (
 
 // Frame is the MCP state of one connection.
 //
-// Until the client sends an "#$#mcp" line, the frame is disabled and every
-// line is ordinary text. Negotiation establishes a version, an authentication
-// key that every later message must carry, and the set of packages both sides
-// understand.
+// Until the client sends an "#$#mcp" line, the frame is disabled and
+// every line is ordinary text. Negotiation establishes a version, an
+// authentication key that every later message must carry, and the set
+// of packages both sides understand.
 type Frame struct {
-	// Send writes one line to the client. It is set by whoever owns the
-	// connection, and must not be nil once the frame is in use.
+	// Send writes one line to the client. It is set by whoever
+	// owns the connection, and must not be nil once the frame is
+	// in use.
 	Send func(string)
 
-	// mu guards everything below. A frame belongs to a connection rather
-	// than to the world, and a connection is read on its transport's
-	// goroutine while the game writes to it from the world's, so unlike
-	// the object graph this state really is reached from two at once.
+	// mu guards everything below. A frame belongs to a connection
+	// rather than to the world, and a connection is read on its
+	// transport's goroutine while the game writes to it from the
+	// world's, so unlike the object graph this state really is
+	// reached from two at once.
 	mu sync.Mutex
 
 	enabled bool
 	authKey string
 	version Version
 
-	// packages holds what the client said it supports, by folded name.
+	// packages holds what the client said it supports, by folded
+	// name.
 	packages map[string]Version
 
-	// partial holds messages still receiving their continuation lines,
-	// keyed by data tag.
+	// partial holds messages still receiving their continuation
+	// lines, keyed by data tag.
 	partial map[string]*Message
 
 	// registry is the set of packages this server offers.
@@ -70,63 +73,69 @@ func (f *Frame) Version() Version {
 	return f.version
 }
 
-// Supports returns the version agreed for a package, or the null version.
+// Supports returns the version agreed for a package, or the null
+// version.
 func (f *Frame) Supports(pkg string) Version {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.supports(pkg)
 }
 
-// supports is Supports without the lock, for callers that already hold it.
+// supports is Supports without the lock, for callers that already
+// hold it.
 func (f *Frame) supports(pkg string) Version {
 	return f.packages[ascii.Fold(pkg)]
 }
 
-// serverVersion is the protocol version this server speaks. MCP 2.1 is the
-// only version in use; 1.0 was never deployed widely.
+// serverVersion is the protocol version this server speaks. MCP 2.1
+// is the only version in use; 1.0 was never deployed widely.
 var serverVersion = Version{Major: 2, Minor: 1}
 
 // ProcessInput examines one line from the client.
 //
-// It returns the text to treat as ordinary input and whether there is any: a
-// line that was a complete MCP message is consumed, and produces nothing for
-// the command parser.
+// It returns the text to treat as ordinary input and whether there is
+// any: a line that was a complete MCP message is consumed, and
+// produces nothing for the command parser.
 //
-// A line beginning with the quote prefix is in-band text the client has
-// escaped because it would otherwise look like a message; the prefix is
-// stripped and the rest handed back.
+// A line beginning with the quote prefix is in-band text the client
+// has escaped because it would otherwise look like a message; the
+// prefix is stripped and the rest handed back.
 func (f *Frame) ProcessInput(line string) (string, bool) {
 	f.mu.Lock()
 	text, pass, msg := f.readLine(line)
 	f.mu.Unlock()
 
-	// Handlers run with the lock released. They are given the frame and
-	// may send on it, and holding the lock across a callback would turn
-	// any such send into a deadlock.
+	// Handlers run with the lock released. They are given the
+	// frame and may send on it, and holding the lock across a
+	// callback would turn any such send into a deadlock.
 	if msg != nil {
 		f.dispatch(msg)
 	}
 	return text, pass
 }
 
-// readLine parses one line, returning the text to pass on, whether there is
-// any, and any message that is now complete. The caller holds the lock.
+// readLine parses one line, returning the text to pass on, whether
+// there is any, and any message that is now complete. The caller
+// holds the lock.
 func (f *Frame) readLine(line string) (string, bool, *Message) {
 	switch {
 	case strings.HasPrefix(line, Prefix):
-		// Before negotiation only the opening "mcp" message is read as
-		// a message; anything else starting with the prefix is text,
-		// which is what lets a world talk about MCP without a client
-		// swallowing the conversation.
-		if !f.enabled && !ascii.HasPrefix(line[len(Prefix):], "mcp ") {
+		// Before negotiation only the opening "mcp" message
+		// is read as a message; anything else starting with
+		// the prefix is text, which is what lets a world talk
+		// about MCP without a client swallowing the
+		// conversation.
+		if !f.enabled &&
+			!ascii.HasPrefix(line[len(Prefix):], "mcp ") {
 			return line, true, nil
 		}
 		if done, ok := f.parse(line[len(Prefix):]); ok {
 			return "", false, done
 		}
-		// Something that looked like a message but did not parse is
-		// passed through rather than dropped, so a malformed line is
-		// visible instead of silently vanishing.
+		// Something that looked like a message but did not
+		// parse is passed through rather than dropped, so a
+		// malformed line is visible instead of silently
+		// vanishing.
 		return line, true, nil
 
 	case f.enabled && strings.HasPrefix(line, QuotePrefix):
@@ -137,8 +146,8 @@ func (f *Frame) readLine(line string) (string, bool, *Message) {
 	}
 }
 
-// parse reads one message line, returning any message it completed and
-// whether the line was a message at all.
+// parse reads one message line, returning any message it completed
+// and whether the line was a message at all.
 func (f *Frame) parse(in string) (*Message, bool) {
 	if done, ok := f.parseContinuation(in); ok {
 		return done, true
@@ -156,9 +165,9 @@ func (f *Frame) parseStart(in string) (*Message, bool) {
 		return nil, false
 	}
 
-	// Every message but the opening one carries the authentication key,
-	// which is what stops a world echoing text that a client would then
-	// obey as a message.
+	// Every message but the opening one carries the
+	// authentication key, which is what stops a world echoing
+	// text that a client would then obey as a message.
 	if !ascii.EqualFold(name, InitPackage) {
 		var key string
 		rest, ok = skipSpace(rest)
@@ -184,8 +193,8 @@ func (f *Frame) parseStart(in string) (*Message, bool) {
 	}
 
 	if msg.incomplete {
-		// The message is still arriving. The data tag is how its
-		// continuation lines will find it again.
+		// The message is still arriving. The data tag is how
+		// its continuation lines will find it again.
 		tag, _ := msg.Arg(DataTag)
 		msg.removeArg(DataTag)
 		msg.dataTag = tag
@@ -195,14 +204,17 @@ func (f *Frame) parseStart(in string) (*Message, bool) {
 	return msg, true
 }
 
-// splitPackage works out which registered package a message name belongs to.
+// splitPackage works out which registered package a message name
+// belongs to.
 //
-// The longest registered name that the message name starts with wins, because
-// package names are hierarchical: "org-fuzzball-gui-ctrl-value" belongs to
-// "org-fuzzball-gui" and not to "org-fuzzball".
+// The longest registered name that the message name starts with wins,
+// because package names are hierarchical:
+// "org-fuzzball-gui-ctrl-value" belongs to "org-fuzzball-gui" and not
+// to "org-fuzzball".
 func (f *Frame) splitPackage(name string) (pkg, sub string, ok bool) {
 	longest := 0
-	if !ascii.HasPrefix(name, InitPackage) || len(name) > len(InitPackage) {
+	if !ascii.HasPrefix(name, InitPackage) ||
+		len(name) > len(InitPackage) {
 		for _, p := range f.registry {
 			n := len(p.Name)
 			if !ascii.HasPrefix(name, p.Name) {
@@ -241,8 +253,8 @@ func (f *Frame) readKeyval(msg *Message, in string) (string, bool) {
 		return in, false
 	}
 
-	// A '*' after the key means the value is coming on continuation
-	// lines rather than here.
+	// A '*' after the key means the value is coming on
+	// continuation lines rather than here.
 	deferred := false
 	if strings.HasPrefix(rest, "*") {
 		deferred = true
@@ -272,8 +284,8 @@ func (f *Frame) readKeyval(msg *Message, in string) (string, bool) {
 	return rest, true
 }
 
-// parseContinuation reads a "* <tag> <key>: <value>" line, which carries one
-// line of a multi-line argument.
+// parseContinuation reads a "* <tag> <key>: <value>" line, which
+// carries one line of a multi-line argument.
 func (f *Frame) parseContinuation(in string) (*Message, bool) {
 	if !strings.HasPrefix(in, "*") {
 		return nil, false
@@ -297,9 +309,10 @@ func (f *Frame) parseContinuation(in string) (*Message, bool) {
 	if rest == "" || rest[0] != ' ' {
 		return nil, false
 	}
-	// Exactly one space is consumed: the rest of the line is the value,
-	// leading whitespace included, because this is how arbitrary text —
-	// program source, say — survives the round trip.
+	// Exactly one space is consumed: the rest of the line is the
+	// value, leading whitespace included, because this is how
+	// arbitrary text — program source, say — survives the
+	// round trip.
 	msg, known := f.partial[tag]
 	if !known {
 		return nil, false
@@ -330,15 +343,16 @@ func (f *Frame) parseEnd(in string) (*Message, bool) {
 	return msg, true
 }
 
-// dispatch hands a complete message to whatever handles its package. It runs
-// with the lock released, so a handler may send.
+// dispatch hands a complete message to whatever handles its package.
+// It runs with the lock released, so a handler may send.
 func (f *Frame) dispatch(msg *Message) {
 	if ascii.EqualFold(msg.Package, InitPackage) {
 		f.handleInit(msg)
 		return
 	}
 	for _, p := range f.registry {
-		if ascii.EqualFold(p.Name, msg.Package) && p.Handle != nil {
+		if ascii.EqualFold(p.Name, msg.Package) &&
+			p.Handle != nil {
 			p.Handle(f, msg, f.Supports(msg.Package))
 
 			return
@@ -346,8 +360,9 @@ func (f *Frame) dispatch(msg *Message) {
 	}
 }
 
-// handleInit answers the opening message: it settles the version, issues an
-// authentication key, and announces the packages this server offers.
+// handleInit answers the opening message: it settles the version,
+// issues an authentication key, and announces the packages this
+// server offers.
 func (f *Frame) handleInit(msg *Message) {
 	if msg.Name != "" {
 		return
@@ -386,9 +401,10 @@ func (f *Frame) handleInit(msg *Message) {
 	}
 	f.enabled = true
 
-	// Offered in reverse, because upstream builds its package list by
-	// prepending each registration and then walks it from the head. The
-	// order carries no meaning, but a transcript is compared against it.
+	// Offered in reverse, because upstream builds its package
+	// list by prepending each registration and then walks it from
+	// the head. The order carries no meaning, but a transcript is
+	// compared against it.
 	for i := len(f.registry) - 1; i >= 0; i-- {
 		p := f.registry[i]
 		if ascii.EqualFold(p.Name, InitPackage) {
@@ -407,8 +423,8 @@ func firstArg(msg *Message, name string) string {
 	return v
 }
 
-// NegotiateHandler records what the client says it can do. It is the handler
-// for the mcp-negotiate package itself.
+// NegotiateHandler records what the client says it can do. It is the
+// handler for the mcp-negotiate package itself.
 func NegotiateHandler(f *Frame, msg *Message, _ Version) {
 	if !ascii.EqualFold(msg.Name, "can") {
 		return // "end" needs no answer
@@ -430,8 +446,8 @@ func NegotiateHandler(f *Frame, msg *Message, _ Version) {
 		}
 	}
 
-	// Record the best version both sides can speak, which is what later
-	// messages in that package are sent at.
+	// Record the best version both sides can speak, which is what
+	// later messages in that package are sent at.
 	for _, p := range f.registry {
 		if !ascii.EqualFold(p.Name, pkg) {
 			continue
@@ -452,14 +468,16 @@ func (f *Frame) agree(pkg string, v Version) {
 
 // newAuthKey returns a key for this connection.
 //
-// Upstream builds one from two calls to its own generator; this uses the
-// system source, because the key is what stops text a world prints from being
-// obeyed as a message by a client, and a guessable one would defeat that.
+// Upstream builds one from two calls to its own generator; this uses
+// the system source, because the key is what stops text a world
+// prints from being obeyed as a message by a client, and a guessable
+// one would defeat that.
 func newAuthKey() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand does not fail on any supported platform, and a
-		// predictable key would be worse than no MCP at all.
+		// crypto/rand does not fail on any supported
+		// platform, and a predictable key would be worse than
+		// no MCP at all.
 		panic("mcp: no randomness available: " + err.Error())
 	}
 	return fmt.Sprintf("%08X", binary.BigEndian.Uint32(b[:4]))
@@ -467,10 +485,10 @@ func newAuthKey() string {
 
 // StartNegotiation offers MCP to a client that has just connected.
 //
-// The frame is briefly marked enabled so the opening message passes its own
-// "only the mcp package may be sent before negotiation" check, then put back:
-// a client that does not answer has not agreed to anything, and everything
-// stays plain text.
+// The frame is briefly marked enabled so the opening message passes
+// its own "only the mcp package may be sent before negotiation"
+// check, then put back: a client that does not answer has not agreed
+// to anything, and everything stays plain text.
 func (f *Frame) StartNegotiation() {
 	f.mu.Lock()
 	defer f.mu.Unlock()

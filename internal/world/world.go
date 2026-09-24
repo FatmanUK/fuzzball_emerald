@@ -11,34 +11,39 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 )
 
-// World is the object graph. It is owned by a single goroutine and has no
-// internal locking; reach it through an Engine.
+// World is the object graph. It is owned by a single goroutine and
+// has no internal locking; reach it through an Engine.
 type World struct {
 	objs map[ref.Ref]*Object
-	// top is one past the highest ref ever allocated, matching db_top.
+	// top is one past the highest ref ever allocated, matching
+	// db_top.
 	top ref.Ref
 
-	// players indexes player refs by case-folded name, as upstream's player
-	// hash table does.
+	// players indexes player refs by case-folded name, as
+	// upstream's player hash table does.
 	players map[string]ref.Ref
 
-	// dirty accumulates refs changed since the last flush; deleted holds
-	// refs that need removing from the store.
+	// dirty accumulates refs changed since the last flush;
+	// deleted holds refs that need removing from the store.
 	dirty   map[ref.Ref]struct{}
 	deleted map[ref.Ref]struct{}
 
-	// programs holds MUF source by program ref. Source is loaded at boot and
-	// compiled on demand, so an edit only needs to invalidate a cache.
+	// programs holds MUF source by program ref. Source is loaded
+	// at boot and compiled on demand, so an edit only needs to
+	// invalidate a cache.
 	programs map[ref.Ref]string
-	// progDirty records sources changed since the last flush. Source is
-	// tracked apart from the object because leaving the editor rewrites a
-	// program's text without touching any of its fields.
+	// progDirty records sources changed since the last flush.
+	// Source is tracked apart from the object because leaving the
+	// editor rewrites a program's text without touching any of
+	// its fields.
 	progDirty map[ref.Ref]struct{}
 
-	// macros is the MUF editor's macro table, keyed by folded name.
+	// macros is the MUF editor's macro table, keyed by folded
+	// name.
 	macros map[string]Macro
-	// macrosDirty records that the table changed. It is small and changes
-	// rarely, so the whole table is written rather than each entry.
+	// macrosDirty records that the table changed. It is small and
+	// changes rarely, so the whole table is written rather than
+	// each entry.
 	macrosDirty bool
 
 	Tune *tune.Set
@@ -65,8 +70,8 @@ func New() *World {
 	}
 }
 
-// SetClock replaces the world's clock. Tests use it to make timestamps
-// predictable.
+// SetClock replaces the world's clock. Tests use it to make
+// timestamps predictable.
 func (w *World) SetClock(f func() time.Time) { w.now = f }
 
 // Now returns the world's current time.
@@ -75,8 +80,9 @@ func (w *World) Now() time.Time { return w.now() }
 // Top returns one past the highest allocated ref.
 func (w *World) Top() ref.Ref { return w.top }
 
-// SetTop raises the ref ceiling, which the store does on load so a world whose
-// highest objects were recycled still hands out fresh refs.
+// SetTop raises the ref ceiling, which the store does on load so a
+// world whose highest objects were recycled still hands out fresh
+// refs.
 func (w *World) SetTop(top ref.Ref) {
 	if top > w.top {
 		w.top = top
@@ -102,8 +108,8 @@ func (w *World) Touch(r ref.Ref) {
 	}
 }
 
-// Modified marks an object changed and updates its modification timestamp,
-// which is what upstream's ts_modifyobject does.
+// Modified marks an object changed and updates its modification
+// timestamp, which is what upstream's ts_modifyobject does.
 func (w *World) Modified(r ref.Ref) {
 	if o := w.objs[r]; o != nil {
 		o.Modified = w.now()
@@ -120,8 +126,8 @@ func (w *World) Used(r ref.Ref) {
 	}
 }
 
-// Create allocates a new object and marks it dirty. It does not place the
-// object anywhere; use MoveTo for that.
+// Create allocates a new object and marks it dirty. It does not place
+// the object anywhere; use MoveTo for that.
 func (w *World) Create(name string, t ref.ObjType, owner ref.Ref) *Object {
 	r := w.top
 	w.top++
@@ -134,9 +140,9 @@ func (w *World) Create(name string, t ref.ObjType, owner ref.Ref) *Object {
 	return o
 }
 
-// Add inserts an already-built object, as the importer and the store loader
-// do. It does not mark the object dirty, because both callers are reproducing
-// state that is already persisted.
+// Add inserts an already-built object, as the importer and the store
+// loader do. It does not mark the object dirty, because both callers
+// are reproducing state that is already persisted.
 func (w *World) Add(o *Object) error {
 	if o.Ref < 0 {
 		return fmt.Errorf("cannot add object at %v", o.Ref)
@@ -157,9 +163,10 @@ func (w *World) Add(o *Object) error {
 	return nil
 }
 
-// Recycle turns an object into garbage, unlinking it from its container and
-// clearing its properties. The ref itself is kept so existing references to it
-// resolve to garbage rather than to some unrelated later object.
+// Recycle turns an object into garbage, unlinking it from its
+// container and clearing its properties. The ref itself is kept so
+// existing references to it resolve to garbage rather than to some
+// unrelated later object.
 func (w *World) Recycle(r ref.Ref) error {
 	o := w.objs[r]
 	if o == nil {
@@ -202,7 +209,8 @@ func (w *World) Rename(r ref.Ref, name string) error {
 		return fmt.Errorf("no object at %v", r)
 	}
 	if o.Type() == ref.TypePlayer {
-		if existing, taken := w.players[ascii.Fold(name)]; taken && existing != r {
+		if existing, taken := w.players[ascii.Fold(name)]; taken &&
+			existing != r {
 			return fmt.Errorf("the name %q is already taken", name)
 		}
 		delete(w.players, ascii.Fold(o.Name))
@@ -214,25 +222,26 @@ func (w *World) Rename(r ref.Ref, name string) error {
 	return nil
 }
 
-// nameHistoryDir is upstream's PNAME_HISTORY_PROPDIR: what a player has been
-// called, keyed by when they were called it.
+// nameHistoryDir is upstream's PNAME_HISTORY_PROPDIR: what a player
+// has been called, keyed by when they were called it.
 const nameHistoryDir = "@__sys__/name"
 
-// recordNameHistory is upstream's change_player_name bookkeeping: note the
-// new name against the current time, and drop entries older than the
-// pname_history_threshold parameter. A threshold of zero keeps them forever.
+// recordNameHistory is upstream's change_player_name bookkeeping:
+// note the new name against the current time, and drop entries older
+// than the pname_history_threshold parameter. A threshold of zero
+// keeps them forever.
 //
-// The history is recorded whatever pname_history_reporting says — that
-// parameter only decides whether the PNAME_HISTORY primitive may read it
-// back, which is the primitive's own check, not this one's.
+// The history is recorded whatever pname_history_reporting says —
+// that parameter only decides whether the PNAME_HISTORY primitive may
+// read it back, which is the primitive's own check, not this one's.
 func (w *World) recordNameHistory(o *Object, name string) {
 	now := w.now().Unix()
 	if threshold := w.Tune.Duration("pname_history_threshold"); threshold > 0 {
 		cutoff := now - int64(threshold.Seconds())
 		for _, key := range o.Props.Children(nameHistoryDir) {
 			t, err := strconv.ParseInt(key, 10, 64)
-			// created_as lives in this directory too and is not a
-			// timestamp; it is never expired.
+			// created_as lives in this directory too and
+			// is not a timestamp; it is never expired.
 			if err != nil || t > cutoff {
 				continue
 			}
@@ -261,13 +270,16 @@ func (w *World) GetProp(r ref.Ref, path string) (props.Value, bool) {
 	return o.Props.Get(path)
 }
 
-// SetSource stores a program's MUF source without queueing it for writing,
-// which is what loading a world wants.
-func (w *World) SetSource(r ref.Ref, src string) { w.programs[r] = src }
+// SetSource stores a program's MUF source without queueing it for
+// writing, which is what loading a world wants.
+func (w *World) SetSource(r ref.Ref, src string) {
+	w.programs[r] = src
+}
 
-// SaveSource replaces a program's source and queues it for writing. This is
-// the editor's path: leaving the editor rewrites the text, and the object
-// itself is touched too so its modification time moves.
+// SaveSource replaces a program's source and queues it for writing.
+// This is the editor's path: leaving the editor rewrites the text,
+// and the object itself is touched too so its modification time
+// moves.
 func (w *World) SaveSource(r ref.Ref, src string) {
 	w.programs[r] = src
 	w.progDirty[r] = struct{}{}
@@ -289,8 +301,8 @@ func (w *World) SetTune(name, value string) error {
 	return nil
 }
 
-// ResetTune returns a parameter to its default and marks the table for
-// persistence — SETSYSPARM's own "%name" reset convention.
+// ResetTune returns a parameter to its default and marks the table
+// for persistence — SETSYSPARM's own "%name" reset convention.
 func (w *World) ResetTune(name string) error {
 	if err := w.Tune.Reset(name); err != nil {
 		return err
@@ -299,8 +311,9 @@ func (w *World) ResetTune(name string) error {
 	return nil
 }
 
-// chainHead returns a pointer to the list head an object of this type belongs
-// on: exits thread onto the Exits list, everything else onto Contents.
+// chainHead returns a pointer to the list head an object of this type
+// belongs on: exits thread onto the Exits list, everything else onto
+// Contents.
 func chainHead(container *Object, member *Object) *ref.Ref {
 	if member.Type() == ref.TypeExit {
 		return &container.Exits
@@ -308,8 +321,9 @@ func chainHead(container *Object, member *Object) *ref.Ref {
 	return &container.Contents
 }
 
-// MoveTo relocates an object into a container, unlinking it from wherever it
-// was. Passing ref.Nothing as the destination just unlinks it.
+// MoveTo relocates an object into a container, unlinking it from
+// wherever it was. Passing ref.Nothing as the destination just
+// unlinks it.
 func (w *World) MoveTo(what, dest ref.Ref) error {
 	o := w.objs[what]
 	if o == nil {
@@ -336,8 +350,8 @@ func (w *World) MoveTo(what, dest ref.Ref) error {
 	if dest != ref.Nothing {
 		container := w.objs[dest]
 		head := chainHead(container, o)
-		// Fuzzball pushes onto the head of the list, so the most
-		// recently added object is listed first.
+		// Fuzzball pushes onto the head of the list, so the
+		// most recently added object is listed first.
 		o.Next = *head
 		*head = what
 		w.dirty[dest] = struct{}{}
@@ -346,10 +360,11 @@ func (w *World) MoveTo(what, dest ref.Ref) error {
 	return nil
 }
 
-// contains reports whether outer holds inner, at any depth. It is bounded by
-// the object count so a corrupt chain cannot loop forever.
+// contains reports whether outer holds inner, at any depth. It is
+// bounded by the object count so a corrupt chain cannot loop forever.
 func (w *World) contains(outer, inner ref.Ref) bool {
-	for i, r := 0, inner; r != ref.Nothing && i <= len(w.objs); i++ {
+	for i, r := 0, inner; r != ref.Nothing &&
+		i <= len(w.objs); i++ {
 		if r == outer {
 			return true
 		}
@@ -362,7 +377,8 @@ func (w *World) contains(outer, inner ref.Ref) bool {
 	return false
 }
 
-// removeFromChain unlinks member from its container's contents or exits list.
+// removeFromChain unlinks member from its container's contents or
+// exits list.
 func (w *World) removeFromChain(container, member ref.Ref) {
 	c := w.objs[container]
 	m := w.objs[member]
@@ -391,7 +407,9 @@ func (w *World) removeFromChain(container, member ref.Ref) {
 }
 
 // Contents lists what a container holds, in the order MUF walks it.
-func (w *World) Contents(r ref.Ref) []ref.Ref { return w.chain(r, false) }
+func (w *World) Contents(r ref.Ref) []ref.Ref {
+	return w.chain(r, false)
+}
 
 // Exits lists a container's exits, in the order MUF walks them.
 func (w *World) Exits(r ref.Ref) []ref.Ref { return w.chain(r, true) }
@@ -406,8 +424,10 @@ func (w *World) chain(r ref.Ref, exits bool) []ref.Ref {
 		head = o.Exits
 	}
 	var out []ref.Ref
-	// Bounded so a cycle in a damaged chain cannot hang the world goroutine.
-	for cur, i := head, 0; cur != ref.Nothing && i <= len(w.objs); i++ {
+	// Bounded so a cycle in a damaged chain cannot hang the world
+	// goroutine.
+	for cur, i := head, 0; cur != ref.Nothing &&
+		i <= len(w.objs); i++ {
 		out = append(out, cur)
 		next := w.objs[cur]
 		if next == nil {

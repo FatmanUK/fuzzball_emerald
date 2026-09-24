@@ -4,7 +4,10 @@ import "testing"
 
 func TestRefString(t *testing.T) {
 	cases := map[Ref]string{
-		Nothing: "#-1", Ambiguous: "#-2", Home: "#-3", Nil: "#-4",
+		Nothing:           "#-1",
+		Ambiguous:         "#-2",
+		Home:              "#-3",
+		Nil:               "#-4",
 		GlobalEnvironment: "#0", God: "#1", Ref(2546): "#2546",
 	}
 	for in, want := range cases {
@@ -38,11 +41,12 @@ func TestMLevel(t *testing.T) {
 		{SMucker, 1, 1},
 		{Mucker, 2, 2},
 		{Mucker | SMucker, 3, 3},
-		// A wizard with any mucker bit is level 4, but the raw level is
-		// still just the bits.
+		// A wizard with any mucker bit is level 4, but the
+		// raw level is still just the bits.
 		{Wizard | SMucker, 1, MLevWizard},
 		{Wizard | Mucker | SMucker, 3, MLevWizard},
-		// A wizard with no mucker bits gets no mucker level at all.
+		// A wizard with no mucker bits gets no mucker level
+		// at all.
 		{Wizard, 0, 0},
 	}
 	for _, c := range cases {
@@ -124,10 +128,11 @@ func TestDumpMaskCoversInternalFlags(t *testing.T) {
 	}
 }
 
-// TestSpecialRefsMatchFuzzball pins the reserved dbrefs to the values in
-// Fuzzball's include/db.h. They appear in every legacy dump, so changing one
-// would silently corrupt an imported world: #0 is the room every other room
-// ultimately parents to, and the negatives are sentinels rather than objects.
+// TestSpecialRefsMatchFuzzball pins the reserved dbrefs to the values
+// in Fuzzball's include/db.h. They appear in every legacy dump, so
+// changing one would silently corrupt an imported world: #0 is the
+// room every other room ultimately parents to, and the negatives are
+// sentinels rather than objects.
 func TestSpecialRefsMatchFuzzball(t *testing.T) {
 	cases := []struct {
 		name string
@@ -147,8 +152,8 @@ func TestSpecialRefsMatchFuzzball(t *testing.T) {
 		}
 	}
 
-	// #0 is a real object, not a sentinel. Ok() must agree, or the world
-	// root would be treated as absent.
+	// #0 is a real object, not a sentinel. Ok() must agree, or
+	// the world root would be treated as absent.
 	if !GlobalEnvironment.Ok() {
 		t.Error("#0 is the global environment, a real object")
 	}
@@ -161,11 +166,12 @@ func TestSpecialRefsMatchFuzzball(t *testing.T) {
 		}
 	}
 
-	// Go's zero value for a Ref is #0, the global environment, not Nothing.
-	// Any struct holding refs must therefore initialise them explicitly;
-	// forgetting to attaches objects to the world root. This is exactly
-	// what went wrong in the importer for programs, whose exit list a dump
-	// does not store.
+	// Go's zero value for a Ref is #0, the global environment,
+	// not Nothing. Any struct holding refs must therefore
+	// initialise them explicitly; forgetting to attaches objects
+	// to the world root. This is exactly what went wrong in the
+	// importer for programs, whose exit list a dump does not
+	// store.
 	var zero Ref
 	if zero != GlobalEnvironment {
 		t.Fatal("the zero value is expected to be #0; this test is the warning that it is")

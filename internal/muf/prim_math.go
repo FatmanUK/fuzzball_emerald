@@ -92,7 +92,8 @@ func init() {
 		case TypeInteger:
 			return nil, f.Push(v)
 		case TypeFloat:
-			if math.IsNaN(v.Float) || math.IsInf(v.Float, 0) {
+			if math.IsNaN(v.Float) ||
+				math.IsInf(v.Float, 0) {
 				return nil, errf("Invalid argument type.")
 			}
 			return nil, f.Push(Int(int64(v.Float)))
@@ -113,8 +114,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// MUF's atoi takes the leading integer and yields zero when there
-		// is none, as C's does.
+		// MUF's atoi takes the leading integer and yields
+		// zero when there is none, as C's does.
 		return nil, f.Push(Int(leadingInt(s)))
 	})
 	register("INTOSTR", func(f *Frame) (*Result, error) {
@@ -183,8 +184,8 @@ func init() {
 	}))
 }
 
-// arith builds an arithmetic primitive, promoting to float when either side is
-// one, as MUF does.
+// arith builds an arithmetic primitive, promoting to float when
+// either side is one, as MUF does.
 func arith(op byte) primFunc {
 	return func(f *Frame) (*Result, error) {
 		v, err := f.PopN(2)
@@ -207,9 +208,10 @@ func arith(op byte) primFunc {
 			case '*':
 				return nil, f.Push(Float(x * y))
 			case '/':
-				// Float division by zero yields an infinity rather
-				// than failing, which is what the float error mask
-				// is for.
+				// Float division by zero yields an
+				// infinity rather than failing, which
+				// is what the float error mask is
+				// for.
 				return nil, f.Push(Float(x / y))
 			case '%':
 				return nil, f.Push(Float(math.Mod(x, y)))
@@ -227,16 +229,18 @@ func arith(op byte) primFunc {
 		case '*':
 			return nil, f.Push(Int(a.Num * b.Num))
 		case '/', '%':
-			// Dividing by zero is not a failure in MUF: the result
-			// is zero and a flag is raised, which a program reads
-			// with is_set?. Aborting here would end programs that
+			// Dividing by zero is not a failure in MUF:
+			// the result is zero and a flag is raised,
+			// which a program reads with is_set?.
+			// Aborting here would end programs that
 			// upstream runs to completion.
 			if b.Num == 0 {
 				f.ErrorFlags.DivZero = true
 				return nil, f.Push(Int(0))
 			}
-			// The one case where the quotient does not fit, which
-			// would panic in Go and raises a bounds flag upstream.
+			// The one case where the quotient does not
+			// fit, which would panic in Go and raises a
+			// bounds flag upstream.
 			if a.Num == math.MinInt64 && b.Num == -1 {
 				f.ErrorFlags.IBounds = true
 				return nil, f.Push(Int(0))
@@ -250,8 +254,8 @@ func arith(op byte) primFunc {
 	}
 }
 
-// compare builds a comparison primitive. Numbers compare numerically and
-// strings compare case-insensitively, as MUF's operators do.
+// compare builds a comparison primitive. Numbers compare numerically
+// and strings compare case-insensitively, as MUF's operators do.
 func compare(ok func(int) bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		v, err := f.PopN(2)
@@ -285,15 +289,16 @@ func bitwise(op func(a, b int64) int64) primFunc {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeInteger || v[1].Type != TypeInteger {
+		if v[0].Type != TypeInteger ||
+			v[1].Type != TypeInteger {
 			return nil, errf("Invalid argument type.")
 		}
 		return nil, f.Push(Int(op(v[0].Num, v[1].Num)))
 	}
 }
 
-// leadingInt reads the integer a string starts with, yielding zero when it
-// does not start with one.
+// leadingInt reads the integer a string starts with, yielding zero
+// when it does not start with one.
 func leadingInt(s string) int64 {
 	s = strings.TrimLeft(s, " \t")
 	end := 0

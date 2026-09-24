@@ -10,34 +10,34 @@ import (
 
 // The MUF instruction tracer, upstream's debug_inst.
 //
-// A program flagged DARK is being debugged: the interpreter prints a line for
-// every instruction it is about to run, showing where it is and what is on
-// the stack. That flag is what DEBUG_ON and DEBUG_OFF set, and DEBUG_LINE
-// prints a single such line for a program that is *not* flagged, so a program
-// can trace only the part it cares about.
+// A program flagged DARK is being debugged: the interpreter prints a
+// line for every instruction it is about to run, showing where it is
+// and what is on the stack. That flag is what DEBUG_ON and DEBUG_OFF
+// set, and DEBUG_LINE prints a single such line for a program that is
+// *not* flagged, so a program can trace only the part it cares about.
 //
-// Upstream's debugger is interactive as well — a breakpoint drops the player
-// into a prompt where they can step and inspect. Emerald has no such prompt;
-// see DEBUGGER_BREAK for what it does instead.
+// Upstream's debugger is interactive as well — a breakpoint drops
+// the player into a prompt where they can step and inspect. Emerald
+// has no such prompt; see DEBUGGER_BREAK for what it does instead.
 
-// maxTraceStack is how many stack items a trace line shows, upstream's own
-// "count > sp - 8".
+// maxTraceStack is how many stack items a trace line shows,
+// upstream's own "count > sp - 8".
 const maxTraceStack = 8
 
 // traceStrMax is where a string in a trace line is cut, upstream's strmax of
 // 30. A cut string is marked with a trailing underscore.
 const traceStrMax = 30
 
-// debugLine renders one trace line: where the program is, what is on the
-// stack, and the instruction about to run.
+// debugLine renders one trace line: where the program is, what is on
+// the stack, and the instruction about to run.
 //
 //	Debug> Pid 7: #58 6 ("", 3) DEBUG_OFF
 //
 // The stack reads bottom to top, so the rightmost item is the one the
-// instruction is about to take. Upstream builds this line backwards, which is
-// what puts the stack before the instruction despite the code writing the
-// instruction first; only the last eight items are shown, with a leading
-// "..." when there are more.
+// instruction is about to take. Upstream builds this line backwards,
+// which is what puts the stack before the instruction despite the
+// code writing the instruction first; only the last eight items are
+// shown, with a leading "..." when there are more.
 func (f *Frame) debugLine(in Inst) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Debug> Pid %d: %s %d (", f.PID, f.Prog.Ref.String(), in.Line)
@@ -61,10 +61,11 @@ func (f *Frame) debugLine(in Inst) string {
 
 // instText renders the instruction itself, upstream's insttotext.
 //
-// A literal is shown the way the trace shows a stack value, so the same
-// string appears the same way whether it is about to be pushed or already
-// has been. A variable shows its slot, with the scoped kind naming itself
-// too, since a scoped slot means nothing on its own.
+// A literal is shown the way the trace shows a stack value, so the
+// same string appears the same way whether it is about to be pushed
+// or already has been. A variable shows its slot, with the scoped
+// kind naming itself too, since a scoped slot means nothing on its
+// own.
 func instText(f *Frame, in Inst) string {
 	switch in.Type {
 	case TypeString:
@@ -102,9 +103,9 @@ func instText(f *Frame, in Inst) string {
 	return in.String()
 }
 
-// scopedVarName names a scoped variable slot, which the trace shows beside
-// its number. The name comes from whichever procedure is running, so a slot
-// means what it means where it is used.
+// scopedVarName names a scoped variable slot, which the trace shows
+// beside its number. The name comes from whichever procedure is
+// running, so a slot means what it means where it is used.
 func scopedVarName(f *Frame, slot int) string {
 	if f == nil || f.Prog == nil {
 		return "?"
@@ -117,7 +118,8 @@ func scopedVarName(f *Frame, slot int) string {
 
 // procNameAt names the procedure an address points at.
 func procNameAt(f *Frame, pc int) string {
-	if f == nil || f.Prog == nil || pc < 0 || pc >= len(f.Prog.Code) {
+	if f == nil || f.Prog == nil || pc < 0 ||
+		pc >= len(f.Prog.Code) {
 		return "?"
 	}
 	if p := f.Prog.Code[pc].Proc; p != nil {
@@ -133,9 +135,10 @@ func plural(n int) string {
 	return "s"
 }
 
-// valueText renders one value the way a trace line shows it, upstream's
-// insttotext: a string quoted and cut at thirty characters, a float always
-// carrying a decimal point, a variable by its slot number.
+// valueText renders one value the way a trace line shows it,
+// upstream's insttotext: a string quoted and cut at thirty
+// characters, a float always carrying a decimal point, a variable by
+// its slot number.
 func valueText(v Value) string {
 	switch v.Type {
 	case TypeString:
@@ -167,11 +170,12 @@ func valueText(v Value) string {
 	return v.String()
 }
 
-// tracing reports whether this frame should print a line per instruction.
+// tracing reports whether this frame should print a line per
+// instruction.
 //
-// The answer is the program's DARK flag plus a control check, both upstream's:
-// tracing prints to whoever is running the program, so it is only offered to
-// someone who could have read the source anyway.
+// The answer is the program's DARK flag plus a control check, both
+// upstream's: tracing prints to whoever is running the program, so it
+// is only offered to someone who could have read the source anyway.
 func (f *Frame) tracing() bool {
 	if f.ForceTrace {
 		return true

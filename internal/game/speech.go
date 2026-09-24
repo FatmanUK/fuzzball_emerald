@@ -28,8 +28,9 @@ func (s *Server) cmdPose(c *ctx) {
 		return
 	}
 	o := c.w.Get(c.who)
-	// A pose beginning with an apostrophe is possessive: ":'s hat" reads as
-	// "Igor's hat", with no space before the apostrophe.
+	// A pose beginning with an apostrophe is possessive: ":'s
+	// hat" reads as "Igor's hat", with no space before the
+	// apostrophe.
 	sep := " "
 	if strings.HasPrefix(c.arg, "'") {
 		sep = ""

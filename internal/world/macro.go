@@ -7,17 +7,17 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// Macro is one entry in the MUF editor's macro table, upstream's muf/macros
-// file. A program reaches a macro by prefixing its name with '.', and the
-// expansion happens in the compiler's token stream.
+// Macro is one entry in the MUF editor's macro table, upstream's
+// muf/macros file. A program reaches a macro by prefixing its name
+// with '.', and the expansion happens in the compiler's token stream.
 type Macro struct {
 	Name       string
 	Definition string
 	Owner      ref.Ref
 }
 
-// SetMacros replaces the whole macro table without marking it for writing,
-// which is what loading from the store wants.
+// SetMacros replaces the whole macro table without marking it for
+// writing, which is what loading from the store wants.
 func (w *World) SetMacros(list []Macro) {
 	w.macros = make(map[string]Macro, len(list))
 	for _, m := range list {
@@ -25,8 +25,8 @@ func (w *World) SetMacros(list []Macro) {
 	}
 }
 
-// Macros returns the table in name order, as upstream's alphabetical dump has
-// it.
+// Macros returns the table in name order, as upstream's alphabetical
+// dump has it.
 func (w *World) Macros() []Macro {
 	out := make([]Macro, 0, len(w.macros))
 	for _, m := range w.macros {
@@ -38,7 +38,8 @@ func (w *World) Macros() []Macro {
 	return out
 }
 
-// MacroTable returns the folded name to definition mapping the compiler wants.
+// MacroTable returns the folded name to definition mapping the
+// compiler wants.
 func (w *World) MacroTable() map[string]string {
 	out := make(map[string]string, len(w.macros))
 	for k, m := range w.macros {
@@ -47,8 +48,9 @@ func (w *World) MacroTable() map[string]string {
 	return out
 }
 
-// DefineMacro adds an entry, reporting false if the name is taken. Upstream's
-// insert_macro refuses to overwrite: a macro is changed by deleting it first.
+// DefineMacro adds an entry, reporting false if the name is taken.
+// Upstream's insert_macro refuses to overwrite: a macro is changed by
+// deleting it first.
 func (w *World) DefineMacro(name, definition string, owner ref.Ref) bool {
 	k := ascii.Fold(name)
 	if _, taken := w.macros[k]; taken {
@@ -70,8 +72,9 @@ func (w *World) KillMacro(name string) bool {
 	return true
 }
 
-// ChownMacros reassigns every macro owned by one object to another, which
-// deleting a player has to do: a macro outlives the player who defined it.
+// ChownMacros reassigns every macro owned by one object to another,
+// which deleting a player has to do: a macro outlives the player who
+// defined it.
 func (w *World) ChownMacros(from, to ref.Ref) {
 	for k, m := range w.macros {
 		if m.Owner == from {

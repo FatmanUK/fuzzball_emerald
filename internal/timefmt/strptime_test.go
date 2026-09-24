@@ -8,8 +8,9 @@ func TestSeconds(t *testing.T) {
 		want          int64
 		ok            bool
 	}{
-		// CONVTIME's own fixed format, with the year both ways round: the
-		// four-digit case is the one upstream rewrites the format for.
+		// CONVTIME's own fixed format, with the year both
+		// ways round: the four-digit case is the one upstream
+		// rewrites the format for.
 		{"12:00:00 01/01/2000", "%T%t%D", 946728000, true},
 		{"12:00:00 01/01/00", "%T%t%D", 946728000, true},
 		{"00:00:00 06/15/1998", "%T%t%D", 897868800, true},

@@ -11,7 +11,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/timefmt"
 )
 
-// String formatting, pattern matching, time and the remaining odds and ends.
+// String formatting, pattern matching, time and the remaining odds
+// and ends.
 
 func init() {
 	register("TELL", func(f *Frame) (*Result, error) {
@@ -23,8 +24,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// TELL is "me @ swap notify": it speaks to whoever ran the
-		// program.
+		// TELL is "me @ swap notify": it speaks to whoever
+		// ran the program.
 		me := f.Vars[VarMe]
 		for _, line := range strings.Split(msg, "\r") {
 			h.Notify(me.Ref, line)
@@ -96,7 +97,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		return nil, f.Push(Int(int64(cStrcmp(
@@ -158,8 +160,8 @@ func init() {
 		return nil, f.Push(Str(h.Version()))
 	})
 	register("CMD", func(f *Frame) (*Result, error) {
-		// The command as typed, which the compiler stores in the fourth
-		// reserved variable.
+		// The command as typed, which the compiler stores in
+		// the fourth reserved variable.
 		return nil, f.Push(f.Vars[VarCommand])
 	})
 
@@ -216,8 +218,8 @@ func init() {
 			return nil, err
 		}
 		t := time.Unix(secs, 0).UTC()
-		// Seconds, minutes, hours, day, month, year, day of week, day of
-		// year: the order TIMESPLIT pushes them.
+		// Seconds, minutes, hours, day, month, year, day of
+		// week, day of year: the order TIMESPLIT pushes them.
 		vals := []int{
 			t.Second(), t.Minute(), t.Hour(), t.Day(), int(t.Month()),
 			t.Year(), int(t.Weekday()) + 1, t.YearDay(),
@@ -242,16 +244,19 @@ func init() {
 	})
 
 	register("RANDOM", func(f *Frame) (*Result, error) {
-		// A full-width random integer, as upstream's RANDOM gives.
+		// A full-width random integer, as upstream's RANDOM
+		// gives.
 		return nil, f.Push(Int(int64(rand.Uint32())))
 	})
 	register("SRAND", func(f *Frame) (*Result, error) {
-		// Unlike RANDOM, this draws from the frame's own seeded state, so a
-		// program that records a seed with GETSEED replays the same run.
+		// Unlike RANDOM, this draws from the frame's own
+		// seeded state, so a program that records a seed with
+		// GETSEED replays the same run.
 		if f.rndbuf == nil {
 			f.rndbuf = newSeed()
 		}
-		// Upstream's result is a plain int, so the top bit is a sign bit.
+		// Upstream's result is a plain int, so the top bit is
+		// a sign bit.
 		return nil, f.Push(Int(int64(int32(rndFrom(f.rndbuf)))))
 	})
 
@@ -268,7 +273,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// ABORT raises an error the program's own TRY can catch.
+		// ABORT raises an error the program's own TRY can
+		// catch.
 		return nil, errf("%s", msg)
 	})
 
@@ -281,8 +287,9 @@ func init() {
 		case TypeInteger:
 			return nil, f.Push(Str(strconv.FormatInt(v.Num, 10)))
 		case TypeObject:
-			// A dbref renders as a bare number, with no '#': upstream
-			// prints the union's integer field either way.
+			// A dbref renders as a bare number, with no
+			// '#': upstream prints the union's integer
+			// field either way.
 			return nil, f.Push(Str(strconv.FormatInt(int64(v.Ref), 10)))
 		case TypeFloat:
 			out := strconv.FormatFloat(v.Float, 'g', 15, 64)

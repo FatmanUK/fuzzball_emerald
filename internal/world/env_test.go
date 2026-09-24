@@ -7,8 +7,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// TestParentSkipsThings checks that the environment walk lands on the first
-// ancestor that is not a thing, which is what getparent returns.
+// TestParentSkipsThings checks that the environment walk lands on the
+// first ancestor that is not a thing, which is what getparent
+// returns.
 func TestParentSkipsThings(t *testing.T) {
 	w := New()
 	room := w.Create("Room", ref.TypeRoom, ref.God)
@@ -26,8 +27,8 @@ func TestParentSkipsThings(t *testing.T) {
 	}
 }
 
-// TestParentOfAVehicleIsItsHome checks the VEHICLE rule, including the extra
-// step a vehicle takes when its home is a player.
+// TestParentOfAVehicleIsItsHome checks the VEHICLE rule, including
+// the extra step a vehicle takes when its home is a player.
 func TestParentOfAVehicleIsItsHome(t *testing.T) {
 	w := New()
 	garage := w.Create("Garage", ref.TypeRoom, ref.God)
@@ -41,15 +42,16 @@ func TestParentOfAVehicleIsItsHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Not the garage it sits in, and not the player it belongs to: a
-	// vehicle homed to a player inherits from that player's home.
+	// Not the garage it sits in, and not the player it belongs
+	// to: a vehicle homed to a player inherits from that player's
+	// home.
 	if got := w.Parent(car.Ref); got != house.Ref {
 		t.Errorf("Parent(car) = %v, want the house %v", got, house.Ref)
 	}
 }
 
-// TestParentBreaksALoop checks that a cycle of vehicle homes resolves to the
-// global environment rather than spinning.
+// TestParentBreaksALoop checks that a cycle of vehicle homes resolves
+// to the global environment rather than spinning.
 func TestParentBreaksALoop(t *testing.T) {
 	w := New()
 	a := w.Create("a", ref.TypeThing, ref.God)
@@ -65,8 +67,8 @@ func TestParentBreaksALoop(t *testing.T) {
 	}
 }
 
-// TestEnvPropWalksOutwards checks that a property is found on an ancestor and
-// that a nearer one wins.
+// TestEnvPropWalksOutwards checks that a property is found on an
+// ancestor and that a nearer one wins.
 func TestEnvPropWalksOutwards(t *testing.T) {
 	w := New()
 	outer := w.Create("Outer", ref.TypeRoom, ref.God)
@@ -87,7 +89,8 @@ func TestEnvPropWalksOutwards(t *testing.T) {
 
 	// A nearer registration shadows the outer one.
 	w.SetProp(inner.Ref, "_reg/lib", props.Value{Type: props.Ref, Ref: ref.Ref(7)})
-	if v, on, _ := w.EnvProp(who.Ref, "_reg/lib"); on != inner.Ref || v.Ref != ref.Ref(7) {
+	if v, on, _ := w.EnvProp(who.Ref, "_reg/lib"); on != inner.Ref ||
+		v.Ref != ref.Ref(7) {
 		t.Errorf("EnvProp found %v on %v, want #7 on %v", v.Ref, on, inner.Ref)
 	}
 }

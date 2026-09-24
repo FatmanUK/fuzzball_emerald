@@ -11,11 +11,12 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// secondSessionFor connects a second descriptor bound to an already-existing
-// player, for a test that needs one player to be reachable on two
-// descriptors at once — e.g. one busy in a READ while the other sends
-// commands, which a single descriptor cannot do since a line typed mid-READ
-// goes to the reading program rather than the command parser.
+// secondSessionFor connects a second descriptor bound to an
+// already-existing player, for a test that needs one player to be
+// reachable on two descriptors at once — e.g. one busy in a READ
+// while the other sends commands, which a single descriptor cannot do
+// since a line typed mid-READ goes to the reading program rather than
+// the command parser.
 func secondSessionFor(t *testing.T, h *harness, who ref.Ref) *session.Descriptor {
 	t.Helper()
 	d, err := h.s.Connect(session.TransportLine, "test")
@@ -32,10 +33,11 @@ func secondSessionFor(t *testing.T, h *harness, who ref.Ref) *session.Descriptor
 	return d
 }
 
-// makeProgrammer creates a player with mucker level 3, so a program it owns
-// compiles with a real effective mlevel rather than being capped at 0 the
-// way the harness's own "Wizard" player (Wizard|Builder, no mucker bits) —
-// see CLAUDE.md's "a wizard with no mucker bits has level 0" — would cap it.
+// makeProgrammer creates a player with mucker level 3, so a program
+// it owns compiles with a real effective mlevel rather than being
+// capped at 0 the way the harness's own "Wizard" player
+// (Wizard|Builder, no mucker bits) — see CLAUDE.md's "a wizard with
+// no mucker bits has level 0" — would cap it.
 func makeProgrammer(w *world.World, name string) ref.Ref {
 	p := w.Create(name, ref.TypePlayer, ref.Nothing)
 	p.Owner = p.Ref
@@ -43,12 +45,13 @@ func makeProgrammer(w *world.World, name string) ref.Ref {
 	return p.Ref
 }
 
-// makeWizardProgram creates a player and a program it owns, both flagged
-// Wizard with mucker bits set. flags.MLevel() treats Wizard-plus-any-mucker-
-// bit as level 4 outright (see ref.Flags.MLevel), and compileSource takes
-// the lower of a program's own level and its owner's — so both need it for
-// the program to actually compile at mlevel 4, which FORCE and FORCEDBY's
-// generated floor require. Returns the player and the program.
+// makeWizardProgram creates a player and a program it owns, both
+// flagged Wizard with mucker bits set. flags.MLevel() treats
+// Wizard-plus-any-mucker- bit as level 4 outright (see
+// ref.Flags.MLevel), and compileSource takes the lower of a program's
+// own level and its owner's — so both need it for the program to
+// actually compile at mlevel 4, which FORCE and FORCEDBY's generated
+// floor require. Returns the player and the program.
 func makeWizardProgram(w *world.World, name, source string) (owner, prog ref.Ref) {
 	p := w.Create(name+"Owner", ref.TypePlayer, ref.Nothing)
 	p.Owner = p.Ref
@@ -63,10 +66,10 @@ func makeWizardProgram(w *world.World, name, source string) (owner, prog ref.Ref
 	return p.Ref, pr.Ref
 }
 
-// TestCanCallOwnerAlwaysReaches checks that CanCall's permission gate — the
-// owner/wizard/Linkable check, separate from the public's own mlev floor —
-// lets the target's own owner through even without being a wizard or the
-// program being Linkable.
+// TestCanCallOwnerAlwaysReaches checks that CanCall's permission gate
+// — the owner/wizard/Linkable check, separate from the public's own
+// mlev floor — lets the target's own owner through even without
+// being a wizard or the program being Linkable.
 func TestCanCallOwnerAlwaysReaches(t *testing.T) {
 	h := newHarness(t)
 
@@ -85,8 +88,9 @@ func TestCanCallOwnerAlwaysReaches(t *testing.T) {
 	}
 }
 
-// TestCanCallMlevelFourAlwaysReaches checks the other unconditional branch:
-// a level-4 caller passes even for someone else's non-linkable program.
+// TestCanCallMlevelFourAlwaysReaches checks the other unconditional
+// branch: a level-4 caller passes even for someone else's
+// non-linkable program.
 func TestCanCallMlevelFourAlwaysReaches(t *testing.T) {
 	h := newHarness(t)
 
@@ -108,9 +112,10 @@ func TestCanCallMlevelFourAlwaysReaches(t *testing.T) {
 	}
 }
 
-// TestCanCallDeniesNonLinkableStranger checks the permission gate's failing
-// case: a low-level caller who neither owns the program nor finds it
-// Linkable is refused before the public table is even consulted.
+// TestCanCallDeniesNonLinkableStranger checks the permission gate's
+// failing case: a low-level caller who neither owns the program nor
+// finds it Linkable is refused before the public table is even
+// consulted.
 func TestCanCallDeniesNonLinkableStranger(t *testing.T) {
 	h := newHarness(t)
 
@@ -137,9 +142,10 @@ func TestCanCallDeniesNonLinkableStranger(t *testing.T) {
 	}
 }
 
-// TestCanCallRespectsThePublicsOwnMlevelFloor checks that reaching the
-// permission gate is not enough on its own: the caller must also meet the
-// mlev the public itself was declared at (1 for "public", 4 for "wizcall").
+// TestCanCallRespectsThePublicsOwnMlevelFloor checks that reaching
+// the permission gate is not enough on its own: the caller must also
+// meet the mlev the public itself was declared at (1 for "public", 4
+// for "wizcall").
 func TestCanCallRespectsThePublicsOwnMlevelFloor(t *testing.T) {
 	h := newHarness(t)
 
@@ -161,10 +167,11 @@ func TestCanCallRespectsThePublicsOwnMlevelFloor(t *testing.T) {
 	}
 }
 
-// TestCanCallIsCaseInsensitiveAndCompilesOnDemand checks the two mechanical
-// details prim_cancallp handles itself: the public name is matched with
-// strcasecmp, and a program that has never been run yet still answers
-// correctly because CanCall compiles it rather than assuming it already is.
+// TestCanCallIsCaseInsensitiveAndCompilesOnDemand checks the two
+// mechanical details prim_cancallp handles itself: the public name is
+// matched with strcasecmp, and a program that has never been run yet
+// still answers correctly because CanCall compiles it rather than
+// assuming it already is.
 func TestCanCallIsCaseInsensitiveAndCompilesOnDemand(t *testing.T) {
 	h := newHarness(t)
 
@@ -183,8 +190,8 @@ func TestCanCallIsCaseInsensitiveAndCompilesOnDemand(t *testing.T) {
 	}
 }
 
-// TestCanCallMissingNameFails checks that a name the target never declared
-// public reports false rather than erroring.
+// TestCanCallMissingNameFails checks that a name the target never
+// declared public reports false rather than erroring.
 func TestCanCallMissingNameFails(t *testing.T) {
 	h := newHarness(t)
 
@@ -203,10 +210,10 @@ func TestCanCallMissingNameFails(t *testing.T) {
 	}
 }
 
-// TestCanCallUncompiledMlevelZeroFails checks that ProgMLevel(target) > 0 is
-// its own unconditional gate: a program whose effective mlevel is 0 — here,
-// because its owner has no mucker bits — can never be called, even by its
-// own owner.
+// TestCanCallUncompiledMlevelZeroFails checks that ProgMLevel(target)
+// > 0 is its own unconditional gate: a program whose effective mlevel
+// is 0 — here, because its owner has no mucker bits — can never
+// be called, even by its own owner.
 func TestCanCallUncompiledMlevelZeroFails(t *testing.T) {
 	h := newHarness(t)
 
@@ -226,9 +233,9 @@ func TestCanCallUncompiledMlevelZeroFails(t *testing.T) {
 	}
 }
 
-// TestControlsProcessOwnPlayerControls checks the third of control_process's
-// three OR'd branches: the process's own player controls it, even without
-// owning its program or trigger.
+// TestControlsProcessOwnPlayerControls checks the third of
+// control_process's three OR'd branches: the process's own player
+// controls it, even without owning its program or trigger.
 func TestControlsProcessOwnPlayerControls(t *testing.T) {
 	h := newHarness(t)
 
@@ -248,9 +255,10 @@ func TestControlsProcessOwnPlayerControls(t *testing.T) {
 	}
 }
 
-// TestControlsProcessProgramOrTriggerOwnerControls checks the other two
-// branches: controlling the process's program, or its trigger, is each
-// enough on its own, independent of who the process is running for.
+// TestControlsProcessProgramOrTriggerOwnerControls checks the other
+// two branches: controlling the process's program, or its trigger, is
+// each enough on its own, independent of who the process is running
+// for.
 func TestControlsProcessProgramOrTriggerOwnerControls(t *testing.T) {
 	h := newHarness(t)
 
@@ -282,9 +290,9 @@ func TestControlsProcessProgramOrTriggerOwnerControls(t *testing.T) {
 	}
 }
 
-// TestControlsProcessDeniesAStranger checks the failing case: someone who
-// controls neither the process's program nor its trigger, and is not the
-// player it runs for, does not control it.
+// TestControlsProcessDeniesAStranger checks the failing case: someone
+// who controls neither the process's program nor its trigger, and is
+// not the player it runs for, does not control it.
 func TestControlsProcessDeniesAStranger(t *testing.T) {
 	h := newHarness(t)
 
@@ -307,9 +315,10 @@ func TestControlsProcessDeniesAStranger(t *testing.T) {
 	}
 }
 
-// TestControlsProcessMissingPIDIsFalse checks that a pid naming no process
-// at all answers false, the same as upstream's control_process falling
-// through both the timequeue and event-queue searches empty-handed.
+// TestControlsProcessMissingPIDIsFalse checks that a pid naming no
+// process at all answers false, the same as upstream's
+// control_process falling through both the timequeue and event-queue
+// searches empty-handed.
 func TestControlsProcessMissingPIDIsFalse(t *testing.T) {
 	h := newHarness(t)
 
@@ -323,8 +332,8 @@ func TestControlsProcessMissingPIDIsFalse(t *testing.T) {
 	}
 }
 
-// TestKillPIDRemovesAnExistingProcess and TestKillPIDMissingIsFalse check
-// KillPID's dequeue_process semantics directly.
+// TestKillPIDRemovesAnExistingProcess and TestKillPIDMissingIsFalse
+// check KillPID's dequeue_process semantics directly.
 func TestKillPIDRemovesAnExistingProcess(t *testing.T) {
 	h := newHarness(t)
 
@@ -356,16 +365,16 @@ func TestKillPIDMissingIsFalse(t *testing.T) {
 	}
 }
 
-// TestKillPrimitiveStopsASuspendedProgram exercises KILL end to end: a
-// program suspended on READ, killed by its pid from a second, separate
-// player's own program, never resumes even though its player later types
-// the line it was waiting for.
+// TestKillPrimitiveStopsASuspendedProgram exercises KILL end to end:
+// a program suspended on READ, killed by its pid from a second,
+// separate player's own program, never resumes even though its player
+// later types the line it was waiting for.
 //
 // The killer has to be a separate connection: the target process is
 // suspended on READ, and a line sent on its own connection would be
-// swallowed as that READ's input rather than reaching the command parser —
-// see CLAUDE.md's "A line typed while a program is reading goes to that
-// program, not the command parser."
+// swallowed as that READ's input rather than reaching the command
+// parser — see CLAUDE.md's "A line typed while a program is reading
+// goes to that program, not the command parser."
 func TestKillPrimitiveStopsASuspendedProgram(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -415,23 +424,24 @@ func TestKillPrimitiveStopsASuspendedProgram(t *testing.T) {
 	}
 }
 
-// TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer pins the fix to
-// internal/muf/internal/gen/gen_mlev.py this session made: KILL's own
-// "mlev < 3 && !control_process(...)" is a conditional check, not a flat
-// floor, but the generator's exemption regex did not recognise
-// "control_process(" (only "controls(") and so had wrongly generated
-// "KILL": 3 as an unconditional floor — which would have silently blocked
-// this exact case, a mlev-2 player killing their own suspended program,
-// with the wrong ("Permission denied.", generic) message before KILL's own
-// ownership-aware check ever ran.
+// TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer pins the
+// fix to internal/muf/internal/gen/gen_mlev.py this session made:
+// KILL's own "mlev < 3 && !control_process(...)" is a conditional
+// check, not a flat floor, but the generator's exemption regex did
+// not recognise "control_process(" (only "controls(") and so had
+// wrongly generated "KILL": 3 as an unconditional floor — which
+// would have silently blocked this exact case, a mlev-2 player
+// killing their own suspended program, with the wrong ("Permission
+// denied.", generic) message before KILL's own ownership-aware check
+// ever ran.
 func TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
 	who, d := connectAs(t, h, "SoloPlayer", false)
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
-		// Mucker level 2: enough to call NOTIFY, still below KILL's
-		// conditional floor of 3.
+		// Mucker level 2: enough to call NOTIFY, still below
+		// KILL's conditional floor of 3.
 		w.Get(who).Flags = w.Get(who).Flags.SetMLevel(2)
 		here := w.Get(who).Location
 
@@ -476,9 +486,10 @@ func TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A second descriptor for the same player: d's first descriptor is still
-	// mid-READ in "waits2", and would swallow "selfkill" as that READ's
-	// input rather than letting it reach the command parser.
+	// A second descriptor for the same player: d's first
+	// descriptor is still mid-READ in "waits2", and would swallow
+	// "selfkill" as that READ's input rather than letting it
+	// reach the command parser.
 	d2 := secondSessionFor(t, h, who)
 	got := sendAs(t, h, d2, "selfkill")
 	if !strings.Contains(got, "killed") {
@@ -489,12 +500,13 @@ func TestKillBelowMlevelThreeStillWorksForTheProcessesOwnPlayer(t *testing.T) {
 	}
 }
 
-// TestForkPrimitiveRunsParentAndChildIndependently exercises FORK end to
-// end: the parent finishes its command and reports its child's pid; the
-// child does not run until the process queue is drained (the test harness
-// deliberately does not wire Engine.OnEachOp — see BOOTSTRAP.md), and then
-// reports its own distinct output, proving the two frames are genuinely
-// independent rather than one clobbering the other's stack or variables.
+// TestForkPrimitiveRunsParentAndChildIndependently exercises FORK end
+// to end: the parent finishes its command and reports its child's
+// pid; the child does not run until the process queue is drained (the
+// test harness deliberately does not wire Engine.OnEachOp — see
+// BOOTSTRAP.md), and then reports its own distinct output, proving
+// the two frames are genuinely independent rather than one clobbering
+// the other's stack or variables.
 func TestForkPrimitiveRunsParentAndChildIndependently(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -529,14 +541,16 @@ func TestForkPrimitiveRunsParentAndChildIndependently(t *testing.T) {
 	}
 }
 
-// TestForkRejectsBelowMlevelThree checks the primitive's own gate end to
-// end, matching upstream's "MUCKER level 3" requirement noted in
-// prim_fork's doc comment. The message is the dispatcher's own generic
-// "Permission denied." (see internal/muf/prim.go's primitive()), not
-// upstream's differently-cased literal — FORK's floor is unconditional, so
-// it is gated by primMLevel rather than a hand-written check; see FORK's own
-// doc comment in internal/muf/prim_proc.go for why that is the convention
-// this codebase already uses for every other unconditional-floor primitive.
+// TestForkRejectsBelowMlevelThree checks the primitive's own gate end
+// to end, matching upstream's "MUCKER level 3" requirement noted in
+// prim_fork's doc comment. The message is the dispatcher's own
+// generic "Permission denied." (see internal/muf/prim.go's
+// primitive()), not upstream's differently-cased literal — FORK's
+// floor is unconditional, so it is gated by primMLevel rather than a
+// hand-written check; see FORK's own doc comment in
+// internal/muf/prim_proc.go for why that is the convention this
+// codebase already uses for every other unconditional-floor
+// primitive.
 func TestForkRejectsBelowMlevelThree(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -566,12 +580,13 @@ func TestForkRejectsBelowMlevelThree(t *testing.T) {
 	}
 }
 
-// TestForkRejectedWhenPlayerProcessLimitExceeded checks processLimitOK's
-// max_plyr_processes gate, and its own documented off-by-one against
-// upstream: the parent's own currently-running process already counts
-// against the limit here, unlike upstream's tqhead-only count. Run as a
-// non-wizard: the harness's own default player is flagged Wizard, which
-// max_plyr_processes deliberately exempts.
+// TestForkRejectedWhenPlayerProcessLimitExceeded checks
+// processLimitOK's max_plyr_processes gate, and its own documented
+// off-by-one against upstream: the parent's own currently-running
+// process already counts against the limit here, unlike upstream's
+// tqhead-only count. Run as a non-wizard: the harness's own default
+// player is flagged Wizard, which max_plyr_processes deliberately
+// exempts.
 func TestForkRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -623,12 +638,12 @@ func TestForkRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
 	}
 }
 
-// TestQueuePrimitiveRunsLaterWithItsOwnArgAndCommand exercises QUEUE end to
-// end: the queued program does not run until the process queue is drained,
-// and when it does, its COMMAND variable is "Queued Event." while its
-// initial stack argument is the string QUEUE was given — two different
-// strings, unlike a command-driven program where SetReserved's own
-// convention makes them the same one.
+// TestQueuePrimitiveRunsLaterWithItsOwnArgAndCommand exercises QUEUE
+// end to end: the queued program does not run until the process queue
+// is drained, and when it does, its COMMAND variable is "Queued
+// Event." while its initial stack argument is the string QUEUE was
+// given — two different strings, unlike a command-driven program
+// where SetReserved's own convention makes them the same one.
 func TestQueuePrimitiveRunsLaterWithItsOwnArgAndCommand(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -674,8 +689,9 @@ func TestQueuePrimitiveRunsLaterWithItsOwnArgAndCommand(t *testing.T) {
 	}
 }
 
-// TestQueueRejectedWhenPlayerProcessLimitExceeded checks that QUEUE respects
-// processLimitOK the same way FORK does, and pushes 0 rather than FORK's -1.
+// TestQueueRejectedWhenPlayerProcessLimitExceeded checks that QUEUE
+// respects processLimitOK the same way FORK does, and pushes 0 rather
+// than FORK's -1.
 func TestQueueRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -729,10 +745,11 @@ func TestQueueRejectedWhenPlayerProcessLimitExceeded(t *testing.T) {
 }
 
 // TestForcePrimitiveRunsCommandAsVictim exercises FORCE end to end: a
-// mlev-4 program forces a THING with no descriptor of its own to "say"
-// something, and the broadcast reaches the forcing player because they are
-// in the same room — proving the command genuinely ran as the victim, not
-// as the forcer, since the speaker's own name in the line is the victim's.
+// mlev-4 program forces a THING with no descriptor of its own to
+// "say" something, and the broadcast reaches the forcing player
+// because they are in the same room — proving the command genuinely
+// ran as the victim, not as the forcer, since the speaker's own name
+// in the line is the victim's.
 func TestForcePrimitiveRunsCommandAsVictim(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -773,11 +790,12 @@ func TestForcePrimitiveRunsCommandAsVictim(t *testing.T) {
 	}
 }
 
-// TestForcedByReflectsTheForcingProgram exercises FORCEDBY/FORCEDBY_ARRAY
-// end to end: a victim forced to run a program sees the forcing program's
-// own dbref from FORCEDBY, and [program, player] from FORCEDBY_ARRAY —
-// prim_force's own "if (player != program)" second push, since a program
-// (not a player typing @force directly) did the forcing here.
+// TestForcedByReflectsTheForcingProgram exercises
+// FORCEDBY/FORCEDBY_ARRAY end to end: a victim forced to run a
+// program sees the forcing program's own dbref from FORCEDBY, and
+// [program, player] from FORCEDBY_ARRAY — prim_force's own "if
+// (player != program)" second push, since a program (not a player
+// typing @force directly) did the forcing here.
 func TestForcedByReflectsTheForcingProgram(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -786,9 +804,10 @@ func TestForcedByReflectsTheForcingProgram(t *testing.T) {
 	var forcerProg ref.Ref
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		wiz := h.wizRef()
-		// FORCEDBY/FORCEDBY_ARRAY need mlevel 4, which needs the owner —
-		// here, the harness's own default player — to carry mucker bits
-		// too: Wizard alone caps a program's effective mlevel at 0.
+		// FORCEDBY/FORCEDBY_ARRAY need mlevel 4, which needs
+		// the owner — here, the harness's own default
+		// player — to carry mucker bits too: Wizard alone
+		// caps a program's effective mlevel at 0.
 		w.Get(wiz).Flags = w.Get(wiz).Flags.SetMLevel(3)
 		here := w.Get(wiz).Location
 
@@ -806,10 +825,11 @@ func TestForcedByReflectsTheForcingProgram(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Notifying "me" here would be notifying the victim, Gizmo, which
-		// has no descriptor of its own to receive anything on — so this
-		// reports straight to owner's own dbref instead, the one real
-		// connection in this test that can actually hear it.
+		// Notifying "me" here would be notifying the victim,
+		// Gizmo, which has no descriptor of its own to
+		// receive anything on — so this reports straight to
+		// owner's own dbref instead, the one real connection
+		// in this test that can actually hear it.
 		reporter := w.Create("report.muf", ref.TypeProgram, wiz)
 		reporter.Flags |= ref.Wizard
 		reporter.Flags = reporter.Flags.SetMLevel(3)
@@ -837,16 +857,18 @@ func TestForcedByReflectsTheForcingProgram(t *testing.T) {
 	d := secondSessionFor(t, h, owner)
 	got := sendAs(t, h, d, "dothings2")
 
-	// intostr renders a dbref as a bare number, no '#' — matching upstream's
-	// own union-agnostic print, per INTOSTR's own doc comment.
+	// intostr renders a dbref as a bare number, no '#' —
+	// matching upstream's own union-agnostic print, per INTOSTR's
+	// own doc comment.
 	want := fmt.Sprintf("%d\n2\n%d\n%d", forcerProg, forcerProg, owner)
 	if strings.TrimRight(got, "\n") != want {
 		t.Errorf("output = %q, want %q (forcedby, forcedby_array count, [0], [1])", got, want)
 	}
 }
 
-// TestForcedByEmptyOutsideAForce checks the not-forced baseline: FORCEDBY
-// is #-1 (NOTHING) and FORCEDBY_ARRAY is empty for a program nobody forced.
+// TestForcedByEmptyOutsideAForce checks the not-forced baseline:
+// FORCEDBY is #-1 (NOTHING) and FORCEDBY_ARRAY is empty for a program
+// nobody forced.
 func TestForcedByEmptyOutsideAForce(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -879,10 +901,10 @@ func TestForcedByEmptyOutsideAForce(t *testing.T) {
 	}
 }
 
-// TestAtForcePopulatesForcedByWithJustThePlayer checks that @force (not
-// just the FORCE primitive) also pushes onto the shared forcelist, and that
-// it pushes only the player — upstream's do_force has no "program" to push,
-// unlike prim_force.
+// TestAtForcePopulatesForcedByWithJustThePlayer checks that @force
+// (not just the FORCE primitive) also pushes onto the shared
+// forcelist, and that it pushes only the player — upstream's
+// do_force has no "program" to push, unlike prim_force.
 func TestAtForcePopulatesForcedByWithJustThePlayer(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -890,8 +912,9 @@ func TestAtForcePopulatesForcedByWithJustThePlayer(t *testing.T) {
 	var wiz ref.Ref
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		wiz = h.wizRef()
-		// FORCEDBY/FORCEDBY_ARRAY need mlevel 4; Wizard alone caps a
-		// program's effective mlevel at 0 without mucker bits too.
+		// FORCEDBY/FORCEDBY_ARRAY need mlevel 4; Wizard alone
+		// caps a program's effective mlevel at 0 without
+		// mucker bits too.
 		w.Get(wiz).Flags = w.Get(wiz).Flags.SetMLevel(3)
 		here := w.Get(wiz).Location
 
@@ -901,8 +924,9 @@ func TestAtForcePopulatesForcedByWithJustThePlayer(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Notifying "me" would notify Puppet, which has no descriptor of
-		// its own — report straight to wiz's own dbref instead.
+		// Notifying "me" would notify Puppet, which has no
+		// descriptor of its own — report straight to wiz's
+		// own dbref instead.
 		reporter := w.Create("report2.muf", ref.TypeProgram, wiz)
 		reporter.Flags |= ref.Wizard
 		reporter.Flags = reporter.Flags.SetMLevel(3)
@@ -927,12 +951,13 @@ func TestAtForcePopulatesForcedByWithJustThePlayer(t *testing.T) {
 	}
 }
 
-// TestGetPIDsMatchesByPlayerProgramOrNegativeArgument exercises GETPIDS end
-// to end: a program blocked on READ (so it stays in procQueue for the whole
-// test), matched by its player; a nonexistent dbref, matching nothing; and
-// -1, matching everything — which in this architecture includes the
-// currently-running querying process itself, unlike upstream's own
-// timequeue (see GETPIDS's own doc comment in prim_proc.go).
+// TestGetPIDsMatchesByPlayerProgramOrNegativeArgument exercises
+// GETPIDS end to end: a program blocked on READ (so it stays in
+// procQueue for the whole test), matched by its player; a nonexistent
+// dbref, matching nothing; and -1, matching everything — which in
+// this architecture includes the currently-running querying process
+// itself, unlike upstream's own timequeue (see GETPIDS's own doc
+// comment in prim_proc.go).
 func TestGetPIDsMatchesByPlayerProgramOrNegativeArgument(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -995,10 +1020,11 @@ func TestGetPIDsMatchesByPlayerProgramOrNegativeArgument(t *testing.T) {
 	}
 }
 
-// TestGetPIDInfoOtherPIDReportsReadState checks mufHost.PIDInfo end to end:
-// a program at mlevel 3 inspects a sibling process blocked on READ, and gets
-// back SUBTYPE "READ", CALLED_DATA "READ", and MLEVEL hardcoded to 0 — the
-// same documented quirk upstream's own get_pidinfo has.
+// TestGetPIDInfoOtherPIDReportsReadState checks mufHost.PIDInfo end
+// to end: a program at mlevel 3 inspects a sibling process blocked on
+// READ, and gets back SUBTYPE "READ", CALLED_DATA "READ", and MLEVEL
+// hardcoded to 0 — the same documented quirk upstream's own
+// get_pidinfo has.
 func TestGetPIDInfoOtherPIDReportsReadState(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -1065,12 +1091,12 @@ func TestGetPIDInfoOtherPIDReportsReadState(t *testing.T) {
 	}
 }
 
-// TestWatchPIDDeliversProcExitOnCompletion is an end-to-end test of the
-// whole delivery path: a watcher blocked in EVENT_WAITFOR resumes
-// immediately — within the same engine.Do the killer's own command runs in,
-// not on the next tick — when the process it WATCHPID'd is killed, carrying
-// the PROC.EXIT.<pid> event name and the dead pid as data, exactly as
-// EVENT_WAITFOR leaves them on the stack.
+// TestWatchPIDDeliversProcExitOnCompletion is an end-to-end test of
+// the whole delivery path: a watcher blocked in EVENT_WAITFOR resumes
+// immediately — within the same engine.Do the killer's own command
+// runs in, not on the next tick — when the process it WATCHPID'd is
+// killed, carrying the PROC.EXIT.<pid> event name and the dead pid as
+// data, exactly as EVENT_WAITFOR leaves them on the stack.
 func TestWatchPIDDeliversProcExitOnCompletion(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -1158,11 +1184,12 @@ func TestWatchPIDDeliversProcExitOnCompletion(t *testing.T) {
 	}
 }
 
-// TestTimerWakesAWaitingProgram covers the half of TIMER_START the golden
-// harness cannot: a timer that is not already due when EVENT_WAITFOR asks
-// for it, so the program genuinely suspends and a later tick delivers the
-// event. The golden case uses a zero delay instead, because the two servers
-// run their timequeues at different intervals.
+// TestTimerWakesAWaitingProgram covers the half of TIMER_START the
+// golden harness cannot: a timer that is not already due when
+// EVENT_WAITFOR asks for it, so the program genuinely suspends and a
+// later tick delivers the event. The golden case uses a zero delay
+// instead, because the two servers run their timequeues at different
+// intervals.
 func TestTimerWakesAWaitingProgram(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -1192,8 +1219,8 @@ func TestTimerWakesAWaitingProgram(t *testing.T) {
 	}
 }
 
-// TestTimerStopCancelsBeforeItFires checks that a stopped timer delivers
-// nothing, even once its deadline has passed.
+// TestTimerStopCancelsBeforeItFires checks that a stopped timer
+// delivers nothing, even once its deadline has passed.
 func TestTimerStopCancelsBeforeItFires(t *testing.T) {
 	h := newHarness(t)
 	h.login()

@@ -13,8 +13,8 @@ func testFrame(packages ...Package) (*Frame, *[]string) {
 	return f, &out
 }
 
-// negotiate takes a frame through the opening exchange and returns the key the
-// server issued.
+// negotiate takes a frame through the opening exchange and returns
+// the key the server issued.
 func negotiate(t *testing.T, f *Frame, out *[]string) string {
 	t.Helper()
 	if _, pass := f.ProcessInput("#$#mcp version: 2.1 to: 2.1"); pass {
@@ -34,7 +34,8 @@ func negotiate(t *testing.T, f *Frame, out *[]string) string {
 	return ""
 }
 
-// argFromLine pulls a quoted or bare argument out of a rendered message.
+// argFromLine pulls a quoted or bare argument out of a rendered
+// message.
 func argFromLine(line, name string) (string, bool) {
 	i := strings.Index(line, name+": ")
 	if i < 0 {
@@ -52,7 +53,8 @@ func TestTextPassesThroughUntilNegotiated(t *testing.T) {
 	f, _ := testFrame()
 
 	for _, line := range []string{"look", "say hello", "#$#not-mcp foo"} {
-		if got, pass := f.ProcessInput(line); !pass || got != line {
+		if got, pass := f.ProcessInput(line); !pass ||
+			got != line {
 			t.Errorf("ProcessInput(%q) = %q, %v; want the line unchanged", line, got, pass)
 		}
 	}
@@ -92,9 +94,10 @@ func TestMessagesNeedTheAuthenticationKey(t *testing.T) {
 	)
 	key := negotiate(t, f, out)
 
-	// A message carrying the wrong key is not a message. It comes back as
-	// text rather than being obeyed, which is the whole point of the key:
-	// otherwise anything a world echoed could drive a client.
+	// A message carrying the wrong key is not a message. It comes
+	// back as text rather than being obeyed, which is the whole
+	// point of the key: otherwise anything a world echoed could
+	// drive a client.
 	line := "#$#org-fuzzball-gui-ctrl-value 00000000 id: \"x\""
 	if text, pass := f.ProcessInput(line); !pass || text != line {
 		t.Errorf("a message with the wrong key was accepted")
@@ -110,7 +113,8 @@ func TestMessagesNeedTheAuthenticationKey(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("the handler saw %d messages, want 1", len(got))
 	}
-	if got[0].Package != "org-fuzzball-gui" || got[0].Name != "ctrl-value" {
+	if got[0].Package != "org-fuzzball-gui" ||
+		got[0].Name != "ctrl-value" {
 		t.Errorf("message parsed as %q / %q", got[0].Package, got[0].Name)
 	}
 	if v, _ := got[0].Arg("id"); v != "widget" {
@@ -152,8 +156,8 @@ func TestMultilineArgumentsAreReassembled(t *testing.T) {
 	}
 	for i := range want {
 		if lines[i] != want[i] {
-			// Leading spaces matter: this is how program source
-			// survives the round trip.
+			// Leading spaces matter: this is how program
+			// source survives the round trip.
 			t.Errorf("content line %d = %q, want %q", i, lines[i], want[i])
 		}
 	}
@@ -177,12 +181,14 @@ func TestSendSplitsLongAndMultilineValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The opening line, one line per line of content, and the closing tag.
+	// The opening line, one line per line of content, and the
+	// closing tag.
 	if len(*out) != 4 {
 		t.Fatalf("sent %d lines, want 4:\n%s", len(*out), strings.Join(*out, "\n"))
 	}
 	first := (*out)[0]
-	if !strings.Contains(first, `content*: ""`) || !strings.Contains(first, "_data-tag: ") {
+	if !strings.Contains(first, `content*: ""`) ||
+		!strings.Contains(first, "_data-tag: ") {
 		t.Errorf("the opening line does not defer the content:\n%s", first)
 	}
 	if !strings.Contains((*out)[1], "content: line one") {
@@ -217,11 +223,12 @@ func TestQuotedInbandTextIsUnquoted(t *testing.T) {
 		t.Errorf("ProcessInput unquoted to %q, %v", got, pass)
 	}
 
-	// And the other direction: text that would look like a message is
-	// quoted on the way out.
+	// And the other direction: text that would look like a
+	// message is quoted on the way out.
 	*out = nil
 	f.SendInband("#$#pretending to be a message")
-	if len(*out) != 1 || !strings.HasPrefix((*out)[0], QuotePrefix) {
+	if len(*out) != 1 ||
+		!strings.HasPrefix((*out)[0], QuotePrefix) {
 		t.Errorf("outgoing text was not quoted: %q", *out)
 	}
 }
@@ -255,28 +262,30 @@ func TestPackageNamesResolveToTheLongestMatch(t *testing.T) {
 	)
 	key := negotiate(t, f, out)
 
-	// Package names are hierarchical, so the longest registered prefix
-	// wins: this belongs to org-fuzzball-gui, not to org-fuzzball.
+	// Package names are hierarchical, so the longest registered
+	// prefix wins: this belongs to org-fuzzball-gui, not to
+	// org-fuzzball.
 	f.ProcessInput("#$#org-fuzzball-gui-ctrl-value " + key + ` id: "x"`)
 	if seen != "long:ctrl-value" {
 		t.Errorf("message went to %q, want the gui package", seen)
 	}
 }
 
-// TestAHandlerMaySendWhileHandling checks that a package handler can answer
-// the message it was given.
+// TestAHandlerMaySendWhileHandling checks that a package handler can
+// answer the message it was given.
 //
-// This is the obvious thing for a handler to do, and the frame has to have
-// released its lock before calling one: holding it across the callback turns
-// every such reply into a deadlock, which is exactly what the first version
-// of this did.
+// This is the obvious thing for a handler to do, and the frame has to
+// have released its lock before calling one: holding it across the
+// callback turns every such reply into a deadlock, which is exactly
+// what the first version of this did.
 func TestAHandlerMaySendWhileHandling(t *testing.T) {
 	f, out := testFrame(
 		Package{Name: NegotiatePackage, MinVer: Version{1, 0}, MaxVer: Version{2, 0},
 			Handle: NegotiateHandler},
 		Package{Name: "org-fuzzball-help", MinVer: Version{1, 0}, MaxVer: Version{1, 0},
 			Handle: func(fr *Frame, m *Message, _ Version) {
-				// Reading state and sending both take the lock.
+				// Reading state and sending both take
+				// the lock.
 				_ = fr.Enabled()
 				_ = fr.Supports("org-fuzzball-help")
 				_ = fr.SendMessage(NewMessage("org-fuzzball-help", "reply").
@@ -299,7 +308,8 @@ func TestAHandlerMaySendWhileHandling(t *testing.T) {
 		t.Fatal("the handler deadlocked against the frame's own lock")
 	}
 
-	if len(*out) != 1 || !strings.Contains((*out)[0], "org-fuzzball-help-reply") {
+	if len(*out) != 1 ||
+		!strings.Contains((*out)[0], "org-fuzzball-help-reply") {
 		t.Errorf("the handler's reply did not go out: %q", *out)
 	}
 }

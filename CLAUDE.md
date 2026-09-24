@@ -43,7 +43,8 @@ and several plausible-looking assumptions turned out to be wrong when checked.
 make                  # list every target
 make build            # build ./fbemerald
 make test             # go test -race ./... against a scratch database
-make check            # vet + test
+make check            # vet + formatting + test
+make fmt              # gofmt, then rewrap comments to 70 columns
 make pod-import pod-run   # build image, import starter world, serve in a container
 make connect          # openssl s_client to the running server
 make pod-logs         # follow the container
@@ -51,7 +52,43 @@ make pod-stop         # stop it
 
 make golden-build     # build Fuzzball 7 from the C, once
 make golden           # diff this server against it
+
+make width-check                      # no new line over 70 columns
+make width-check RANGE=HEAD~1..HEAD   # ...in a commit range
 ```
+
+## Go source is 70 columns, counting a tab as 8
+
+`make fmt` enforces it, and `make check` verifies it. **gofmt does not
+wrap anything**, so the limit needs a second pass: `tools/reflow` does
+what a line-wrapper cannot.
+
+- It reflows comment **paragraphs**, not lines. Wrapping each line on
+  its own leaves orphans like `// the ones that`.
+- It moves an over-long one-line function body onto its own line, which
+  gives what you would have written by hand.
+- It splits a composite literal a field per line, and gofmt aligns the
+  colons.
+- It breaks a long condition after `&&` or `||`, packing operands
+  greedily rather than one per line.
+
+It deliberately leaves alone anything carrying its own layout: indented
+examples inside comments, lists, tables, `//go:` directives, and raw
+string literals — several of those hold MUF source for the golden
+fixtures, where re-wrapping would change the program under test.
+
+**Do not add golines.** It was tried and rejected: at this width it
+inflates the tree by 16.7% and produces 1,506 "lonely argument" lines —
+a single short token on a line of its own — where this codebase has two.
+It is also inconsistent, exploding a 73-column line while leaving a
+96-column one beside it.
+
+About **2,900 lines remain over 70**, nearly all string literals. Error
+messages are upstream's exact wording that programs match on, and
+breaking them across a `+` makes them much harder to grep for; that cost
+is not worth paying. The limit is therefore enforced on *new* code —
+`make width-check` — rather than by a mass rewrite. Write new code to
+fit; do not reformat an old line just because it is long.
 
 Running a single test needs the database URL only for `internal/store`, which
 skips without it:

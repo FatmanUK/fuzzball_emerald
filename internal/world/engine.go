@@ -10,23 +10,24 @@ import (
 	"time"
 )
 
-// Persister writes snapshots durably. It is an interface so this package stays
-// free of database concerns and can be tested without one.
+// Persister writes snapshots durably. It is an interface so this
+// package stays free of database concerns and can be tested without
+// one.
 type Persister interface {
-	// Flush writes a snapshot. It is called from the persister goroutine,
-	// never from the world goroutine.
+	// Flush writes a snapshot. It is called from the persister
+	// goroutine, never from the world goroutine.
 	Flush(ctx context.Context, s Snapshot) error
 }
 
-// ErrStopped is returned when work is submitted to an engine that has shut
-// down.
+// ErrStopped is returned when work is submitted to an engine that has
+// shut down.
 var ErrStopped = errors.New("world engine stopped")
 
 // Engine owns a World and serialises every access to it.
 //
-// One goroutine runs the world; nothing else may touch it. Slow work — DNS,
-// SMTP, TLS handshakes, Postgres — belongs in other goroutines that post
-// results back through Go or Do.
+// One goroutine runs the world; nothing else may touch it. Slow work
+// — DNS, SMTP, TLS handshakes, Postgres — belongs in other
+// goroutines that post results back through Go or Do.
 type Engine struct {
 	world *World
 	ops   chan operation
@@ -38,41 +39,47 @@ type Engine struct {
 	// flushNow requests an immediate flush; @dump writes to it.
 	flushNow chan chan error
 
-	// done is closed when the engine stops accepting work. stopOnce guards
-	// it so every Run exit path closes it exactly once.
+	// done is closed when the engine stops accepting work.
+	// stopOnce guards it so every Run exit path closes it exactly
+	// once.
 	done     chan struct{}
 	stopOnce sync.Once
 
-	// onPanic, when set, is called after a recovered panic so the caller
-	// can tell whoever triggered it that their command failed.
+	// onPanic, when set, is called after a recovered panic so the
+	// caller can tell whoever triggered it that their command
+	// failed.
 	onPanic func(any)
 
-	// onTick, when set, runs on the world goroutine at each interval. The
-	// process queue uses it to wake sleeping programs.
+	// onTick, when set, runs on the world goroutine at each
+	// interval. The process queue uses it to wake sleeping
+	// programs.
 	onTick func(*World)
 
-	// onEachOp, when set, runs on the world goroutine after every operation
-	// Run applies — not just at each flush interval. The process queue uses
-	// it too, so a freshly-forked or newly-queued process gets its first
-	// slice within the same tick of activity that created it, rather than
-	// waiting up to a full flush interval: upstream's own scheduler runs
-	// once per main-loop pass, which in Emerald's model is once per applied
-	// operation, not once per second. It is deliberately the same shape as
-	// onTick — most callers wire both to the same function — so periodic and
-	// event-driven scheduling stay in one place rather than two.
+	// onEachOp, when set, runs on the world goroutine after every
+	// operation Run applies — not just at each flush interval.
+	// The process queue uses it too, so a freshly-forked or
+	// newly-queued process gets its first slice within the same
+	// tick of activity that created it, rather than waiting up to
+	// a full flush interval: upstream's own scheduler runs once
+	// per main-loop pass, which in Emerald's model is once per
+	// applied operation, not once per second. It is deliberately
+	// the same shape as onTick — most callers wire both to the
+	// same function — so periodic and event-driven scheduling
+	// stay in one place rather than two.
 	onEachOp func(*World)
 }
 
-// OnTick sets a callback run on the world goroutine at each flush interval.
+// OnTick sets a callback run on the world goroutine at each flush
+// interval.
 func (e *Engine) OnTick(fn func(*World)) { e.onTick = fn }
 
-// OnEachOp sets a callback run on the world goroutine after every operation,
-// in addition to OnTick's periodic firing. See onEachOp's own comment for why
-// this exists.
+// OnEachOp sets a callback run on the world goroutine after every
+// operation, in addition to OnTick's periodic firing. See onEachOp's
+// own comment for why this exists.
 func (e *Engine) OnEachOp(fn func(*World)) { e.onEachOp = fn }
 
-// OnPanic sets a callback run after a recovered panic in a world operation.
-// It runs on the world goroutine.
+// OnPanic sets a callback run after a recovered panic in a world
+// operation. It runs on the world goroutine.
 func (e *Engine) OnPanic(fn func(any)) { e.onPanic = fn }
 
 type operation struct {
@@ -83,12 +90,14 @@ type operation struct {
 // Options configure an Engine.
 type Options struct {
 	Persister Persister
-	// Interval bounds how much a crash can lose. It replaces upstream's
-	// dump_interval, which froze the world for the length of a full write.
+	// Interval bounds how much a crash can lose. It replaces
+	// upstream's dump_interval, which froze the world for the
+	// length of a full write.
 	Interval time.Duration
 	Logger   *slog.Logger
-	// QueueDepth is how many operations may be pending before submitters
-	// block. It bounds memory when a burst of input arrives.
+	// QueueDepth is how many operations may be pending before
+	// submitters block. It bounds memory when a burst of input
+	// arrives.
 	QueueDepth int
 }
 
@@ -114,13 +123,14 @@ func NewEngine(w *World, opts Options) *Engine {
 	}
 }
 
-// Go submits work without waiting for it. Use it for anything on the input
-// path, where blocking a connection goroutine on the world would be wrong.
+// Go submits work without waiting for it. Use it for anything on the
+// input path, where blocking a connection goroutine on the world
+// would be wrong.
 func (e *Engine) Go(fn func(*World)) error {
-	// Check for shutdown first. The operation queue is buffered, so a plain
-	// select would have a ready send case even after the engine stopped,
-	// and would pick it half the time — silently accepting work that never
-	// runs.
+	// Check for shutdown first. The operation queue is buffered,
+	// so a plain select would have a ready send case even after
+	// the engine stopped, and would pick it half the time —
+	// silently accepting work that never runs.
 	if e.stopped() {
 		return ErrStopped
 	}
@@ -142,9 +152,9 @@ func (e *Engine) stopped() bool {
 	}
 }
 
-// Do submits work and waits for it to run. Use it when the caller needs the
-// result, and never from inside another Do: the world goroutine cannot wait on
-// itself.
+// Do submits work and waits for it to run. Use it when the caller
+// needs the result, and never from inside another Do: the world
+// goroutine cannot wait on itself.
 func (e *Engine) Do(ctx context.Context, fn func(*World)) error {
 	if e.stopped() {
 		return ErrStopped
@@ -167,9 +177,9 @@ func (e *Engine) Do(ctx context.Context, fn func(*World)) error {
 	}
 }
 
-// Flush forces an immediate write and waits for it. This is what @dump does;
-// unlike upstream it does not pause the world, so it returns as soon as the
-// snapshot is durable.
+// Flush forces an immediate write and waits for it. This is what
+// @dump does; unlike upstream it does not pause the world, so it
+// returns as soon as the snapshot is durable.
 func (e *Engine) Flush(ctx context.Context) error {
 	reply := make(chan error, 1)
 	select {
@@ -208,10 +218,11 @@ func (e *Engine) Run(ctx context.Context) error {
 				e.apply(operation{fn: e.onTick})
 			}
 			if err := e.flush(ctx); err != nil {
-				// A failed write is not fatal: the objects stay
-				// dirty and the next tick tries again. Losing
-				// the world because Postgres blipped would be
-				// a worse outcome than running on.
+				// A failed write is not fatal: the
+				// objects stay dirty and the next
+				// tick tries again. Losing the world
+				// because Postgres blipped would be a
+				// worse outcome than running on.
 				e.log.Error("flush failed", "error", err)
 			}
 
@@ -224,12 +235,12 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 }
 
-// apply runs one operation, containing any panic so a single bad command
-// cannot take the whole world down.
+// apply runs one operation, containing any panic so a single bad
+// command cannot take the whole world down.
 //
-// The stack is captured and logged: a swallowed panic that leaves no trace is
-// worse than a crash, because the symptom is a command that silently does
-// nothing at all.
+// The stack is captured and logged: a swallowed panic that leaves no
+// trace is worse than a crash, because the symptom is a command that
+// silently does nothing at all.
 func (e *Engine) apply(op operation) {
 	defer func() {
 		if op.done != nil {
@@ -246,10 +257,10 @@ func (e *Engine) apply(op operation) {
 	op.fn(e.world)
 }
 
-// flush snapshots on the world goroutine and writes from it. The snapshot is a
-// deep copy, so a slow write never blocks a mutation — but this call is
-// synchronous, which keeps ordering simple and means a flush cannot overlap
-// itself.
+// flush snapshots on the world goroutine and writes from it. The
+// snapshot is a deep copy, so a slow write never blocks a mutation
+// — but this call is synchronous, which keeps ordering simple and
+// means a flush cannot overlap itself.
 func (e *Engine) flush(ctx context.Context) error {
 	if e.persister == nil {
 		return nil
@@ -259,23 +270,25 @@ func (e *Engine) flush(ctx context.Context) error {
 		return nil
 	}
 	if err := e.persister.Flush(ctx, s); err != nil {
-		// Put the work back so the next attempt retries it, rather than
-		// dropping changes on the floor.
+		// Put the work back so the next attempt retries it,
+		// rather than dropping changes on the floor.
 		e.world.requeue(s)
 		return err
 	}
 	return nil
 }
 
-// stop closes the done channel, after which Go and Do refuse new work.
+// stop closes the done channel, after which Go and Do refuse new
+// work.
 func (e *Engine) stop() { e.stopOnce.Do(func() { close(e.done) }) }
 
-// shutdown stops accepting work, runs whatever is already queued, and makes
-// one final write. It uses a fresh context because the one that triggered
-// shutdown is already cancelled, and the whole point is to finish writing.
+// shutdown stops accepting work, runs whatever is already queued, and
+// makes one final write. It uses a fresh context because the one that
+// triggered shutdown is already cancelled, and the whole point is to
+// finish writing.
 func (e *Engine) shutdown() error {
-	// Refuse new submissions before draining, so the queue cannot be
-	// refilled behind the drain loop.
+	// Refuse new submissions before draining, so the queue cannot
+	// be refilled behind the drain loop.
 	e.stop()
 
 	for {

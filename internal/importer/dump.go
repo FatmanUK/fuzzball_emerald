@@ -1,9 +1,10 @@
-// Package importer loads a legacy Fuzzball database into an Emerald world.
+// Package importer loads a legacy Fuzzball database into an Emerald
+// world.
 //
-// It reads the "Foxen9" dump format written by db_write in src/db.c, together
-// with the MUF sources and macro table Fuzzball keeps in files beside the dump
-// rather than inside it. The direction is one way: once a world is in
-// Postgres, that is the system of record.
+// It reads the "Foxen9" dump format written by db_write in src/db.c,
+// together with the MUF sources and macro table Fuzzball keeps in
+// files beside the dump rather than inside it. The direction is one
+// way: once a world is in Postgres, that is the system of record.
 package importer
 
 import (
@@ -21,9 +22,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// VersionString identifies the only dump format Emerald reads. Fuzzball wrote
-// several earlier ones; converting those is upstream's job, and its own binary
-// will do it.
+// VersionString identifies the only dump format Emerald reads.
+// Fuzzball wrote several earlier ones; converting those is upstream's
+// job, and its own binary will do it.
 const VersionString = "***Foxen9 TinyMUCK DUMP Format***"
 
 const endOfDump = "***END OF DUMP***"
@@ -40,11 +41,13 @@ type Report struct {
 	Macros      int
 	ParamsSet   int
 	ParamsReset int
-	// ParamsDropped counts parameters Emerald deliberately does not
-	// implement, such as the TLS settings that moved to the environment.
+	// ParamsDropped counts parameters Emerald deliberately does
+	// not implement, such as the TLS settings that moved to the
+	// environment.
 	ParamsDropped int
-	// Warnings collects anything survivable: an unknown parameter, a
-	// property that would not parse, a default that no longer matches.
+	// Warnings collects anything survivable: an unknown
+	// parameter, a property that would not parse, a default that
+	// no longer matches.
 	Warnings []string
 }
 
@@ -52,7 +55,8 @@ func (r *Report) warnf(format string, args ...any) {
 	r.Warnings = append(r.Warnings, fmt.Sprintf(format, args...))
 }
 
-// scanner reads a dump line by line, tracking position for error messages.
+// scanner reads a dump line by line, tracking position for error
+// messages.
 type scanner struct {
 	sc   *bufio.Scanner
 	line int
@@ -67,7 +71,8 @@ func newScanner(r io.Reader) *scanner {
 	return &scanner{sc: sc}
 }
 
-// next returns the next line. The bool reports whether one was available.
+// next returns the next line. The bool reports whether one was
+// available.
 func (s *scanner) next() (string, bool) {
 	if s.hasPeek {
 		s.hasPeek = false
@@ -99,8 +104,8 @@ func (s *scanner) errorf(format string, args ...any) error {
 }
 
 // ref reads a line as a dbref. Upstream uses atol, which yields 0 for
-// anything unparseable; being strict here turns a corrupt dump into a clear
-// error instead of an object silently parented to #0.
+// anything unparseable; being strict here turns a corrupt dump into a
+// clear error instead of an object silently parented to #0.
 func (s *scanner) ref() (ref.Ref, error) {
 	line, ok := s.next()
 	if !ok {
@@ -158,7 +163,8 @@ func Parse(r io.Reader, w *world.World) (*Report, error) {
 	}
 }
 
-// parseHeader reads the version line, the two counts and the parameter block.
+// parseHeader reads the version line, the two counts and the
+// parameter block.
 func parseHeader(s *scanner, w *world.World, rep *Report) error {
 	version, ok := s.next()
 	if !ok {
@@ -169,8 +175,9 @@ func parseHeader(s *scanner, w *world.World, rep *Report) error {
 			version, VersionString)
 	}
 
-	// The object count is a sizing hint upstream uses to preallocate, and
-	// the flags word after it has been ignored since Foxen8.
+	// The object count is a sizing hint upstream uses to
+	// preallocate, and the flags word after it has been ignored
+	// since Foxen8.
 	if _, err := s.int64(); err != nil {
 		return fmt.Errorf("object count: %w", err)
 	}
@@ -201,11 +208,12 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 		return s.errorf("%v: dump ended before the name", r)
 	}
 
-	// Every link starts at NOTHING, as db_clear_object does upstream before
-	// reading a record. Go's zero value for a ref is #0, which would quietly
-	// attach objects to the global environment: a dump stores `exits` only
-	// for things, players and rooms, so a program left at the zero value
-	// would claim #0 as its exit list.
+	// Every link starts at NOTHING, as db_clear_object does
+	// upstream before reading a record. Go's zero value for a ref
+	// is #0, which would quietly attach objects to the global
+	// environment: a dump stores `exits` only for things, players
+	// and rooms, so a program left at the zero value would claim
+	// #0 as its exit list.
 	o := &world.Object{
 		Ref:      r,
 		Name:     name,
@@ -234,7 +242,8 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 	if err != nil {
 		return fmt.Errorf("%v flags: %w", r, err)
 	}
-	// Flags describing live server state are not meaningful in a dump.
+	// Flags describing live server state are not meaningful in a
+	// dump.
 	o.Flags = ref.Flags(uint32(rawFlags)) &^ ref.DumpMask
 
 	created, err := s.int64()
@@ -258,9 +267,9 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 	o.UseCount = int32(useCount)
 	o.Modified = time.Unix(modified, 0).UTC()
 
-	// What follows is either a property block or, when the object has no
-	// properties, the first type-specific field. Upstream distinguishes them
-	// by peeking at a single character.
+	// What follows is either a property block or, when the object
+	// has no properties, the first type-specific field. Upstream
+	// distinguishes them by peeking at a single character.
 	link := ref.Nothing
 	hadProps := false
 	if line, ok := s.peek(); ok && strings.HasPrefix(line, "*") {
@@ -276,8 +285,8 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 		}
 	}
 
-	// readLink returns the type-specific slot, which was already consumed
-	// when the object had no properties.
+	// readLink returns the type-specific slot, which was already
+	// consumed when the object had no properties.
 	readLink := func() (ref.Ref, error) {
 		if hadProps {
 			return s.ref()
@@ -299,7 +308,8 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 				return s.errorf("%v: dump ended before the password", r)
 			}
 			o.PasswordHash = legacyPassword(pw)
-			// A player owns itself; the dump does not store it.
+			// A player owns itself; the dump does not
+			// store it.
 			o.Owner = r
 		} else {
 			if o.Owner, err = s.ref(); err != nil {
@@ -341,8 +351,8 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 		if o.Owner, err = readLink(); err != nil {
 			return fmt.Errorf("%v owner: %w", r, err)
 		}
-		// INTERNAL marks a program as compiled in the running server,
-		// which a freshly loaded one is not.
+		// INTERNAL marks a program as compiled in the running
+		// server, which a freshly loaded one is not.
 		o.Flags &^= ref.Internal
 
 	case ref.TypeGarbage:
@@ -355,16 +365,16 @@ func parseObject(s *scanner, w *world.World, rep *Report, r ref.Ref) error {
 	return w.Add(o)
 }
 
-// maxExitDests bounds an exit's destination list, so a corrupt count cannot
-// make the importer allocate without limit.
+// maxExitDests bounds an exit's destination list, so a corrupt count
+// cannot make the importer allocate without limit.
 const maxExitDests = 4096
 
-// parseProps reads a *Props* ... *End* block, returning how many properties
-// were stored.
+// parseProps reads a *Props* ... *End* block, returning how many
+// properties were stored.
 //
-// Stored, not read: a dump can carry a property with an empty value, and
-// storing one unsets the property instead, exactly as upstream does. Counting
-// lines would overstate what the world actually holds.
+// Stored, not read: a dump can carry a property with an empty value,
+// and storing one unsets the property instead, exactly as upstream
+// does. Counting lines would overstate what the world actually holds.
 func parseProps(s *scanner, o *world.Object, rep *Report, r ref.Ref) (int, error) {
 	first, ok := s.next()
 	if !ok {
@@ -385,22 +395,26 @@ func parseProps(s *scanner, o *world.Object, rep *Report, r ref.Ref) (int, error
 		}
 		name, value, err := parseProp(line)
 		if err != nil {
-			// A single unreadable property is not worth abandoning
-			// the whole world for; upstream skips it too.
+			// A single unreadable property is not worth
+			// abandoning the whole world for; upstream
+			// skips it too.
 			rep.warnf("%v: %v", r, err)
 			continue
 		}
 		if name == "" {
 			continue
 		}
-		// Upstream's C never validated a property's bytes as any
-		// encoding, so a live world can carry a value that is not valid
-		// UTF-8 — seen in the wild as debug code that stored a raw
-		// struct in a string property. Postgres's TEXT columns require
-		// valid UTF-8, so this is sanitized here rather than failing the
-		// whole import (or, worse, failing a flush after import, on a
-		// property nothing touched again).
-		if (value.Type == props.String || value.Type == props.Lock) && !utf8.ValidString(value.Str) {
+		// Upstream's C never validated a property's bytes as
+		// any encoding, so a live world can carry a value
+		// that is not valid UTF-8 — seen in the wild as
+		// debug code that stored a raw struct in a string
+		// property. Postgres's TEXT columns require valid
+		// UTF-8, so this is sanitized here rather than
+		// failing the whole import (or, worse, failing a
+		// flush after import, on a property nothing touched
+		// again).
+		if (value.Type == props.String || value.Type == props.Lock) &&
+			!utf8.ValidString(value.Str) {
 			rep.warnf("%v: property %q was not valid UTF-8; invalid bytes replaced", r, name)
 			value.Str = strings.ToValidUTF8(value.Str, "�")
 		}
@@ -437,7 +451,8 @@ func parseProp(line string) (string, props.Value, error) {
 		}
 		v.Num = n
 	case props.Ref:
-		// Dumps store dbrefs as bare integers, with no leading #.
+		// Dumps store dbrefs as bare integers, with no
+		// leading #.
 		n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
 		if err != nil {
 			return "", props.Value{}, fmt.Errorf("property %q has a bad dbref %q", name, value)

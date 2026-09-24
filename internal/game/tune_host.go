@@ -9,8 +9,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 )
 
-// objTypeName is upstream's str_objecttype table, for SYSPARM_ARRAY's own
-// "objtype" key on a dbref-typed parameter.
+// objTypeName is upstream's str_objecttype table, for SYSPARM_ARRAY's
+// own "objtype" key on a dbref-typed parameter.
 func objTypeName(t ref.ObjType) string {
 	switch t {
 	case ref.TypeRoom:
@@ -27,8 +27,9 @@ func objTypeName(t ref.ObjType) string {
 	return "unknown"
 }
 
-// TuneGet implements muf.Host for SYSPARM (and PRONOUN_SUB's own gender_prop
-// lookup), upstream's tune_get_parmstring minus its own mlev gate.
+// TuneGet implements muf.Host for SYSPARM (and PRONOUN_SUB's own
+// gender_prop lookup), upstream's tune_get_parmstring minus its own
+// mlev gate.
 func (h *mufHost) TuneGet(name string) (string, bool) {
 	p, ok := tune.Lookup(name)
 	if !ok {
@@ -38,8 +39,9 @@ func (h *mufHost) TuneGet(name string) (string, bool) {
 	return p.Format(v), true
 }
 
-// TuneReadMLevel and TuneWriteMLevel implement muf.Host for the mlev checks
-// SYSPARM, SETSYSPARM and SYSPARM_ARRAY make against TUNE_MLEV(player).
+// TuneReadMLevel and TuneWriteMLevel implement muf.Host for the mlev
+// checks SYSPARM, SETSYSPARM and SYSPARM_ARRAY make against
+// TUNE_MLEV(player).
 func (h *mufHost) TuneReadMLevel(name string) (int, bool) {
 	p, ok := tune.Lookup(name)
 	if !ok {
@@ -56,8 +58,8 @@ func (h *mufHost) TuneWriteMLevel(name string) (int, bool) {
 	return p.WriteMLev, true
 }
 
-// TuneSet implements muf.Host for SETSYSPARM, upstream's tune_setparm minus
-// its own mlev gate.
+// TuneSet implements muf.Host for SETSYSPARM, upstream's tune_setparm
+// minus its own mlev gate.
 func (h *mufHost) TuneSet(name, value string) (bool, error) {
 	reset := false
 	if rest, isReset := strings.CutPrefix(name, "%"); isReset {
@@ -73,11 +75,18 @@ func (h *mufHost) TuneSet(name, value string) (bool, error) {
 	return true, h.w.SetTune(p.Name, value)
 }
 
-// TuneBool and TuneInt implement muf.Host's typed, server-side tune reads.
-func (h *mufHost) TuneBool(name string) bool { return h.w.Tune.Bool(name) }
-func (h *mufHost) TuneInt(name string) int64 { return h.w.Tune.Int(name) }
+// TuneBool and TuneInt implement muf.Host's typed, server-side tune
+// reads.
+func (h *mufHost) TuneBool(name string) bool {
+	return h.w.Tune.Bool(name)
+}
+func (h *mufHost) TuneInt(name string) int64 {
+	return h.w.Tune.Int(name)
+}
 
-func (h *mufHost) TuneSpan(name string) time.Duration { return h.w.Tune.Duration(name) }
+func (h *mufHost) TuneSpan(name string) time.Duration {
+	return h.w.Tune.Duration(name)
+}
 
 // TuneList implements muf.Host for SYSPARM_ARRAY, upstream's
 // tune_parms_array.
@@ -87,7 +96,8 @@ func (h *mufHost) TuneList(pattern string, mlevel int) []muf.TuneEntry {
 		if p.ReadMLev > mlevel {
 			continue
 		}
-		if pattern != "" && !strings.EqualFold(pattern, p.Name) {
+		if pattern != "" &&
+			!strings.EqualFold(pattern, p.Name) {
 			continue
 		}
 		v, _ := h.w.Tune.Get(p.Name)

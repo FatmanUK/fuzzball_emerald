@@ -10,8 +10,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// dropWizardBit makes the harness's player an ordinary one, for the checks
-// that a wizard is exempt from.
+// dropWizardBit makes the harness's player an ordinary one, for the
+// checks that a wizard is exempt from.
 func dropWizardBit(t *testing.T, h *harness) {
 	t.Helper()
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
@@ -35,14 +35,16 @@ func setTune(t *testing.T, h *harness, name, value string) {
 
 func TestPlayermaxRefusesLoginWhenFull(t *testing.T) {
 	h := newHarness(t)
-	// The cap counts connections that have *finished* logging in, as
-	// upstream's con_players_curr does — this one has not, so a limit of
-	// zero is what makes the server full for it. That is also a real
-	// configuration: it is how a world is closed for maintenance.
+	// The cap counts connections that have *finished* logging in,
+	// as upstream's con_players_curr does — this one has not,
+	// so a limit of zero is what makes the server full for it.
+	// That is also a real configuration: it is how a world is
+	// closed for maintenance.
 	setTune(t, h, "playermax", "yes")
 	setTune(t, h, "playermax_limit", "0")
 
-	// The wizard is exempt, so it has to lose the bit to be refused.
+	// The wizard is exempt, so it has to lose the bit to be
+	// refused.
 	dropWizardBit(t, h)
 
 	h.send("connect Wizard secret")
@@ -55,15 +57,17 @@ func TestPlayermaxRefusesLoginWhenFull(t *testing.T) {
 	}
 }
 
-// TestPlayermaxCountsLoggedInConnections pins the distinction the test above
-// depends on: someone sitting at the login screen does not occupy a place.
+// TestPlayermaxCountsLoggedInConnections pins the distinction the
+// test above depends on: someone sitting at the login screen does not
+// occupy a place.
 func TestPlayermaxCountsLoggedInConnections(t *testing.T) {
 	h := newHarness(t)
 	setTune(t, h, "playermax", "yes")
 	setTune(t, h, "playermax_limit", "1")
 	dropWizardBit(t, h)
 
-	// This connection is at the login screen, so the one place is free.
+	// This connection is at the login screen, so the one place is
+	// free.
 	h.send("connect Wizard secret")
 	if got := h.out(); !strings.Contains(got, "The Study") {
 		t.Fatalf("the first login should have been allowed:\n%s", got)
@@ -81,8 +85,9 @@ func TestPlayermaxCountsLoggedInConnections(t *testing.T) {
 	}
 }
 
-// TestPlayermaxExemptsWizards is the half that matters operationally: an
-// admin has to be able to get in to deal with whatever filled the server up.
+// TestPlayermaxExemptsWizards is the half that matters operationally:
+// an admin has to be able to get in to deal with whatever filled the
+// server up.
 func TestPlayermaxExemptsWizards(t *testing.T) {
 	h := newHarness(t)
 	setTune(t, h, "playermax", "yes")
@@ -110,9 +115,9 @@ func TestPlayermaxOffAllowsEveryone(t *testing.T) {
 	}
 }
 
-// TestQuotaRefillsOnTick checks the wiring rather than the bucket itself,
-// which internal/session tests directly: a tick has to hand out the
-// allowance the @tune parameters name.
+// TestQuotaRefillsOnTick checks the wiring rather than the bucket
+// itself, which internal/session tests directly: a tick has to hand
+// out the allowance the @tune parameters name.
 func TestQuotaRefillsOnTick(t *testing.T) {
 	h := newHarness(t)
 	h.login()

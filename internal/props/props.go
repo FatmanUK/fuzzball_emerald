@@ -1,11 +1,11 @@
-// Package props implements the property tree hanging off every database
-// object.
+// Package props implements the property tree hanging off every
+// database object.
 //
 // Fuzzball stores properties in a per-directory AVL tree keyed with
-// strcasecmp, so lookup and ordering are case-insensitive while the name keeps
-// whatever case it was first created with. This package keeps those semantics
-// with a sorted child slice per node, which is observably identical and much
-// easier to persist.
+// strcasecmp, so lookup and ordering are case-insensitive while the
+// name keeps whatever case it was first created with. This package
+// keeps those semantics with a sorted child slice per node, which is
+// observably identical and much easier to persist.
 package props
 
 import (
@@ -16,8 +16,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// Type is a property's value type. The values are stored in legacy database
-// dumps and must not be renumbered.
+// Type is a property's value type. The values are stored in legacy
+// database dumps and must not be renumbered.
 type Type uint8
 
 const (
@@ -50,15 +50,17 @@ func (t Type) String() string {
 	}
 }
 
-// FlagBlessed marks a property whose MPI evaluates with wizard permissions.
-// It is the one persisted flag; everything else in the upstream flag word
-// describes diskbase state that Emerald does not have.
+// FlagBlessed marks a property whose MPI evaluates with wizard
+// permissions. It is the one persisted flag; everything else in the
+// upstream flag word describes diskbase state that Emerald does not
+// have.
 const FlagBlessed = 0x1000
 
-// Value is a property's contents. Only the field matching Type is meaningful.
+// Value is a property's contents. Only the field matching Type is
+// meaningful.
 //
-// A lock is held as its unparsed boolean expression, which is also how dumps
-// store it; boolexp parsing happens at the point of use.
+// A lock is held as its unparsed boolean expression, which is also
+// how dumps store it; boolexp parsing happens at the point of use.
 type Value struct {
 	Type    Type
 	Str     string
@@ -68,9 +70,9 @@ type Value struct {
 	Blessed bool
 }
 
-// IsEmpty reports whether setting this value should delete the property
-// instead of storing it. Fuzzball treats an empty string, a zero number and a
-// NOTHING dbref as a request to unset.
+// IsEmpty reports whether setting this value should delete the
+// property instead of storing it. Fuzzball treats an empty string, a
+// zero number and a NOTHING dbref as a request to unset.
 func (v Value) IsEmpty() bool {
 	switch v.Type {
 	case String, Lock:
@@ -86,7 +88,8 @@ func (v Value) IsEmpty() bool {
 	}
 }
 
-// StringValue renders a value the way a dump stores it and MUF prints it.
+// StringValue renders a value the way a dump stores it and MUF prints
+// it.
 func (v Value) StringValue() string {
 	switch v.Type {
 	case String, Lock:
@@ -120,9 +123,10 @@ type Tree struct {
 // New returns an empty tree.
 func New() *Tree { return &Tree{} }
 
-// split normalises a property path into its segments. Leading and repeated
-// slashes are dropped, and the path is truncated at the first ':', which is
-// the delimiter dumps use between a name and its flags.
+// split normalises a property path into its segments. Leading and
+// repeated slashes are dropped, and the path is truncated at the
+// first ':', which is the delimiter dumps use between a name and its
+// flags.
 func split(path string) []string {
 	if i := strings.IndexByte(path, ':'); i >= 0 {
 		path = path[:i]
@@ -136,8 +140,9 @@ func split(path string) []string {
 	return out
 }
 
-// find locates a child by folded name, returning its index. The bool reports
-// an exact match; otherwise the index is where it would be inserted.
+// find locates a child by folded name, returning its index. The bool
+// reports an exact match; otherwise the index is where it would be
+// inserted.
 func (n *node) find(f string) (int, bool) {
 	i := sort.Search(len(n.kids), func(i int) bool { return n.kids[i].fold >= f })
 	return i, i < len(n.kids) && n.kids[i].fold == f
@@ -176,8 +181,8 @@ func (t *Tree) lookup(path string) *node {
 	return n
 }
 
-// Get returns the value at path. The bool reports whether a value is present;
-// a path that exists only as a directory reports false.
+// Get returns the value at path. The bool reports whether a value is
+// present; a path that exists only as a directory reports false.
 func (t *Tree) Get(path string) (Value, bool) {
 	n := t.lookup(path)
 	if n == nil || !n.has {
@@ -187,7 +192,9 @@ func (t *Tree) Get(path string) (Value, bool) {
 }
 
 // Exists reports whether anything lives at path, value or directory.
-func (t *Tree) Exists(path string) bool { return t.lookup(path) != nil }
+func (t *Tree) Exists(path string) bool {
+	return t.lookup(path) != nil
+}
 
 // IsDir reports whether path has children.
 func (t *Tree) IsDir(path string) bool {
@@ -195,9 +202,9 @@ func (t *Tree) IsDir(path string) bool {
 	return n != nil && len(n.kids) > 0
 }
 
-// Set stores a value. Following Fuzzball, storing an empty value unsets the
-// property instead: the node becomes a plain directory, and is removed
-// entirely if it has no children.
+// Set stores a value. Following Fuzzball, storing an empty value
+// unsets the property instead: the node becomes a plain directory,
+// and is removed entirely if it has no children.
 func (t *Tree) Set(path string, v Value) {
 	segs := split(path)
 	if len(segs) == 0 {
@@ -218,18 +225,21 @@ func (t *Tree) Set(path string, v Value) {
 }
 
 // SetString is shorthand for storing a string property.
-func (t *Tree) SetString(path, s string) { t.Set(path, Value{Type: String, Str: s}) }
+func (t *Tree) SetString(path, s string) {
+	t.Set(path, Value{Type: String, Str: s})
+}
 
-// Delete removes the value at path. A node with children survives as a
-// directory; one without is pruned, along with any parents left empty. It
-// reports whether anything was removed.
+// Delete removes the value at path. A node with children survives as
+// a directory; one without is pruned, along with any parents left
+// empty. It reports whether anything was removed.
 func (t *Tree) Delete(path string) bool {
 	segs := split(path)
 	if len(segs) == 0 {
 		return false
 	}
 
-	// Walk down, remembering the path so empty parents can be pruned.
+	// Walk down, remembering the path so empty parents can be
+	// pruned.
 	chain := make([]*node, 0, len(segs)+1)
 	n := &t.root
 	chain = append(chain, n)
@@ -247,7 +257,8 @@ func (t *Tree) Delete(path string) bool {
 	}
 	n.val, n.has = Value{}, false
 
-	// Prune upwards while nodes carry neither a value nor children.
+	// Prune upwards while nodes carry neither a value nor
+	// children.
 	for i := len(chain) - 1; i > 0; i-- {
 		c := chain[i]
 		if c.has || len(c.kids) > 0 {
@@ -261,8 +272,8 @@ func (t *Tree) Delete(path string) bool {
 	return removed
 }
 
-// DeleteDir removes path and everything beneath it, reporting how many
-// value-bearing properties went with it.
+// DeleteDir removes path and everything beneath it, reporting how
+// many value-bearing properties went with it.
 func (t *Tree) DeleteDir(path string) int {
 	segs := split(path)
 	if len(segs) == 0 {
@@ -296,8 +307,8 @@ func countValues(n *node) int {
 	return c
 }
 
-// Children lists the names directly under path, in the order MUF's nextprop
-// walks them. Names keep the case they were created with.
+// Children lists the names directly under path, in the order MUF's
+// nextprop walks them. Names keep the case they were created with.
 func (t *Tree) Children(path string) []string {
 	n := t.lookup(path)
 	if n == nil {
@@ -310,8 +321,8 @@ func (t *Tree) Children(path string) []string {
 	return out
 }
 
-// Len returns the number of properties that carry a value. Directories that
-// exist only to hold children are not counted.
+// Len returns the number of properties that carry a value.
+// Directories that exist only to hold children are not counted.
 func (t *Tree) Len() int { return t.n }
 
 // Entry is one property, as produced by Walk.
@@ -320,8 +331,8 @@ type Entry struct {
 	Value Value
 }
 
-// Walk visits every value-bearing property in depth-first order, parents
-// before children and siblings in nextprop order.
+// Walk visits every value-bearing property in depth-first order,
+// parents before children and siblings in nextprop order.
 func (t *Tree) Walk(fn func(Entry) bool) {
 	walk(&t.root, "", fn)
 }
@@ -352,8 +363,8 @@ func (t *Tree) All() []Entry {
 	return out
 }
 
-// Clone returns a deep copy, so a snapshot can be handed to the persister
-// while the world keeps mutating the original.
+// Clone returns a deep copy, so a snapshot can be handed to the
+// persister while the world keeps mutating the original.
 func (t *Tree) Clone() *Tree {
 	return &Tree{root: *cloneNode(&t.root), n: t.n}
 }

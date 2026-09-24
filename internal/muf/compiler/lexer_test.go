@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// lexAll returns every token's text, or the error that stopped lexing.
+// lexAll returns every token's text, or the error that stopped
+// lexing.
 func lexAll(t *testing.T, src string) ([]string, error) {
 	t.Helper()
 	l := newLexer(src)
@@ -72,8 +73,9 @@ func TestLexStrings(t *testing.T) {
 }
 
 func TestLexStringEscapes(t *testing.T) {
-	// \r is a carriage return, which MUCK uses as the in-string line
-	// separator; \[ is the ANSI escape; anything else is itself.
+	// \r is a carriage return, which MUCK uses as the in-string
+	// line separator; \[ is the ANSI escape; anything else is
+	// itself.
 	got := mustLex(t, `"a\rb" "\[[0m" "\q"`)
 	if got[0] != "a\rb" {
 		t.Errorf("\\r = %q, want a carriage return", got[0])
@@ -87,7 +89,8 @@ func TestLexStringEscapes(t *testing.T) {
 }
 
 func TestStringsAreMarked(t *testing.T) {
-	// A quoted literal that looks like a number is still a string.
+	// A quoted literal that looks like a number is still a
+	// string.
 	l := newLexer(`"123" 123`)
 	first, _, _ := l.next()
 	second, _, _ := l.next()
@@ -127,9 +130,10 @@ func TestCommentsNest(t *testing.T) {
 	}
 }
 
-// TestUnbalancedCommentFallsBackToFlat covers the behaviour old MUF depends
-// on: a comment containing an unmatched '(' does not nest cleanly, and
-// upstream retries it as a flat comment ending at the first ')'.
+// TestUnbalancedCommentFallsBackToFlat covers the behaviour old MUF
+// depends on: a comment containing an unmatched '(' does not nest
+// cleanly, and upstream retries it as a flat comment ending at the
+// first ')'.
 func TestUnbalancedCommentFallsBackToFlat(t *testing.T) {
 	got := mustLex(t, "a ( a smiley :-( in a comment ) b")
 	if strings.Join(got, "|") != "a|b" {
@@ -138,13 +142,13 @@ func TestUnbalancedCommentFallsBackToFlat(t *testing.T) {
 }
 
 func TestCommentNestingIsBounded(t *testing.T) {
-	// Eight levels exceeds the limit, so the flat fallback takes over and
-	// the comment ends at the first ')'.
+	// Eight levels exceeds the limit, so the flat fallback takes
+	// over and the comment ends at the first ')'.
 	src := "a " + strings.Repeat("(", 8) + " x " + strings.Repeat(")", 8) + " b"
 	got := mustLex(t, src)
-	// The flat fallback stops at the first ')', so the trailing parens
-	// become tokens. What matters is that lexing terminates and does not
-	// error.
+	// The flat fallback stops at the first ')', so the trailing
+	// parens become tokens. What matters is that lexing
+	// terminates and does not error.
 	if len(got) == 0 || got[0] != "a" {
 		t.Errorf("got %v, want it to start with a", got)
 	}

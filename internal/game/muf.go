@@ -18,17 +18,19 @@ import (
 
 // mufHost lets a running program reach the world.
 //
-// Every method runs on the world goroutine, because the interpreter is driven
-// from there and never from a connection's own.
+// Every method runs on the world goroutine, because the interpreter
+// is driven from there and never from a connection's own.
 type mufHost struct {
 	s *Server
 	w *world.World
-	// caller is the player the program is running for, which MPI needs as
-	// the audience for what it evaluates.
+	// caller is the player the program is running for, which MPI
+	// needs as the audience for what it evaluates.
 	caller ref.Ref
 }
 
-func (h *mufHost) Notify(who ref.Ref, msg string) { h.s.send(h.w, who, msg) }
+func (h *mufHost) Notify(who ref.Ref, msg string) {
+	h.s.send(h.w, who, msg)
+}
 
 func (h *mufHost) NotifyExcept(room ref.Ref, except []ref.Ref, msg string) {
 	h.s.notifyRoom(h.w, room, except, "%s", msg)
@@ -61,8 +63,9 @@ func (h *mufHost) Home(obj ref.Ref) ref.Ref {
 	return ref.Nothing
 }
 
-// Links returns what an object points at, which differs by type: an exit's
-// destinations, a room's drop-to, or a thing's or player's home.
+// Links returns what an object points at, which differs by type: an
+// exit's destinations, a room's drop-to, or a thing's or player's
+// home.
 func (h *mufHost) Links(obj ref.Ref) []ref.Ref {
 	o := h.w.Get(obj)
 	if o == nil {
@@ -85,10 +88,16 @@ func (h *mufHost) Links(obj ref.Ref) []ref.Ref {
 	return nil
 }
 
-func (h *mufHost) Contents(obj ref.Ref) []ref.Ref { return h.w.Contents(obj) }
-func (h *mufHost) Exits(obj ref.Ref) []ref.Ref    { return h.w.Exits(obj) }
+func (h *mufHost) Contents(obj ref.Ref) []ref.Ref {
+	return h.w.Contents(obj)
+}
+func (h *mufHost) Exits(obj ref.Ref) []ref.Ref {
+	return h.w.Exits(obj)
+}
 
-func (h *mufHost) MoveTo(what, dest ref.Ref) error { return h.w.MoveTo(what, dest) }
+func (h *mufHost) MoveTo(what, dest ref.Ref) error {
+	return h.w.MoveTo(what, dest)
+}
 
 func (h *mufHost) Valid(obj ref.Ref) bool { return h.w.Valid(obj) }
 
@@ -111,8 +120,8 @@ func (h *mufHost) SetFlags(obj ref.Ref, f ref.Flags) {
 	if o == nil {
 		return
 	}
-	// The type bits are not a program's to change, and the internal flags
-	// describe live server state.
+	// The type bits are not a program's to change, and the
+	// internal flags describe live server state.
 	o.Flags = (f &^ ref.DumpMask).WithType(o.Type())
 	h.w.Modified(obj)
 }
@@ -166,7 +175,8 @@ func (h *mufHost) Descriptors(player ref.Ref) []int {
 	return out
 }
 
-// Online lists the players with a live connection, in connection order.
+// Online lists the players with a live connection, in connection
+// order.
 func (h *mufHost) Online() []ref.Ref {
 	seen := map[ref.Ref]bool{}
 	var out []ref.Ref
@@ -201,7 +211,8 @@ func (h *mufHost) MatchPlayerPrefix(name string) ref.Ref {
 	// No exact match, so accept a unique prefix.
 	found := ref.Nothing
 	h.w.Each(func(o *world.Object) bool {
-		if o.Type() != ref.TypePlayer || !ascii.HasPrefix(o.Name, name) {
+		if o.Type() != ref.TypePlayer ||
+			!ascii.HasPrefix(o.Name, name) {
 			return true
 		}
 		if found != ref.Nothing {
@@ -236,7 +247,9 @@ func (h *mufHost) Create(t ref.ObjType, name string, parent, owner ref.Ref) (ref
 	return o.Ref, nil
 }
 
-func (h *mufHost) Recycle(obj ref.Ref) error { return h.w.Recycle(obj) }
+func (h *mufHost) Recycle(obj ref.Ref) error {
+	return h.w.Recycle(obj)
+}
 
 func (h *mufHost) SetOwner(obj, owner ref.Ref) {
 	if o := h.w.Get(obj); o != nil {
@@ -277,11 +290,12 @@ func (h *mufHost) Timestamps(obj ref.Ref) (int64, int64, int64, int32) {
 	return o.Created.Unix(), o.Modified.Unix(), o.LastUsed.Unix(), o.UseCount
 }
 
-// Entrances lists everything that points at an object, which needs a scan:
-// nothing records the reverse direction.
+// Entrances lists everything that points at an object, which needs a
+// scan: nothing records the reverse direction.
 //
-// Exits that lead there count, and so do a thing's or player's home and a
-// room's drop-to, because all three are links to the same place.
+// Exits that lead there count, and so do a thing's or player's home
+// and a room's drop-to, because all three are links to the same
+// place.
 func (h *mufHost) Entrances(target ref.Ref) []ref.Ref {
 	var out []ref.Ref
 	h.w.Each(func(o *world.Object) bool {
@@ -332,8 +346,8 @@ func (h *mufHost) SetPassword(player ref.Ref, pass string) error {
 	return nil
 }
 
-// ParseProp evaluates a property's MPI, which is how MUF reaches the other
-// language.
+// ParseProp evaluates a property's MPI, which is how MUF reaches the
+// other language.
 func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string, error) {
 	o := h.w.Get(obj)
 	if o == nil {
@@ -359,8 +373,9 @@ func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string
 	return mpi.Eval(env, v.StringValue()), nil
 }
 
-// ParsePropEx implements muf.Host for PARSEPROPEX: ParseProp with a caller's
-// own variables in scope, handed back with whatever the MPI left in them.
+// ParsePropEx implements muf.Host for PARSEPROPEX: ParseProp with a
+// caller's own variables in scope, handed back with whatever the MPI
+// left in them.
 func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, private bool) (string, []muf.MPIVar, error) {
 	o := h.w.Get(obj)
 	if o == nil {
@@ -368,8 +383,9 @@ func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, priva
 	}
 	v, ok := o.Props.Get(path)
 	if !ok || v.StringValue() == "" {
-		// Nothing to evaluate, so the variables come back untouched —
-		// upstream skips the whole block when the property is empty.
+		// Nothing to evaluate, so the variables come back
+		// untouched — upstream skips the whole block when
+		// the property is empty.
 		return "", vars, nil
 	}
 
@@ -388,9 +404,9 @@ func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, priva
 
 	out := mpi.Eval(env, v.StringValue())
 
-	// The variables are read back in the order they were given, so the
-	// primitive can put them into the same dictionary keys it took them
-	// from.
+	// The variables are read back in the order they were given,
+	// so the primitive can put them into the same dictionary keys
+	// it took them from.
 	result := make([]muf.MPIVar, len(vars))
 	for i, kv := range vars {
 		final, _ := env.Var(kv.Name)
@@ -399,8 +415,9 @@ func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, priva
 	return out, result, nil
 }
 
-// ParseMPI implements muf.Host for PARSEMPI/PARSEMPIBLESSED: evaluates
-// source directly as MPI, rather than reading it from a property first.
+// ParseMPI implements muf.Host for PARSEMPI/PARSEMPIBLESSED:
+// evaluates source directly as MPI, rather than reading it from a
+// property first.
 func (h *mufHost) ParseMPI(who ref.Ref, source, arg string, blessed bool) (string, error) {
 	if source == "" {
 		return "", nil
@@ -420,8 +437,8 @@ func (h *mufHost) ParseMPI(who ref.Ref, source, arg string, blessed bool) (strin
 	return mpi.Eval(env, source), nil
 }
 
-// BlessProp and IsPropBlessed implement muf.Host for BLESSPROP/UNBLESSPROP
-// and BLESSED?.
+// BlessProp and IsPropBlessed implement muf.Host for
+// BLESSPROP/UNBLESSPROP and BLESSED?.
 func (h *mufHost) BlessProp(obj ref.Ref, path string, blessed bool) {
 	v, ok := h.GetProp(obj, path)
 	if !ok {
@@ -438,9 +455,13 @@ func (h *mufHost) IsPropBlessed(obj ref.Ref, path string) bool {
 
 func (h *mufHost) Now() time.Time { return h.w.Now() }
 
-func (h *mufHost) Uptime() time.Duration { return h.w.Now().Sub(h.s.started) }
+func (h *mufHost) Uptime() time.Duration {
+	return h.w.Now().Sub(h.s.started)
+}
 
-func (h *mufHost) Version() string { return "Fuzzball Emerald " + Version }
+func (h *mufHost) Version() string {
+	return "Fuzzball Emerald " + Version
+}
 
 // compiled caches a program's compiled form, keyed by ref.
 type compiled struct {
@@ -448,9 +469,9 @@ type compiled struct {
 	err  error
 }
 
-// compileProgram compiles a program, caching the result. A program that fails
-// to compile caches its error too, so a broken one is not recompiled on every
-// use.
+// compileProgram compiles a program, caching the result. A program
+// that fails to compile caches its error too, so a broken one is not
+// recompiled on every use.
 func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error) {
 	if c, ok := s.programs[r]; ok {
 		return c.prog, c.err
@@ -468,16 +489,17 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 	return prog, err
 }
 
-// compileSource compiles text as if it were a program's source, without
-// consulting or updating the cache. The editor needs this to check a buffer
-// that has not been saved.
+// compileSource compiles text as if it were a program's source,
+// without consulting or updating the cache. The editor needs this to
+// check a buffer that has not been saved.
 func (s *Server) compileSource(w *world.World, r ref.Ref, src string) (*muf.Program, error) {
-	// A program runs at the lower of its own mucker level and its owner's,
-	// which is what find_mlev computes. A programmer cannot grant a program
-	// more authority than they hold by setting bits on it.
+	// A program runs at the lower of its own mucker level and its
+	// owner's, which is what find_mlev computes. A programmer
+	// cannot grant a program more authority than they hold by
+	// setting bits on it.
 	//
-	// Note that a wizard with no mucker bits has level 0, so programs it
-	// owns are capped there.
+	// Note that a wizard with no mucker bits has level 0, so
+	// programs it owns are capped there.
 	o := w.Get(r)
 	mlev := 1
 	if o != nil {
@@ -500,17 +522,20 @@ func (s *Server) compileSource(w *world.World, r ref.Ref, src string) (*muf.Prog
 	})
 }
 
-// InvalidateProgram drops a program's cached compile, which an edit needs.
-func (s *Server) InvalidateProgram(r ref.Ref) { delete(s.programs, r) }
+// InvalidateProgram drops a program's cached compile, which an edit
+// needs.
+func (s *Server) InvalidateProgram(r ref.Ref) {
+	delete(s.programs, r)
+}
 
-// cacheProgram installs a compile result, so a program checked in the editor
-// runs without being compiled again.
+// cacheProgram installs a compile result, so a program checked in the
+// editor runs without being compiled again.
 func (s *Server) cacheProgram(r ref.Ref, prog *muf.Program, err error) {
 	s.programs[r] = compiled{prog: prog, err: err}
 }
 
-// definesFor collects the compile-time definitions a program sees: the _defs/
-// propdir on #0 and on the program's owner.
+// definesFor collects the compile-time definitions a program sees:
+// the _defs/ propdir on #0 and on the program's owner.
 func (s *Server) definesFor(w *world.World, prog ref.Ref) map[string]string {
 	out := map[string]string{}
 	collectDefs(w, ref.GlobalEnvironment, out)
@@ -534,8 +559,8 @@ func collectDefs(w *world.World, holder ref.Ref, out map[string]string) {
 	}
 }
 
-// includerFor resolves a $include target: a registered name through the _reg/
-// propdir on #0, or a bare dbref.
+// includerFor resolves a $include target: a registered name through
+// the _reg/ propdir on #0, or a bare dbref.
 func (s *Server) includerFor(w *world.World) func(string) (map[string]string, bool) {
 	return func(target string) (map[string]string, bool) {
 		var r ref.Ref
@@ -566,23 +591,24 @@ func (s *Server) includerFor(w *world.World) func(string) (map[string]string, bo
 	}
 }
 
-// reportMUFError tells a player their program failed, in the shape Fuzzball
-// uses.
+// reportMUFError tells a player their program failed, in the shape
+// Fuzzball uses.
 //
-// Two conditions are upstream's, not decoration. The header differs depending
-// on whether the player owns the program, because a stranger cannot act on the
-// message and is told whom to tell instead. And the backtrace appears only to
-// someone who controls the program, since it exposes its source.
+// Two conditions are upstream's, not decoration. The header differs
+// depending on whether the player owns the program, because a
+// stranger cannot act on the message and is told whom to tell
+// instead. And the backtrace appears only to someone who controls the
+// program, since it exposes its source.
 func (s *Server) reportMUFError(c *ctx, f *muf.Frame, prog ref.Ref, err error) {
 	s.reportMUFErrorTo(c.w, c.who, f, prog, err)
 }
 
 // runProgram compiles and runs a program on behalf of a player.
 //
-// It runs to completion on the world goroutine, in instruction slices so a
-// long program does not block it indefinitely. Real multitasking — running
-// several programs concurrently, and suspending one on READ or SLEEP — needs
-// the process queue, which is M7.
+// It runs to completion on the world goroutine, in instruction slices
+// so a long program does not block it indefinitely. Real multitasking
+// — running several programs concurrently, and suspending one on
+// READ or SLEEP — needs the process queue, which is M7.
 func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 	p, err := s.compileProgram(c.w, prog)
 	if err != nil {
@@ -620,8 +646,8 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 	s.step(c.w, proc)
 }
 
-// reportMUFErrorTo is reportMUFError for a process, which has no command
-// context to report through.
+// reportMUFErrorTo is reportMUFError for a process, which has no
+// command context to report through.
 func (s *Server) reportMUFErrorTo(w *world.World, who ref.Ref, f *muf.Frame,
 	prog ref.Ref, err error) {
 

@@ -31,8 +31,9 @@ func TestLookupIsCaseInsensitiveButPreservesCase(t *testing.T) {
 			t.Errorf("Get(%q) = %+v, %v; lookup should be case-insensitive", p, v, ok)
 		}
 	}
-	// Writing through a different case updates the same property and leaves
-	// the original spelling alone, as the AVL tree does upstream.
+	// Writing through a different case updates the same property
+	// and leaves the original spelling alone, as the AVL tree
+	// does upstream.
 	tr.SetString("_/de", "updated")
 	if tr.Len() != 1 {
 		t.Errorf("Len() = %d, want 1: differing case must not create a second property", tr.Len())
@@ -43,8 +44,9 @@ func TestLookupIsCaseInsensitiveButPreservesCase(t *testing.T) {
 }
 
 func TestFoldIsASCIIOnly(t *testing.T) {
-	// strcasecmp in the C locale does not fold non-ASCII, so these are
-	// distinct properties even though Unicode folding would merge them.
+	// strcasecmp in the C locale does not fold non-ASCII, so
+	// these are distinct properties even though Unicode folding
+	// would merge them.
 	tr := New()
 	tr.SetString("Ä", "a")
 	tr.SetString("ä", "b")
@@ -67,8 +69,8 @@ func TestPathNormalisation(t *testing.T) {
 }
 
 func TestEmptyValueDeletes(t *testing.T) {
-	// Fuzzball treats setting an empty value as an unset, which is
-	// surprising but load-bearing for existing MUF.
+	// Fuzzball treats setting an empty value as an unset, which
+	// is surprising but load-bearing for existing MUF.
 	cases := []struct {
 		name string
 		val  Value
@@ -180,7 +182,8 @@ func TestWalkOrder(t *testing.T) {
 		got = append(got, e.Path)
 		return true
 	})
-	// Parents come before their children; siblings in nextprop order.
+	// Parents come before their children; siblings in nextprop
+	// order.
 	want := []string{"a", "a/x", "a/y", "b"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Walk order = %v, want %v", got, want)

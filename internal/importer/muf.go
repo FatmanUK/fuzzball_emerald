@@ -19,8 +19,9 @@ type Macro struct {
 	Owner      ref.Ref
 }
 
-// ParseMacros reads the muf/macros file, which stores three lines per macro:
-// the name, the definition, and the owner's dbref without a leading '#'.
+// ParseMacros reads the muf/macros file, which stores three lines per
+// macro: the name, the definition, and the owner's dbref without a
+// leading '#'.
 func ParseMacros(r io.Reader) ([]Macro, error) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), maxLine)
@@ -40,7 +41,8 @@ func ParseMacros(r io.Reader) ([]Macro, error) {
 		if !ok {
 			break
 		}
-		// Upstream writes no blank lines, but tolerate a trailing one.
+		// Upstream writes no blank lines, but tolerate a
+		// trailing one.
 		if strings.TrimSpace(name) == "" {
 			continue
 		}
@@ -62,18 +64,19 @@ func ParseMacros(r io.Reader) ([]Macro, error) {
 	return out, sc.Err()
 }
 
-// ProgramSource is one program's text, keyed by the ref its file is named for.
+// ProgramSource is one program's text, keyed by the ref its file is
+// named for.
 type ProgramSource struct {
 	Ref    ref.Ref
 	Source string
 }
 
-// LoadProgramDir reads the muf/ directory that sits beside a dump. Fuzzball
-// keeps program text in files named <dbref>.m rather than inside the dump, so
-// a dump on its own carries no code at all.
+// LoadProgramDir reads the muf/ directory that sits beside a dump.
+// Fuzzball keeps program text in files named <dbref>.m rather than
+// inside the dump, so a dump on its own carries no code at all.
 //
-// Files whose names are not a dbref are ignored, which is what lets the macro
-// table live in the same directory.
+// Files whose names are not a dbref are ignored, which is what lets
+// the macro table live in the same directory.
 func LoadProgramDir(dir string) ([]ProgramSource, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

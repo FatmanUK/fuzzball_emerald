@@ -18,7 +18,8 @@ func TestQuotaSpendsAndRefills(t *testing.T) {
 		t.Fatalf("Remaining() = %d, want 0", got)
 	}
 
-	// A third take has to wait, so it only completes once Add runs.
+	// A third take has to wait, so it only completes once Add
+	// runs.
 	taken := make(chan bool, 1)
 	go func() { taken <- q.Take(done) }()
 	select {
@@ -46,9 +47,9 @@ func TestQuotaAddIsCapped(t *testing.T) {
 	}
 }
 
-// TestQuotaTakeUnblocksOnClose covers the case that would otherwise leak a
-// transport goroutine: a connection that goes away while its input is being
-// held by the limiter.
+// TestQuotaTakeUnblocksOnClose covers the case that would otherwise
+// leak a transport goroutine: a connection that goes away while its
+// input is being held by the limiter.
 func TestQuotaTakeUnblocksOnClose(t *testing.T) {
 	q := newQuota(0)
 	done := make(chan struct{})

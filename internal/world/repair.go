@@ -2,15 +2,17 @@ package world
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
 
-// RepairChains checks every container's contents and exits lists against what
-// the objects themselves claim, and rebuilds any that disagree.
+// RepairChains checks every container's contents and exits lists
+// against what the objects themselves claim, and rebuilds any that
+// disagree.
 //
-// The lists are stored as Fuzzball keeps them, because MUF can observe their
-// order. Each object also records its own location, which is redundant but
-// cheap, and that redundancy is what makes recovery possible: a chain that has
-// been truncated, cycled or crossed would otherwise silently orphan everything
-// past the break. Rebuilt lists come out in ref order, which is not
-// necessarily the order they had, but no object goes missing.
+// The lists are stored as Fuzzball keeps them, because MUF can
+// observe their order. Each object also records its own location,
+// which is redundant but cheap, and that redundancy is what makes
+// recovery possible: a chain that has been truncated, cycled or
+// crossed would otherwise silently orphan everything past the break.
+// Rebuilt lists come out in ref order, which is not necessarily the
+// order they had, but no object goes missing.
 //
 // It returns the number of containers that had to be rebuilt.
 func (w *World) RepairChains() int {
@@ -24,8 +26,8 @@ func (w *World) RepairChains() int {
 			continue
 		}
 		if w.objs[o.Location] == nil {
-			// The container is gone; the object is unreachable
-			// wherever it thinks it is.
+			// The container is gone; the object is
+			// unreachable wherever it thinks it is.
 			continue
 		}
 		if o.Type() == ref.TypeExit {
@@ -42,9 +44,10 @@ func (w *World) RepairChains() int {
 			continue
 		}
 		fixed := false
-		// Compare membership, not order: a healthy chain is in
-		// insertion order, which is not ref order, and reordering it on
-		// every boot would be a bug of its own.
+		// Compare membership, not order: a healthy chain is
+		// in insertion order, which is not ref order, and
+		// reordering it on every boot would be a bug of its
+		// own.
 		if !sameMembers(w.chain(r, false), wantContents[r]) {
 			w.relink(wantContents[r], &c.Contents)
 			fixed = true
@@ -76,8 +79,8 @@ func (w *World) relink(members []ref.Ref, head *ref.Ref) {
 	}
 }
 
-// sameMembers reports whether two ref lists hold exactly the same refs,
-// in any order and with no duplicates in a.
+// sameMembers reports whether two ref lists hold exactly the same
+// refs, in any order and with no duplicates in a.
 func sameMembers(a, b []ref.Ref) bool {
 	if len(a) != len(b) {
 		return false
@@ -90,8 +93,9 @@ func sameMembers(a, b []ref.Ref) bool {
 		if _, ok := seen[r]; !ok {
 			return false
 		}
-		// Delete as we go, so a chain that visits the same object twice
-		// is caught rather than passing on length alone.
+		// Delete as we go, so a chain that visits the same
+		// object twice is caught rather than passing on
+		// length alone.
 		delete(seen, r)
 	}
 	return len(seen) == 0

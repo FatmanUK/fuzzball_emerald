@@ -15,7 +15,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
 )
 
-// version is stamped at build time with -ldflags "-X main.version=...".
+// version is stamped at build time with -ldflags "-X
+// main.version=...".
 var version = "dev"
 
 func main() {
@@ -72,9 +73,9 @@ func run(args []string) error {
 	}
 }
 
-// notifyContext returns a context cancelled on SIGINT or SIGTERM. A second
-// signal aborts immediately, so an operator is never stuck waiting on a
-// shutdown that has wedged.
+// notifyContext returns a context cancelled on SIGINT or SIGTERM. A
+// second signal aborts immediately, so an operator is never stuck
+// waiting on a shutdown that has wedged.
 func notifyContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }

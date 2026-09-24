@@ -6,16 +6,16 @@ import (
 	"time"
 )
 
-// sanityScript runs the checker over a clean database, damages it with
-// @sanchange, checks again, repairs, and checks once more.
+// sanityScript runs the checker over a clean database, damages it
+// with @sanchange, checks again, repairs, and checks once more.
 //
-// @sanchange is the only way to create the damage from inside the game, which
-// is exactly what it exists for.
+// @sanchange is the only way to create the damage from inside the
+// game, which is exactly what it exists for.
 var sanityScript = Script{
 	"@sanity",
 
-	// A room whose drop-to points at an exit, and a thing homed to
-	// something that cannot be a home.
+	// A room whose drop-to points at an exit, and a thing homed
+	// to something that cannot be a home.
 	"@sanchange #0 home #3",
 	"@sanchange #2 location #3",
 	"@sanity",
@@ -36,24 +36,27 @@ var sanityScript = Script{
 
 // uncompared are the steps whose output is deliberately not diffed.
 //
-// @sanfix prints what it changed, and the two servers repair differently:
-// upstream cuts the damaged chains and then hunts for whatever fell out of
-// them, while Emerald corrects each object and rebuilds the chains from the
-// locations, because it stores each object's location as well as the chain.
-// What is compared instead is the check either side of the repair, which is
-// what says whether they agree about the state of the database.
+// @sanfix prints what it changed, and the two servers repair
+// differently: upstream cuts the damaged chains and then hunts for
+// whatever fell out of them, while Emerald corrects each object and
+// rebuilds the chains from the locations, because it stores each
+// object's location as well as the chain. What is compared instead is
+// the check either side of the repair, which is what says whether
+// they agree about the state of the database.
 //
-// The malformed-dbref case is upstream reading a stale stack variable:
-// sscanf leaves its target untouched when the input does not parse, so the
-// number it reports is left over from the previous command. That is not
-// behaviour to reproduce — it is not stable enough for anything to depend on
-// — so this server reports the dbref it actually failed to read.
+// The malformed-dbref case is upstream reading a stale stack
+// variable: sscanf leaves its target untouched when the input does
+// not parse, so the number it reports is left over from the previous
+// command. That is not behaviour to reproduce — it is not stable
+// enough for anything to depend on — so this server reports the
+// dbref it actually failed to read.
 var uncompared = map[string]bool{
 	"@sanfix":                      true,
 	"@sanchange notadbref home #1": true,
 }
 
-// TestSanityMatchesFuzzball checks the sanity reports against the C server.
+// TestSanityMatchesFuzzball checks the sanity reports against the C
+// server.
 func TestSanityMatchesFuzzball(t *testing.T) {
 	requireOracle(t)
 	ctx := context.Background()

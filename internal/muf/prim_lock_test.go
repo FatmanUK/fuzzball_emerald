@@ -7,10 +7,11 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// lockTestHost implements only what TESTLOCK and LOCKED? need. Embedding the
-// Host interface itself satisfies it at compile time and panics on anything
-// else called, which surfaces a test relying on an unstubbed method loudly
-// rather than silently returning a zero value.
+// lockTestHost implements only what TESTLOCK and LOCKED? need.
+// Embedding the Host interface itself satisfies it at compile time
+// and panics on anything else called, which surfaces a test relying
+// on an unstubbed method loudly rather than silently returning a zero
+// value.
 type lockTestHost struct {
 	Host
 
@@ -21,8 +22,9 @@ type lockTestHost struct {
 	testLockCalls []testLockCall
 	testLockOK    bool
 	testLockErr   error
-	// testLockFunc, when set, decides TestLock's result per testPlayer
-	// instead of the single testLockOK value, for tests over several dbrefs.
+	// testLockFunc, when set, decides TestLock's result per
+	// testPlayer instead of the single testLockOK value, for
+	// tests over several dbrefs.
 	testLockFunc func(testPlayer ref.Ref) bool
 
 	lockedOK  bool
@@ -180,12 +182,22 @@ func newLockTestHost() *lockTestHost {
 	}
 }
 
-func (h *lockTestHost) Valid(r ref.Ref) bool          { return h.valid[r] }
-func (h *lockTestHost) ObjType(r ref.Ref) ref.ObjType { return h.types[r] }
-func (h *lockTestHost) Owner(r ref.Ref) ref.Ref       { return h.owner[r] }
-func (h *lockTestHost) Location(ref.Ref) ref.Ref      { return ref.Nothing }
+func (h *lockTestHost) Valid(r ref.Ref) bool {
+	return h.valid[r]
+}
+func (h *lockTestHost) ObjType(r ref.Ref) ref.ObjType {
+	return h.types[r]
+}
+func (h *lockTestHost) Owner(r ref.Ref) ref.Ref {
+	return h.owner[r]
+}
+func (h *lockTestHost) Location(ref.Ref) ref.Ref {
+	return ref.Nothing
+}
 
-func (h *lockTestHost) LockString(obj ref.Ref) string { return h.lockStrings[obj] }
+func (h *lockTestHost) LockString(obj ref.Ref) string {
+	return h.lockStrings[obj]
+}
 
 func (h *lockTestHost) SetLockString(descr int, matchPlayer, obj ref.Ref, raw string) bool {
 	h.setLockCalls = append(h.setLockCalls, setLockCall{descr, matchPlayer, obj, raw})
@@ -221,11 +233,15 @@ func (h *lockTestHost) Locked(descr, level int, player, thing ref.Ref) (bool, er
 	return h.lockedOK, h.lockedErr
 }
 
-func (h *lockTestHost) MaxInterpRecursion() int { return h.maxRecursion }
+func (h *lockTestHost) MaxInterpRecursion() int {
+	return h.maxRecursion
+}
 
-func (h *lockTestHost) ForceLevel() int       { return h.forceLevel }
-func (h *lockTestHost) IsPID(int) bool        { return h.isPIDResult }
-func (h *lockTestHost) Instances(ref.Ref) int { return h.instancesResult }
+func (h *lockTestHost) ForceLevel() int { return h.forceLevel }
+func (h *lockTestHost) IsPID(int) bool  { return h.isPIDResult }
+func (h *lockTestHost) Instances(ref.Ref) int {
+	return h.instancesResult
+}
 
 func (h *lockTestHost) CanCall(callerLevel int, callerUID, prog ref.Ref, name string) bool {
 	h.canCallCalls = append(h.canCallCalls, canCallCall{callerLevel, callerUID, prog, name})
@@ -256,8 +272,12 @@ func (h *lockTestHost) Force(descr int, player, program, victim ref.Ref, command
 	h.forceCalls = append(h.forceCalls, forceCall{descr, player, program, victim, command})
 }
 
-func (h *lockTestHost) ForcedBy() ref.Ref        { return h.forcedByResult }
-func (h *lockTestHost) ForcedByArray() []ref.Ref { return h.forcedByArrayResult }
+func (h *lockTestHost) ForcedBy() ref.Ref {
+	return h.forcedByResult
+}
+func (h *lockTestHost) ForcedByArray() []ref.Ref {
+	return h.forcedByArrayResult
+}
 
 func (h *lockTestHost) GetPIDs(obj ref.Ref, selfPID int) []int {
 	h.getPIDsCalls = append(h.getPIDsCalls, getPIDsCall{obj, selfPID})
@@ -377,9 +397,9 @@ func (h *lockTestHost) SetUser(descr int, who ref.Ref) bool {
 
 const testProgram ref.Ref = 99
 
-// newTestFrame builds a frame at mucker level 3 (so checkRemote and progUID
-// take their "at or above level 2" branch, matching every other test in this
-// file) with the given host and no compiled code.
+// newTestFrame builds a frame at mucker level 3 (so checkRemote and
+// progUID take their "at or above level 2" branch, matching every
+// other test in this file) with the given host and no compiled code.
 func newTestFrame(host Host) *Frame {
 	return &Frame{Level: 1, host: host, Prog: &Program{Ref: testProgram, MLevel: 3}}
 }
@@ -423,7 +443,9 @@ func TestTestlockPushesHostResult(t *testing.T) {
 		t.Fatalf("TestLock called %d times, want 1", len(h.testLockCalls))
 	}
 	call := h.testLockCalls[0]
-	if call.testPlayer != testPlayer || call.lock != lock || call.trig != 20 || call.caller != 21 || call.descr != 5 || call.level != 1 {
+	if call.testPlayer != testPlayer || call.lock != lock ||
+		call.trig != 20 || call.caller != 21 ||
+		call.descr != 5 || call.level != 1 {
 		t.Fatalf("unexpected call: %+v", call)
 	}
 }
@@ -442,7 +464,8 @@ func TestTestlockInvalidPlayerArg(t *testing.T) {
 	}
 
 	_, err := prims[PrimNumber("TESTLOCK")](f)
-	if err == nil || err.Error() != "Invalid player or thing argument (1)." {
+	if err == nil ||
+		err.Error() != "Invalid player or thing argument (1)." {
 		t.Fatalf("err = %v, want the invalid-player message", err)
 	}
 }
@@ -481,7 +504,8 @@ func TestTestlockRecursionGuard(t *testing.T) {
 	}
 
 	_, err := prims[PrimNumber("TESTLOCK")](f)
-	if err == nil || err.Error() != "Interp call loops not allowed." {
+	if err == nil ||
+		err.Error() != "Interp call loops not allowed." {
 		t.Fatalf("err = %v, want the recursion-guard message", err)
 	}
 	if len(h.testLockCalls) != 0 {
@@ -517,10 +541,11 @@ func TestLockedPushesHostResult(t *testing.T) {
 	}
 }
 
-// TestLockedRejectsThingArgument reproduces Fuzzball 7.2.1's own bug: its
-// condition for the player/thing argument is written "!= TYPE_PLAYER &&
-// == TYPE_THING", which rejects a THING rather than allowing it as its own
-// doc comment claims. This is deliberately kept, not fixed.
+// TestLockedRejectsThingArgument reproduces Fuzzball 7.2.1's own bug:
+// its condition for the player/thing argument is written "!=
+// TYPE_PLAYER && == TYPE_THING", which rejects a THING rather than
+// allowing it as its own doc comment claims. This is deliberately
+// kept, not fixed.
 func TestLockedRejectsThingArgument(t *testing.T) {
 	h := newLockTestHost()
 	h.types[testPlayer] = ref.TypeThing
@@ -537,7 +562,8 @@ func TestLockedRejectsThingArgument(t *testing.T) {
 	}
 
 	_, err := prims[PrimNumber("LOCKED?")](f)
-	if err == nil || err.Error() != "Invalid player or thing argument. (1)" {
+	if err == nil ||
+		err.Error() != "Invalid player or thing argument. (1)" {
 		t.Fatalf("err = %v, want the invalid-player message", err)
 	}
 }
@@ -576,7 +602,8 @@ func TestLockedRecursionGuard(t *testing.T) {
 	}
 
 	_, err := prims[PrimNumber("LOCKED?")](f)
-	if err == nil || err.Error() != "Interp call loops not allowed." {
+	if err == nil ||
+		err.Error() != "Interp call loops not allowed." {
 		t.Fatalf("err = %v, want the recursion-guard message", err)
 	}
 }
@@ -663,7 +690,8 @@ func TestSetlockstrClearsOnEmptyString(t *testing.T) {
 		t.Fatalf("SetLockString called %d times, want 1", len(h.setLockCalls))
 	}
 	call := h.setLockCalls[0]
-	if call.obj != testThing || call.matchPlayer != testPlayer || call.raw != "" || call.descr != 7 {
+	if call.obj != testThing || call.matchPlayer != testPlayer ||
+		call.raw != "" || call.descr != 7 {
 		t.Fatalf("unexpected call: %+v", call)
 	}
 }
@@ -731,7 +759,9 @@ func TestParselockPushesLockValue(t *testing.T) {
 	if v.Type != TypeLock || v.Lock != lock {
 		t.Fatalf("result = %+v, want the parsed lock", v)
 	}
-	if len(h.parseLockCalls) != 1 || h.parseLockCalls[0].raw != "#11" || h.parseLockCalls[0].descr != 3 {
+	if len(h.parseLockCalls) != 1 ||
+		h.parseLockCalls[0].raw != "#11" ||
+		h.parseLockCalls[0].descr != 3 {
 		t.Fatalf("unexpected call: %+v", h.parseLockCalls)
 	}
 }
@@ -879,7 +909,8 @@ func TestArrayFilterLockInvalidArgs(t *testing.T) {
 	if err := f.Push(LockVal(nil)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil || err.Error() != "Argument not an array. (1)" {
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil ||
+		err.Error() != "Argument not an array. (1)" {
 		t.Fatalf("err = %v, want the not-an-array message", err)
 	}
 
@@ -890,7 +921,8 @@ func TestArrayFilterLockInvalidArgs(t *testing.T) {
 	if err := f.Push(LockVal(nil)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil || err.Error() != "Argument not an array of dbrefs. (1)" {
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil ||
+		err.Error() != "Argument not an array of dbrefs. (1)" {
 		t.Fatalf("err = %v, want the not-dbrefs message", err)
 	}
 
@@ -901,7 +933,8 @@ func TestArrayFilterLockInvalidArgs(t *testing.T) {
 	if err := f.Push(Str("not a lock")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil || err.Error() != "Argument not a lock. (2)" {
+	if _, err := prims[PrimNumber("ARRAY_FILTER_LOCK")](f); err == nil ||
+		err.Error() != "Argument not a lock. (2)" {
 		t.Fatalf("err = %v, want the not-a-lock message", err)
 	}
 }

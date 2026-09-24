@@ -9,13 +9,15 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestWritesBecomeDurableWithinTheInterval is the durability half of M1.
+// TestWritesBecomeDurableWithinTheInterval is the durability half of
+// M1.
 //
-// The guarantee Emerald replaces the dump cycle with is: at any instant, every
-// change older than the flush interval is already in Postgres. This asserts it
-// directly, by reading the database from a second connection while the engine
-// is still running — which is the same thing a crash would observe, without
-// needing to kill anything.
+// The guarantee Emerald replaces the dump cycle with is: at any
+// instant, every change older than the flush interval is already in
+// Postgres. This asserts it directly, by reading the database from a
+// second connection while the engine is still running — which is
+// the same thing a crash would observe, without needing to kill
+// anything.
 func TestWritesBecomeDurableWithinTheInterval(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -29,7 +31,8 @@ func TestWritesBecomeDurableWithinTheInterval(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- engine.Run(runCtx) }()
 
-	// Write steadily for a while, recording when each object was accepted.
+	// Write steadily for a while, recording when each object was
+	// accepted.
 	written := make(map[ref.Ref]time.Time)
 	stopWriting := time.Now().Add(700 * time.Millisecond)
 	for time.Now().Before(stopWriting) {
@@ -43,8 +46,8 @@ func TestWritesBecomeDurableWithinTheInterval(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// Everything written before this instant must be durable once the
-	// interval, plus room for the write itself, has elapsed.
+	// Everything written before this instant must be durable once
+	// the interval, plus room for the write itself, has elapsed.
 	cutoff := time.Now()
 	time.Sleep(3 * interval)
 
@@ -74,9 +77,10 @@ func TestWritesBecomeDurableWithinTheInterval(t *testing.T) {
 	}
 }
 
-// TestCrashLosesOnlyRecentWrites simulates losing the process without a clean
-// shutdown: the engine is abandoned mid-flight and the database is read back.
-// Older writes must survive; only the tail since the last flush may be lost.
+// TestCrashLosesOnlyRecentWrites simulates losing the process without
+// a clean shutdown: the engine is abandoned mid-flight and the
+// database is read back. Older writes must survive; only the tail
+// since the last flush may be lost.
 func TestCrashLosesOnlyRecentWrites(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -86,8 +90,9 @@ func TestCrashLosesOnlyRecentWrites(t *testing.T) {
 	w := world.New()
 	engine := world.NewEngine(w, world.Options{Persister: s, Interval: interval})
 
-	// A context that is never cancelled: nothing gets a chance to flush on
-	// the way out, which is what a kill -9 looks like from Postgres's side.
+	// A context that is never cancelled: nothing gets a chance to
+	// flush on the way out, which is what a kill -9 looks like
+	// from Postgres's side.
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = engine.Run(runCtx) }()
@@ -128,8 +133,9 @@ func TestCrashLosesOnlyRecentWrites(t *testing.T) {
 			t.Errorf("%v was written well before the crash and should have survived", r)
 		}
 	}
-	// The late batch may or may not have made it; what matters is that its
-	// absence is the only loss, and that nothing is corrupt.
+	// The late batch may or may not have made it; what matters is
+	// that its absence is the only loss, and that nothing is
+	// corrupt.
 	lost := 0
 	for _, r := range late {
 		if reloaded.Get(r) == nil {

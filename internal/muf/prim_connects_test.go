@@ -6,12 +6,12 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// TestConnectsPrimitivesUseTheirOwnMlevWording spot-checks every distinct
-// mlev-floor wording this session found in src/p_connects.c — three
-// level-3 variants and two level-4 variants, none of them the dispatcher's
-// generic "Permission denied."/"Permission denied.  Requires Wizbit." —
-// across every primitive in the file, at one mucker level below the floor
-// each needs.
+// TestConnectsPrimitivesUseTheirOwnMlevWording spot-checks every
+// distinct mlev-floor wording this session found in src/p_connects.c
+// — three level-3 variants and two level-4 variants, none of them
+// the dispatcher's generic "Permission denied."/"Permission denied.
+// Requires Wizbit." — across every primitive in the file, at one
+// mucker level below the floor each needs.
 func TestConnectsPrimitivesUseTheirOwnMlevWording(t *testing.T) {
 	tests := []struct {
 		prim  string
@@ -88,7 +88,8 @@ func TestDescrIdleForwardsAndAbortsOnNegativeResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = prims[PrimNumber("DESCRIDLE")](f2)
-	if err == nil || err.Error() != "Invalid descriptor number. (1)" {
+	if err == nil ||
+		err.Error() != "Invalid descriptor number. (1)" {
 		t.Fatalf("err = %v, want the invalid-descriptor message", err)
 	}
 }
@@ -100,15 +101,16 @@ func TestDescrIdleRejectsNonInteger(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := prims[PrimNumber("DESCRIDLE")](f)
-	if err == nil || err.Error() != "Argument not an integer. (1)" {
+	if err == nil ||
+		err.Error() != "Argument not an integer. (1)" {
 		t.Fatalf("err = %v, want the argument-type message", err)
 	}
 }
 
-// TestDescrLeastMostIdleNeverAbortOnNegativeResult checks that, unlike
-// DESCRIDLE/DESCRTIME/DESCRBUFSIZE, these two push a -1 result straight
-// through rather than aborting — "no connection found" is itself a valid
-// answer for a player-scoped query.
+// TestDescrLeastMostIdleNeverAbortOnNegativeResult checks that,
+// unlike DESCRIDLE/DESCRTIME/DESCRBUFSIZE, these two push a -1 result
+// straight through rather than aborting — "no connection found" is
+// itself a valid answer for a player-scoped query.
 func TestDescrLeastMostIdleNeverAbortOnNegativeResult(t *testing.T) {
 	h := newLockTestHost()
 	h.valid[testPlayer] = true
@@ -147,14 +149,15 @@ func TestDescrLeastIdleRejectsNonObjectAndInvalidRef(t *testing.T) {
 	if err := f2.Push(Obj(testThing)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prims[PrimNumber("DESCRLEASTIDLE")](f2); err == nil || err.Error() != "Bad dbref." {
+	if _, err := prims[PrimNumber("DESCRLEASTIDLE")](f2); err == nil ||
+		err.Error() != "Bad dbref." {
 		t.Fatalf("err = %v, want the bad-dbref message", err)
 	}
 }
 
-// TestDescrFlushIsStackNeutral checks upstream's own real quirk: it computes
-// a result but never pushes it — the primitive consumes its descriptor
-// argument and leaves nothing behind.
+// TestDescrFlushIsStackNeutral checks upstream's own real quirk: it
+// computes a result but never pushes it — the primitive consumes
+// its descriptor argument and leaves nothing behind.
 func TestDescrFlushIsStackNeutral(t *testing.T) {
 	h := newLockTestHost()
 	f := newTestFrame(h)
@@ -176,7 +179,8 @@ func TestSetWidthValidatesRangeAndArgumentOrder(t *testing.T) {
 	h := newLockTestHost()
 	h.setDescrSizeResult = true
 	f := newTestFrame(h)
-	// Stack order is descr, size (upstream's own): descr sits under size.
+	// Stack order is descr, size (upstream's own): descr sits
+	// under size.
 	if err := f.Push(Int(9)); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +207,8 @@ func TestSetWidthValidatesRangeAndArgumentOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := prims[PrimNumber("SETWIDTH")](f2)
-	if err == nil || err.Error() != "Width must be between 0 and 65535." {
+	if err == nil ||
+		err.Error() != "Width must be between 0 and 65535." {
 		t.Fatalf("err = %v, want the range message", err)
 	}
 }
@@ -219,9 +224,11 @@ func TestSetHeightReportsInvalidDescriptorWithoutAPeriod(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := prims[PrimNumber("SETHEIGHT")](f)
-	// Note: no trailing period, unlike most of this file's "Invalid
-	// descriptor number. (1)" — upstream's own literal wording here.
-	if err == nil || err.Error() != "Invalid descriptor number (2)" {
+	// Note: no trailing period, unlike most of this file's
+	// "Invalid descriptor number. (1)" — upstream's own literal
+	// wording here.
+	if err == nil ||
+		err.Error() != "Invalid descriptor number (2)" {
 		t.Fatalf("err = %v, want the no-period invalid-descriptor message", err)
 	}
 }
@@ -244,7 +251,8 @@ func TestFirstDescrAndLastDescrDispatchByPlayerArgument(t *testing.T) {
 	if v.Num != 5 {
 		t.Fatalf("result = %+v, want 5", v)
 	}
-	if len(h.firstDescrCalls) != 1 || h.firstDescrCalls[0] != ref.Nothing {
+	if len(h.firstDescrCalls) != 1 ||
+		h.firstDescrCalls[0] != ref.Nothing {
 		t.Fatalf("FirstDescr calls = %+v, want [Nothing]", h.firstDescrCalls)
 	}
 }
@@ -277,7 +285,8 @@ func TestDescrSetUserValidatesEachArgumentInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := prims[PrimNumber("DESCR_SETUSER")](f)
-	if err == nil || err.Error() != "Integer descriptor number expected. (1)" {
+	if err == nil ||
+		err.Error() != "Integer descriptor number expected. (1)" {
 		t.Fatalf("err = %v, want the descriptor-type message", err)
 	}
 }
@@ -327,7 +336,8 @@ func TestDescrSetUserSkipsPasswordCheckForNothing(t *testing.T) {
 	if len(h.checkPasswordCalls) != 0 {
 		t.Fatal("CheckPassword should not be called when who is NOTHING")
 	}
-	if len(h.setUserCalls) != 1 || h.setUserCalls[0] != (setUserCall{3, ref.Nothing}) {
+	if len(h.setUserCalls) != 1 ||
+		h.setUserCalls[0] != (setUserCall{3, ref.Nothing}) {
 		t.Fatalf("SetUser calls = %+v, want [{3 Nothing}]", h.setUserCalls)
 	}
 }

@@ -13,7 +13,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// openFixture opens a test fixture, skipping the test if it is unavailable.
+// openFixture opens a test fixture, skipping the test if it is
+// unavailable.
 func openFixture(t *testing.T, path string) *os.File {
 	t.Helper()
 	f, err := os.Open(path)
@@ -36,8 +37,8 @@ func parseFile(t *testing.T, path string) (*world.World, *Report) {
 	return w, rep
 }
 
-// TestMinimalDatabase reads the two-object database Fuzzball ships, which is
-// small enough to assert on completely.
+// TestMinimalDatabase reads the two-object database Fuzzball ships,
+// which is small enough to assert on completely.
 func TestMinimalDatabase(t *testing.T) {
 	w, rep := parseFile(t, "../../testdata/minimal.db")
 
@@ -96,7 +97,8 @@ func TestMinimalDatabase(t *testing.T) {
 	if got := one.Flags.RawMLevel(); got != 3 {
 		t.Errorf("#1 mucker level = %d, want 3", got)
 	}
-	// A player owns itself; the dump does not store an owner for one.
+	// A player owns itself; the dump does not store an owner for
+	// one.
 	if one.Owner != ref.God {
 		t.Errorf("#1 owner = %v, want itself", one.Owner)
 	}
@@ -119,7 +121,8 @@ func TestMinimalDatabase(t *testing.T) {
 		t.Errorf("#1 last used = %v", one.LastUsed)
 	}
 
-	// The password survives in a form the login path can still verify.
+	// The password survives in a form the login path can still
+	// verify.
 	if !password.Verify(one.PasswordHash, "potrzebie").OK {
 		t.Error("#1's documented starter password should verify after import")
 	}
@@ -133,8 +136,9 @@ func TestMinimalDatabase(t *testing.T) {
 func TestMinimalDatabaseParameters(t *testing.T) {
 	_, rep := parseFile(t, "../../testdata/minimal.db")
 
-	// 169 parameters: 8 dropped, 2 explicitly set (default_room_parent and
-	// player_start), the rest marked as defaults.
+	// 169 parameters: 8 dropped, 2 explicitly set
+	// (default_room_parent and player_start), the rest marked as
+	// defaults.
 	if rep.ParamsDropped != 8 {
 		t.Errorf("dropped %d parameters, want 8", rep.ParamsDropped)
 	}
@@ -148,14 +152,15 @@ func TestMinimalDatabaseParameters(t *testing.T) {
 		if strings.Contains(warn, "unknown parameter") {
 			t.Errorf("unexpected unknown parameter: %s", warn)
 		}
-		if strings.Contains(warn, "default") && strings.Contains(warn, "differs") {
+		if strings.Contains(warn, "default") &&
+			strings.Contains(warn, "differs") {
 			t.Errorf("our default has drifted from Fuzzball's: %s", warn)
 		}
 	}
 }
 
-// TestStarterDatabase reads the full starter world, which exercises every
-// object type, every property type and a blessed property.
+// TestStarterDatabase reads the full starter world, which exercises
+// every object type, every property type and a blessed property.
 func TestStarterDatabase(t *testing.T) {
 	w, rep := parseFile(t, "../../testdata/starterdb/starterdb.db")
 
@@ -165,11 +170,12 @@ func TestStarterDatabase(t *testing.T) {
 	if rep.Properties == 0 {
 		t.Fatal("read no properties")
 	}
-	// The shipped starter database contains exactly one corrupt property:
-	// _prefs/ws/doing was set with an embedded newline, so its value spills
-	// onto a following line that is not a property at all. Upstream cannot
-	// read it either and skips it with a warning to the wizards. Pin the
-	// count, so a regression that breaks other properties still fails.
+	// The shipped starter database contains exactly one corrupt
+	// property: _prefs/ws/doing was set with an embedded newline,
+	// so its value spills onto a following line that is not a
+	// property at all. Upstream cannot read it either and skips
+	// it with a warning to the wizards. Pin the count, so a
+	// regression that breaks other properties still fails.
 	var propWarnings []string
 	for _, warn := range rep.Warnings {
 		if strings.Contains(warn, "property") {
@@ -228,8 +234,8 @@ func TestStarterDatabase(t *testing.T) {
 	t.Logf("property types: %v, blessed: %d", seen, blessed)
 }
 
-// TestStarterDatabaseChainsAreConsistent checks that the containment chains a
-// real dump carries survive the import intact.
+// TestStarterDatabaseChainsAreConsistent checks that the containment
+// chains a real dump carries survive the import intact.
 func TestStarterDatabaseChainsAreConsistent(t *testing.T) {
 	w, _ := parseFile(t, "../../testdata/starterdb/starterdb.db")
 
@@ -249,15 +255,17 @@ func TestParsePropLine(t *testing.T) {
 		{"_/de:2:A scroll", "_/de", props.Value{Type: props.String, Str: "A scroll"}, false},
 		{"@/value:3:1", "@/value", props.Value{Type: props.Int, Num: 1}, false},
 		{"_/lok:4:#0&!#0", "_/lok", props.Value{Type: props.Lock, Str: "#0&!#0"}, false},
-		// Dumps store dbrefs as bare integers, with no leading #.
+		// Dumps store dbrefs as bare integers, with no
+		// leading #.
 		{"~/prog:5:68", "~/prog", props.Value{Type: props.Ref, Ref: ref.Ref(68)}, false},
 		{"w:6:1.5", "w", props.Value{Type: props.Float, Float: 1.5}, false},
 		// 4098 is string plus the blessed bit.
 		{"_/sc:4098:{null}", "_/sc", props.Value{Type: props.String, Str: "{null}", Blessed: true}, false},
-		// A value may contain colons; only the first two split.
+		// A value may contain colons; only the first two
+		// split.
 		{"p:2:a:b:c", "p", props.Value{Type: props.String, Str: "a:b:c"}, false},
-		// An empty string value is legal in the file even though storing
-		// it would unset the property.
+		// An empty string value is legal in the file even
+		// though storing it would unset the property.
 		{"p:2:", "p", props.Value{Type: props.String, Str: ""}, false},
 
 		{"noflags", "", props.Value{}, true},
@@ -314,7 +322,8 @@ func TestParseFloatAcceptsFuzzballSpellings(t *testing.T) {
 
 func TestRejectsWrongFormat(t *testing.T) {
 	_, err := Parse(strings.NewReader("***Foxen8 TinyMUCK DUMP Format***\n"), world.New())
-	if err == nil || !strings.Contains(err.Error(), "unsupported dump format") {
+	if err == nil ||
+		!strings.Contains(err.Error(), "unsupported dump format") {
 		t.Errorf("err = %v, want a complaint about the format", err)
 	}
 	if _, err := Parse(strings.NewReader(""), world.New()); err == nil {
@@ -331,9 +340,10 @@ func TestRejectsTruncatedDump(t *testing.T) {
 }
 
 func TestObjectWithNoProperties(t *testing.T) {
-	// When an object has no properties, the type-specific fields follow the
-	// timestamps directly, with no *Props* block. This is the branch
-	// upstream distinguishes by peeking one character.
+	// When an object has no properties, the type-specific fields
+	// follow the timestamps directly, with no *Props* block. This
+	// is the branch upstream distinguishes by peeking one
+	// character.
 	dump := VersionString + "\n1\n0\n0\n" +
 		"#0\nRoom Zero\n-1\n-1\n-1\n0\n100\n200\n3\n400\n" +
 		"-1\n-1\n1\n" + // drop-to, exits, owner
@@ -349,19 +359,21 @@ func TestObjectWithNoProperties(t *testing.T) {
 			rep.Objects, rep.Properties)
 	}
 	o := w.Get(ref.GlobalEnvironment)
-	if o.Name != "Room Zero" || o.Owner != ref.God || o.Dropto != ref.Nothing {
+	if o.Name != "Room Zero" || o.Owner != ref.God ||
+		o.Dropto != ref.Nothing {
 		t.Errorf("object = %+v", o)
 	}
-	if o.UseCount != 3 || o.Created.Unix() != 100 || o.LastUsed.Unix() != 200 {
+	if o.UseCount != 3 || o.Created.Unix() != 100 ||
+		o.LastUsed.Unix() != 200 {
 		t.Errorf("timestamps or use count wrong: %+v", o)
 	}
 }
 
-// TestInvalidUTF8PropertyIsSanitized checks that a property whose bytes are
-// not valid UTF-8 — seen in a real Dreamtrack dump, where a debug library had
-// stored a raw struct in a string property — is sanitized rather than
-// aborting the whole import or being written to Postgres as-is, which a TEXT
-// column refuses.
+// TestInvalidUTF8PropertyIsSanitized checks that a property whose
+// bytes are not valid UTF-8 — seen in a real Dreamtrack dump, where
+// a debug library had stored a raw struct in a string property — is
+// sanitized rather than aborting the whole import or being written to
+// Postgres as-is, which a TEXT column refuses.
 func TestInvalidUTF8PropertyIsSanitized(t *testing.T) {
 	bad := "\xe0\x8f\x1e\x0c\xff\x7f"
 	dump := VersionString + "\n1\n0\n0\n" +
@@ -399,8 +411,8 @@ func TestInvalidUTF8PropertyIsSanitized(t *testing.T) {
 }
 
 func TestDumpMaskFlagsAreCleared(t *testing.T) {
-	// A dump should never carry live-state flags, but if it does they must
-	// not survive the import.
+	// A dump should never carry live-state flags, but if it does
+	// they must not survive the import.
 	flags := uint32(ref.TypeRoom) | uint32(ref.Interactive) | uint32(ref.ObjectChanged) |
 		uint32(ref.Listener) | uint32(ref.ReadMode) | uint32(ref.SaneBit) | uint32(ref.Dark)
 	dump := VersionString + "\n1\n0\n0\n" +
@@ -420,13 +432,14 @@ func TestDumpMaskFlagsAreCleared(t *testing.T) {
 	}
 }
 
-// TestUnstoredLinksDefaultToNothing guards the importer against Go's zero
-// value leaking in as #0.
+// TestUnstoredLinksDefaultToNothing guards the importer against Go's
+// zero value leaking in as #0.
 //
-// A dump stores `exits` only for things, players and rooms, and an owner only
-// for some types. Any field the record does not carry must end up as NOTHING,
-// because the zero value for a ref is #0 — the global environment — and
-// defaulting to it silently attaches objects to the world root.
+// A dump stores `exits` only for things, players and rooms, and an
+// owner only for some types. Any field the record does not carry must
+// end up as NOTHING, because the zero value for a ref is #0 — the
+// global environment — and defaulting to it silently attaches
+// objects to the world root.
 func TestUnstoredLinksDefaultToNothing(t *testing.T) {
 	// A program: the dump gives it an owner and nothing else.
 	dump := VersionString + "\n1\n0\n0\n" +
@@ -462,9 +475,9 @@ func TestUnstoredLinksDefaultToNothing(t *testing.T) {
 	}
 }
 
-// TestGlobalEnvironmentSurvivesImport checks that #0 comes back as the world
-// root it is in the shipped databases, rather than being confused with a
-// sentinel.
+// TestGlobalEnvironmentSurvivesImport checks that #0 comes back as
+// the world root it is in the shipped databases, rather than being
+// confused with a sentinel.
 func TestGlobalEnvironmentSurvivesImport(t *testing.T) {
 	for _, path := range []string{
 		"../../testdata/minimal.db",
@@ -482,16 +495,18 @@ func TestGlobalEnvironmentSurvivesImport(t *testing.T) {
 		if root.Name != "Room Zero" {
 			t.Errorf("%s: #0 is named %q, want Room Zero", path, root.Name)
 		}
-		// The world root sits in no container; that is what makes it the
-		// root, and it must not be confused with #0 meaning "unset".
+		// The world root sits in no container; that is what
+		// makes it the root, and it must not be confused with
+		// #0 meaning "unset".
 		if root.Location != ref.Nothing {
 			t.Errorf("%s: #0 location = %v, want #-1", path, root.Location)
 		}
-		// New rooms parent to default_room_parent, which is #0 in the
-		// minimal world and the Null Environment Room (#109) in the
-		// starter one. Either way it must be a real room whose own
-		// containment chain reaches #0, since that is what makes #0 the
-		// root of the world rather than just another object.
+		// New rooms parent to default_room_parent, which is
+		// #0 in the minimal world and the Null Environment
+		// Room (#109) in the starter one. Either way it must
+		// be a real room whose own containment chain reaches
+		// #0, since that is what makes #0 the root of the
+		// world rather than just another object.
 		parent := w.Tune.Ref("default_room_parent")
 		po := w.Get(parent)
 		if po == nil {
@@ -509,7 +524,8 @@ func TestGlobalEnvironmentSurvivesImport(t *testing.T) {
 	}
 }
 
-// reachesRoot reports whether r is #0 or is contained, at any depth, by #0.
+// reachesRoot reports whether r is #0 or is contained, at any depth,
+// by #0.
 func reachesRoot(w *world.World, r ref.Ref) bool {
 	for i := 0; i < w.Len()+1; i++ {
 		if r == ref.GlobalEnvironment {

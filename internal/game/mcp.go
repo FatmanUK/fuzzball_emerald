@@ -9,15 +9,18 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// The MUF host's MCP methods. A program reaches a connection's protocol state
-// through these; everything below runs on the world goroutine, and the frame
-// has its own lock for the transport side.
+// The MUF host's MCP methods. A program reaches a connection's
+// protocol state through these; everything below runs on the world
+// goroutine, and the frame has its own lock for the transport side.
 
-// MCPMinLevel is the mucker level a program needs to use MCP, which is the
-// mcp_muf_mlev parameter.
-func (h *mufHost) MCPMinLevel() int { return int(h.w.Tune.Int("mcp_muf_mlev")) }
+// MCPMinLevel is the mucker level a program needs to use MCP, which
+// is the mcp_muf_mlev parameter.
+func (h *mufHost) MCPMinLevel() int {
+	return int(h.w.Tune.Int("mcp_muf_mlev"))
+}
 
-// MCPSupports reports the version agreed for a package on a connection.
+// MCPSupports reports the version agreed for a package on a
+// connection.
 func (h *mufHost) MCPSupports(descr int, pkg string) (int, int) {
 	d := h.s.hub.Get(descr)
 	if d == nil {
@@ -43,12 +46,13 @@ func (h *mufHost) MCPSend(descr int, pkg, name string, args []muf.MCPArg) error 
 	return nil
 }
 
-// MCPRegister offers a package to every connection that negotiates from now
-// on.
+// MCPRegister offers a package to every connection that negotiates
+// from now on.
 //
-// Upstream registers into one global table, so a package a program offers is
-// offered to everyone. That is reproduced: a program that registers a package
-// expects clients connecting later to be told about it.
+// Upstream registers into one global table, so a package a program
+// offers is offered to everyone. That is reproduced: a program that
+// registers a package expects clients connecting later to be told
+// about it.
 func (h *mufHost) MCPRegister(pkg string, minMajor, minMinor, maxMajor, maxMinor int) error {
 	return h.s.registerMCPPackage(pkg,
 		mcp.Version{Major: minMajor, Minor: minMinor},
@@ -63,8 +67,9 @@ func (h *mufHost) MCPBind(prog ref.Ref, pkg, name string, addr int) error {
 
 // GUINew opens a dialog on a connection.
 //
-// The dialog's callbacks resume the program that opened it, which is what lets
-// a program put up a dialog, wait, and act on what the user chose.
+// The dialog's callbacks resume the program that opened it, which is
+// what lets a program put up a dialog, wait, and act on what the user
+// chose.
 func (h *mufHost) GUINew(descr int, frame *muf.Frame) (string, error) {
 	if h.s.hub.Get(descr) == nil {
 		return "", errMsg("Invalid descriptor number. (1)")
@@ -134,14 +139,15 @@ func (h *mufHost) GUISetValue(id, ctrl string, lines []string) {
 	}
 }
 
-// --- the server side ---------------------------------------------------------
+// --- the server side
+// ---------------------------------------------------------
 
-// installMCPHandlers attaches this server's handling to the packages the
-// session layer advertises.
+// installMCPHandlers attaches this server's handling to the packages
+// the session layer advertises.
 //
-// The list is built before the server exists — a descriptor needs one the
-// moment it is created — so the handlers are filled in here rather than
-// declared with the packages.
+// The list is built before the server exists — a descriptor needs
+// one the moment it is created — so the handlers are filled in here
+// rather than declared with the packages.
 func (s *Server) installMCPHandlers() {
 	list := s.hub.MCPPackageList()
 	for i, p := range list {
@@ -151,15 +157,16 @@ func (s *Server) installMCPHandlers() {
 		case ascii.EqualFold(p.Name, mcp.NegotiatePackage):
 			// The negotiation package handles itself.
 		default:
-			// Everything else is offered so a program can claim
-			// its messages with MCP_BIND.
+			// Everything else is offered so a program can
+			// claim its messages with MCP_BIND.
 			list[i].Handle = s.programPackageHandler()
 		}
 	}
 	s.hub.SetMCPPackages(list)
 }
 
-// registerMCPPackage adds a package to what every new connection is offered.
+// registerMCPPackage adds a package to what every new connection is
+// offered.
 func (s *Server) registerMCPPackage(name string, minVer, maxVer mcp.Version) error {
 	if name == "" {
 		return errMsg("Package name expected. (1)")
@@ -197,9 +204,9 @@ type mcpTarget struct {
 
 // programPackageHandler runs whatever program has bound the message.
 //
-// The handler is called from the connection's goroutine, so the work is
-// handed to the world goroutine rather than done here: everything a program
-// touches belongs to the world.
+// The handler is called from the connection's goroutine, so the work
+// is handed to the world goroutine rather than done here: everything
+// a program touches belongs to the world.
 func (s *Server) programPackageHandler() func(*mcp.Frame, *mcp.Message, mcp.Version) {
 	return func(f *mcp.Frame, msg *mcp.Message, _ mcp.Version) {
 		key := mcpBinding{pkg: ascii.Fold(msg.Package), name: ascii.Fold(msg.Name)}
@@ -219,9 +226,9 @@ func (s *Server) programPackageHandler() func(*mcp.Frame, *mcp.Message, mcp.Vers
 
 // descriptorFor finds the connection a frame belongs to.
 //
-// The frame does not name its descriptor — it is given a function to write
-// with and nothing else — so the hub is searched. Connection counts are small
-// enough that this costs nothing.
+// The frame does not name its descriptor — it is given a function
+// to write with and nothing else — so the hub is searched.
+// Connection counts are small enough that this costs nothing.
 func (s *Server) descriptorFor(f *mcp.Frame) *session.Descriptor {
 	for _, d := range s.hub.All() {
 		if d.MCP == f {
@@ -234,8 +241,9 @@ func (s *Server) descriptorFor(f *mcp.Frame) *session.Descriptor {
 // runBound starts a program at the procedure that claimed a message.
 //
 // The procedure is called with the descriptor and a dictionary of the
-// message's arguments: a single-line value is a string, a multi-line one a
-// list of strings, and one with no value at all an empty string.
+// message's arguments: a single-line value is a string, a multi-line
+// one a list of strings, and one with no value at all an empty
+// string.
 func (s *Server) runBound(w *world.World, d *session.Descriptor,
 	target mcpTarget, msg *mcp.Message) {
 
@@ -288,8 +296,8 @@ func (s *Server) runBound(w *world.World, d *session.Descriptor,
 	s.step(w, proc)
 }
 
-// mcpArgValue renders one message argument as the MUF value a bound procedure
-// receives.
+// mcpArgValue renders one message argument as the MUF value a bound
+// procedure receives.
 func mcpArgValue(a mcp.Arg) muf.Value {
 	switch len(a.Lines) {
 	case 0:
@@ -317,7 +325,8 @@ func (s *Server) guiEvent(d *mcp.Dialog, ctrl, event string, dismissed bool) {
 	})
 }
 
-// guiError tells a program that the client could not do what it asked.
+// guiError tells a program that the client could not do what it
+// asked.
 func (s *Server) guiError(d *mcp.Dialog, ctrl, code, text string) {
 	_ = s.engine.Go(func(w *world.World) {
 		s.log.Info("gui error reported by a client",
@@ -325,7 +334,8 @@ func (s *Server) guiError(d *mcp.Dialog, ctrl, code, text string) {
 	})
 }
 
-// closeDialogsFor forgets every dialog on a connection that has gone away.
+// closeDialogsFor forgets every dialog on a connection that has gone
+// away.
 func (s *Server) closeDialogsFor(descr int) {
 	for _, id := range s.dialogs.CloseDescr(descr) {
 		delete(s.dialogOwner, id)

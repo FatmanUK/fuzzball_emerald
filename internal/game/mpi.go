@@ -10,14 +10,16 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// mpiHost lets MPI reach the world. Like the MUF host, every method runs on
-// the world goroutine.
+// mpiHost lets MPI reach the world. Like the MUF host, every method
+// runs on the world goroutine.
 type mpiHost struct {
 	s *Server
 	w *world.World
 }
 
-func (h *mpiHost) Name(obj mpi.Ref) string { return nameOf(h.w, ref.Ref(obj)) }
+func (h *mpiHost) Name(obj mpi.Ref) string {
+	return nameOf(h.w, ref.Ref(obj))
+}
 
 func (h *mpiHost) GetPropStr(obj mpi.Ref, path string) string {
 	v, ok := h.w.GetProp(ref.Ref(obj), path)
@@ -81,7 +83,9 @@ func (h *mpiHost) Contents(obj mpi.Ref) []mpi.Ref {
 	return out
 }
 
-func (h *mpiHost) Valid(obj mpi.Ref) bool { return h.w.Valid(ref.Ref(obj)) }
+func (h *mpiHost) Valid(obj mpi.Ref) bool {
+	return h.w.Valid(ref.Ref(obj))
+}
 
 func (h *mpiHost) IsPlayer(obj mpi.Ref) bool {
 	o := h.w.Get(ref.Ref(obj))
@@ -96,7 +100,9 @@ func (h *mpiHost) Match(who mpi.Ref, name string) mpi.Ref {
 	return mpi.Ref(match.New(h.w, ref.Ref(who), name).Everything().Player().Result())
 }
 
-func (h *mpiHost) Notify(obj mpi.Ref, msg string) { h.s.send(h.w, ref.Ref(obj), msg) }
+func (h *mpiHost) Notify(obj mpi.Ref, msg string) {
+	h.s.send(h.w, ref.Ref(obj), msg)
+}
 
 func (h *mpiHost) Now() int64 { return h.w.Now().Unix() }
 
@@ -119,8 +125,9 @@ func (s *Server) evalMPI(w *world.World, viewer, what ref.Ref, text string, bles
 		Blessed: blessed,
 		Host:    &mpiHost{s: s, w: w},
 	}
-	// Eval reports a failure to the viewer and yields empty text rather than
-	// propagating, so a broken description cannot break the look.
+	// Eval reports a failure to the viewer and yields empty text
+	// rather than propagating, so a broken description cannot
+	// break the look.
 	return mpi.Eval(env, text)
 }
 

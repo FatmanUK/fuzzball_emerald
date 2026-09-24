@@ -9,9 +9,9 @@ import (
 // impl is one MPI function's implementation.
 type impl func(env *Env, fn *Func, args []string) (string, error)
 
-// impls holds the implementations, keyed by the table's name. A function in
-// the table with no entry here reports itself unimplemented rather than
-// silently producing nothing.
+// impls holds the implementations, keyed by the table's name. A
+// function in the table with no entry here reports itself
+// unimplemented rather than silently producing nothing.
 var impls = map[string]impl{}
 
 func register(name string, fn impl) {
@@ -27,8 +27,8 @@ func Implemented() int { return len(impls) }
 func init() {
 	// Text.
 	register("LIT", func(_ *Env, _ *Func, args []string) (string, error) {
-		// LIT returns its argument without evaluating it, which is why
-		// its table entry does not parse.
+		// LIT returns its argument without evaluating it,
+		// which is why its table entry does not parse.
 		return strings.Join(args, string(argSep)), nil
 	})
 	register("NULL", func(*Env, *Func, []string) (string, error) { return "", nil })
@@ -106,8 +106,8 @@ func init() {
 	register("MAX", extreme(true))
 	register("MIN", extreme(false))
 
-	// Comparison and logic. These return "1" for true and "" for false,
-	// which is what MPI treats as a boolean.
+	// Comparison and logic. These return "1" for true and "" for
+	// false, which is what MPI treats as a boolean.
 	register("EQ", compare(func(c int) bool { return c == 0 }))
 	register("NE", compare(func(c int) bool { return c != 0 }))
 	register("GT", compareNum(func(a, b int) bool { return a > b }))
@@ -118,8 +118,8 @@ func init() {
 		return boolOf(!truthy(args[0])), nil
 	})
 
-	// {and} and {or} do not parse their arguments up front, so they can
-	// stop as soon as the answer is known.
+	// {and} and {or} do not parse their arguments up front, so
+	// they can stop as soon as the answer is known.
 	register("AND", shortCircuit(false))
 	register("OR", shortCircuit(true))
 
@@ -146,8 +146,9 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		// {prop} searches outwards through the environment; {prop!} is the
-		// form that looks only at the object named.
+		// {prop} searches outwards through the environment;
+		// {prop!} is the form that looks only at the object
+		// named.
 		return env.getProp(obj, args[0]), nil
 	})
 	register("STORE", func(env *Env, _ *Func, args []string) (string, error) {
@@ -214,10 +215,11 @@ func init() {
 		}
 		return out.String(), nil
 	})
-	// A "{&name}" reference compiles to a SUBLIST call whose first argument
-	// is the variable's value. With nothing further to slice, that value is
-	// the answer; the list-slicing form needs the list functions, which are
-	// not implemented yet.
+	// A "{&name}" reference compiles to a SUBLIST call whose
+	// first argument is the variable's value. With nothing
+	// further to slice, that value is the answer; the
+	// list-slicing form needs the list functions, which are not
+	// implemented yet.
 	register("SUBLIST", func(_ *Env, _ *Func, args []string) (string, error) {
 		if len(args) == 1 {
 			return args[0], nil
@@ -226,9 +228,9 @@ func init() {
 	})
 
 	register("SET", func(env *Env, _ *Func, args []string) (string, error) {
-		// Only an already-bound variable may be set, and the new value is
-		// also what the call produces — so "{set:n,5}{&n}" reads "55", not
-		// "5".
+		// Only an already-bound variable may be set, and the
+		// new value is also what the call produces — so
+		// "{set:n,5}{&n}" reads "55", not "5".
 		if _, ok := env.Var(args[0]); !ok {
 			return "", errf("SET", "No such variable currently defined.")
 		}
@@ -296,8 +298,8 @@ func fold(op func(a, b int) int) impl {
 	}
 }
 
-// foldDiv builds division and modulus, which yield zero rather than failing
-// when the divisor is zero, as MUF's do.
+// foldDiv builds division and modulus, which yield zero rather than
+// failing when the divisor is zero, as MUF's do.
 func foldDiv(mod bool) impl {
 	return func(_ *Env, fn *Func, args []string) (string, error) {
 		total, err := atoiArg(fn.Name, args[0])
@@ -351,7 +353,8 @@ func extreme(wantMax bool) impl {
 			if err != nil {
 				return "", err
 			}
-			if (wantMax && n > best) || (!wantMax && n < best) {
+			if (wantMax && n > best) ||
+				(!wantMax && n < best) {
 				best = n
 			}
 		}
@@ -359,8 +362,8 @@ func extreme(wantMax bool) impl {
 	}
 }
 
-// compare builds the equality tests, which compare as text when either side is
-// not a number.
+// compare builds the equality tests, which compare as text when
+// either side is not a number.
 func compare(ok func(int) bool) impl {
 	return func(_ *Env, _ *Func, args []string) (string, error) {
 		a, aerr := strconv.Atoi(strings.TrimSpace(args[0]))
@@ -393,8 +396,8 @@ func compareNum(ok func(a, b int) bool) impl {
 	}
 }
 
-// shortCircuit builds {and} and {or}, which stop as soon as the answer is
-// settled rather than evaluating every argument.
+// shortCircuit builds {and} and {or}, which stop as soon as the
+// answer is settled rather than evaluating every argument.
 func shortCircuit(stopOn bool) impl {
 	return func(env *Env, _ *Func, args []string) (string, error) {
 		for _, a := range args {
@@ -453,7 +456,8 @@ func repeatTo(n int, fill string) string {
 	return out[:n]
 }
 
-// objectText builds a function that reports something about an object.
+// objectText builds a function that reports something about an
+// object.
 func objectText(fn func(*Env, Ref) string) impl {
 	return func(env *Env, f *Func, args []string) (string, error) {
 		obj, err := env.resolve(f.Name, args, 0)
@@ -475,8 +479,8 @@ func objectRef(fn func(*Env, Ref) Ref) impl {
 	}
 }
 
-// render writes an object the way MPI does: a player as "*Name", anything
-// else as its dbref.
+// render writes an object the way MPI does: a player as "*Name",
+// anything else as its dbref.
 func (env *Env) render(obj Ref) string {
 	if env.Host.IsPlayer(obj) {
 		return "*" + env.Host.Name(obj)
@@ -491,8 +495,8 @@ func clock(layout string) impl {
 	}
 }
 
-// resolve reads an object argument at the given position, defaulting to the
-// object carrying the message.
+// resolve reads an object argument at the given position, defaulting
+// to the object carrying the message.
 func (env *Env) resolve(fn string, args []string, at int) (Ref, error) {
 	if at >= len(args) || strings.TrimSpace(args[at]) == "" {
 		return env.What, nil
@@ -517,8 +521,8 @@ func (env *Env) lookup(name string) Ref {
 
 // mayWrite reports whether this evaluation may change an object.
 //
-// A blessed property carries wizard permissions; otherwise the permissions
-// object must own what is being written.
+// A blessed property carries wizard permissions; otherwise the
+// permissions object must own what is being written.
 func (env *Env) mayWrite(obj Ref) bool {
 	if env.Blessed {
 		return true
@@ -526,8 +530,8 @@ func (env *Env) mayWrite(obj Ref) bool {
 	return env.Host.Owner(obj) == env.Host.Owner(env.Perms) || obj == env.Perms
 }
 
-// truthy decides whether a value counts as true, which MPI does by treating an
-// empty string and a zero as false.
+// truthy decides whether a value counts as true, which MPI does by
+// treating an empty string and a zero as false.
 func truthy(s string) bool {
 	t := strings.TrimSpace(s)
 	return t != "" && t != "0"

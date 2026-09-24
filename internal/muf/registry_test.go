@@ -3,7 +3,8 @@ package muf
 import "testing"
 
 func TestPrimTableIsPopulated(t *testing.T) {
-	// 9 base instructions plus 408 primitives, from Fuzzball's tables.
+	// 9 base instructions plus 408 primitives, from Fuzzball's
+	// tables.
 	if got := PrimCount(); got != 417 {
 		t.Errorf("PrimCount() = %d, want 417", got)
 	}
@@ -27,8 +28,8 @@ func TestPrimNumberAndNameRoundTrip(t *testing.T) {
 			t.Errorf("PrimNumber(%q) = 0", name)
 			continue
 		}
-		// The table stores the canonical spelling, which may differ in
-		// case from what was looked up.
+		// The table stores the canonical spelling, which may
+		// differ in case from what was looked up.
 		if got := PrimName(n); PrimNumber(got) != n {
 			t.Errorf("PrimName(PrimNumber(%q)) = %q, which does not round trip", name, got)
 		}
@@ -43,10 +44,10 @@ func TestUnknownNamesAreNotPrimitives(t *testing.T) {
 	}
 }
 
-// TestInternalPrimitivesAreUnreachable checks that the primitives the compiler
-// emits for loops and try blocks cannot be named by a program. Their names
-// begin with a space, which the tokenizer can never produce, but a lookup must
-// refuse them too.
+// TestInternalPrimitivesAreUnreachable checks that the primitives the
+// compiler emits for loops and try blocks cannot be named by a
+// program. Their names begin with a space, which the tokenizer can
+// never produce, but a lookup must refuse them too.
 func TestInternalPrimitivesAreUnreachable(t *testing.T) {
 	for _, name := range []string{" FOR", " FOREACH", " FORITER", " FORPOP", " TRYPOP"} {
 		if got := PrimNumber(name); got != 0 {

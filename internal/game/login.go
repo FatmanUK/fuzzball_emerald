@@ -12,12 +12,14 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// login handles input from a connection that has not yet authenticated.
+// login handles input from a connection that has not yet
+// authenticated.
 func (s *Server) login(w *world.World, d *session.Descriptor, line string) {
 	defer func() {
 		if r := recover(); r != nil {
 			d.Send("Something went wrong. Please try again.")
-			// The line is not logged: it may hold a password.
+			// The line is not logged: it may hold a
+			// password.
 			s.log.Error("panic during login",
 				"descriptor", d.ID, "host", d.Hostname,
 				"panic", r, "stack", string(debug.Stack()))
@@ -53,10 +55,12 @@ func (s *Server) login(w *world.World, d *session.Descriptor, line string) {
 	}
 }
 
-// parseConnect splits a login line into a command, a name and a password.
+// parseConnect splits a login line into a command, a name and a
+// password.
 //
-// It mirrors Fuzzball's parse_connect: whitespace-separated, and the command
-// is matched case-insensitively so "CO" works as well as "connect".
+// It mirrors Fuzzball's parse_connect: whitespace-separated, and the
+// command is matched case-insensitively so "CO" works as well as
+// "connect".
 func parseConnect(line string) (cmd, user, pass string) {
 	fields := strings.Fields(line)
 	switch len(fields) {
@@ -86,9 +90,9 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 		return
 	}
 
-	// A player imported with no password is unreachable until one is set.
-	// Fuzzball would accept any password here; saying so plainly is better
-	// than a bare "incorrect password".
+	// A player imported with no password is unreachable until one
+	// is set. Fuzzball would accept any password here; saying so
+	// plainly is better than a bare "incorrect password".
 	if o.PasswordHash == password.NoPassword {
 		d.Send("That character has no password set and cannot be connected to.")
 		d.Send("A wizard must set one with @password before it can be used.")
@@ -103,9 +107,9 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 		return
 	}
 
-	// The password was right; the server may still be full. A true wizard
-	// is exempt, so an admin can always get in to deal with whatever filled
-	// it up.
+	// The password was right; the server may still be full. A
+	// true wizard is exempt, so an admin can always get in to
+	// deal with whatever filled it up.
 	if s.serverFull(w) && !o.Flags.IsTrueWizard() {
 		d.Send(w.Tune.String("playermax_bootmesg"))
 		s.securityLog().Warn("refused login: server full",
@@ -115,8 +119,9 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 		return
 	}
 
-	// A correct password stored in one of Fuzzball's formats is upgraded to
-	// Argon2id now that we have the plaintext to rehash from.
+	// A correct password stored in one of Fuzzball's formats is
+	// upgraded to Argon2id now that we have the plaintext to
+	// rehash from.
 	if res.NeedsUpgrade {
 		if hashed, err := password.Hash(pass); err != nil {
 			log.Error("could not upgrade a legacy password hash",
@@ -132,12 +137,13 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 	s.finishLogin(w, d, player)
 }
 
-// serverFull reports whether the playermax cap has been reached, upstream's
-// "tp_playermax && con_players_curr >= tp_playermax_limit".
+// serverFull reports whether the playermax cap has been reached,
+// upstream's "tp_playermax && con_players_curr >=
+// tp_playermax_limit".
 //
 // The count is of logged-in connections, not of distinct players: two
-// windows open as the same character cost two places, which is upstream's
-// own con_players_curr.
+// windows open as the same character cost two places, which is
+// upstream's own con_players_curr.
 func (s *Server) serverFull(w *world.World) bool {
 	if !w.Tune.Bool("playermax") {
 		return false
@@ -145,7 +151,8 @@ func (s *Server) serverFull(w *world.World) bool {
 	return int64(len(s.hub.Connected())) >= w.Tune.Int("playermax_limit")
 }
 
-// failConnect reports a failed login without saying which half was wrong.
+// failConnect reports a failed login without saying which half was
+// wrong.
 func (s *Server) failConnect(w *world.World, d *session.Descriptor, user, why string) {
 	d.Send(w.Tune.String("connect_fail_mesg"))
 	s.securityLog().Warn("failed login",
@@ -155,13 +162,13 @@ func (s *Server) failConnect(w *world.World, d *session.Descriptor, user, why st
 // doCreate makes a new player.
 func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass string) {
 	if w.Tune.Bool("registration") {
-		// Registration on means characters are made out of band, not
-		// from the login screen.
+		// Registration on means characters are made out of
+		// band, not from the login screen.
 		d.Send(w.Tune.String("register_mesg"))
 		return
 	}
-	// A brand-new character has no wizard bit to be exempt by, so the cap
-	// simply applies.
+	// A brand-new character has no wizard bit to be exempt by, so
+	// the cap simply applies.
 	if s.serverFull(w) {
 		d.Send(w.Tune.String("playermax_bootmesg"))
 		d.Close()
@@ -187,11 +194,12 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 	s.finishLogin(w, d, o.Ref)
 }
 
-// createPlayer makes a player and puts them at the starting room. The name is
-// expected to have been checked already.
+// createPlayer makes a player and puts them at the starting room. The
+// name is expected to have been checked already.
 //
-// The name is recorded in a property as well as on the object, because a
-// player may be renamed and upstream keeps what they were first called.
+// The name is recorded in a property as well as on the object,
+// because a player may be renamed and upstream keeps what they were
+// first called.
 func (s *Server) createPlayer(w *world.World, user, pass string) (*world.Object, error) {
 	hashed, err := password.Hash(pass)
 	if err != nil {
@@ -232,8 +240,9 @@ func validPlayerName(w *world.World, name string) error {
 		return errMsg("That name is too long.")
 	}
 	for _, r := range name {
-		// Fuzzball reserves these because they are matcher and property
-		// syntax; a name containing one could never be referred to.
+		// Fuzzball reserves these because they are matcher
+		// and property syntax; a name containing one could
+		// never be referred to.
 		if strings.ContainsRune("#*!$ \t\r\n", r) || r < 32 {
 			return errMsg("That name contains a character that is not allowed.")
 		}
@@ -254,7 +263,8 @@ type errMsg string
 
 func (e errMsg) Error() string { return string(e) }
 
-// finishLogin binds a descriptor to a player and puts them in the world.
+// finishLogin binds a descriptor to a player and puts them in the
+// world.
 func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.Ref) {
 	alreadyOn := s.hub.Online(player)
 	s.hub.Bind(d, player, w.Now())
@@ -277,10 +287,10 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 	s.warnInteractive(d)
 }
 
-// warnInteractive tells a reconnecting player that their input is going
-// somewhere other than the command parser. An editor session outlives the
-// connection that opened it, so without this a player comes back to a prompt
-// that silently eats everything they type.
+// warnInteractive tells a reconnecting player that their input is
+// going somewhere other than the command parser. An editor session
+// outlives the connection that opened it, so without this a player
+// comes back to a prompt that silently eats everything they type.
 func (s *Server) warnInteractive(d *session.Descriptor) {
 	e := s.editing(d.Player)
 	if e == nil {
@@ -308,7 +318,8 @@ func (s *Server) announceConnect(w *world.World, d *session.Descriptor, alreadyO
 
 // announceDisconnect tells the player's room that they have gone.
 func (s *Server) announceDisconnect(w *world.World, d *session.Descriptor) {
-	// Only announce when the last connection for this player goes away.
+	// Only announce when the last connection for this player goes
+	// away.
 	if len(s.hub.DescriptorsFor(d.Player)) > 1 {
 		return
 	}
@@ -319,7 +330,8 @@ func (s *Server) announceDisconnect(w *world.World, d *session.Descriptor) {
 	s.notifyRoom(w, o.Location, []ref.Ref{d.Player}, "%s has disconnected.", o.Name)
 }
 
-// loginWho lists who is online, for someone who has not logged in yet.
+// loginWho lists who is online, for someone who has not logged in
+// yet.
 func (s *Server) loginWho(w *world.World, d *session.Descriptor) {
 	if w.Tune.Bool("secure_who") {
 		d.Send("You must be connected to see who is online.")

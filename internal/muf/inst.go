@@ -1,10 +1,10 @@
-// Package muf implements the MUF language: its instruction set, runtime
-// values, and the interpreter that executes them.
+// Package muf implements the MUF language: its instruction set,
+// runtime values, and the interpreter that executes them.
 //
-// MUF is a stack language in the Forth tradition. Fuzzball compiles a program
-// to an array of instructions and walks it with a program counter; this does
-// the same, so the control flow stays close enough to the C to check against
-// it.
+// MUF is a stack language in the Forth tradition. Fuzzball compiles a
+// program to an array of instructions and walks it with a program
+// counter; this does the same, so the control flow stays close enough
+// to the C to check against it.
 package muf
 
 import (
@@ -15,9 +15,9 @@ import (
 )
 
 // Type tags an instruction and a runtime value. The numbers follow
-// include/inst.h so the two can be read side by side; nothing depends on them
-// being stable, because Emerald compiles from source at load rather than
-// storing compiled code.
+// include/inst.h so the two can be read side by side; nothing depends
+// on them being stable, because Emerald compiles from source at load
+// rather than storing compiled code.
 type Type uint8
 
 const (
@@ -75,27 +75,29 @@ type Inst struct {
 	Type Type
 	Line int
 
-	// Num carries whatever the instruction's type calls for: a primitive
-	// number, an integer literal, a variable slot, or a jump target.
+	// Num carries whatever the instruction's type calls for: a
+	// primitive number, an integer literal, a variable slot, or a
+	// jump target.
 	Num   int64
 	Float float64
 	Str   string
 	Ref   ref.Ref
 
-	// Proc is set on TypeFunction and describes the procedure that starts
-	// here.
+	// Proc is set on TypeFunction and describes the procedure
+	// that starts here.
 	Proc *Proc
 }
 
 // Proc describes a MUF procedure.
 type Proc struct {
 	Name string
-	// Args is how many arguments the procedure declares, for the "name[ a b
-	// -- c ]" form. Vars counts its scoped variables, arguments included.
+	// Args is how many arguments the procedure declares, for the
+	// "name[ a b -- c ]" form. Vars counts its scoped variables,
+	// arguments included.
 	Args int
 	Vars int
-	// VarNames names the scoped variables, for the debugger and error
-	// messages.
+	// VarNames names the scoped variables, for the debugger and
+	// error messages.
 	VarNames []string
 }
 
@@ -107,22 +109,25 @@ type Program struct {
 	Code  []Inst
 	Start int
 
-	// Vars names the program's global variables, of which the first four are
-	// always ME, LOC, TRIGGER and COMMAND.
+	// Vars names the program's global variables, of which the
+	// first four are always ME, LOC, TRIGGER and COMMAND.
 	Vars []string
 	// LVars names the program-local variables.
 	LVars []string
 
-	// Procs maps a procedure name, folded, to its address in Code.
+	// Procs maps a procedure name, folded, to its address in
+	// Code.
 	Procs map[string]int
-	// Publics maps a name, folded, to the address callers reach with CALL.
+	// Publics maps a name, folded, to the address callers reach
+	// with CALL.
 	Publics map[string]*Public
-	// PublicOrder lists the folded public names in declaration order, which
-	// is the order the editor's "p" command lists them in.
+	// PublicOrder lists the folded public names in declaration
+	// order, which is the order the editor's "p" command lists
+	// them in.
 	PublicOrder []string
 
-	// MLevel is the mucker level the program was compiled at, which bounds
-	// what its primitives may do.
+	// MLevel is the mucker level the program was compiled at,
+	// which bounds what its primitives may do.
 	MLevel int
 }
 
@@ -134,7 +139,8 @@ type Public struct {
 	Proc   *Proc
 }
 
-// Reserved variable slots. Every program has these four, in this order.
+// Reserved variable slots. Every program has these four, in this
+// order.
 const (
 	VarMe = iota
 	VarLoc
@@ -144,7 +150,8 @@ const (
 	ReservedVars
 )
 
-// MaxVars is the ceiling on variables of each kind, from include/inst.h.
+// MaxVars is the ceiling on variables of each kind, from
+// include/inst.h.
 const MaxVars = 54
 
 // StackSize is the argument stack's ceiling, from include/inst.h.
@@ -153,8 +160,8 @@ const StackSize = 1024
 // reservedVarNames are the variables every program starts with.
 var reservedVarNames = []string{"me", "loc", "trigger", "command"}
 
-// Disassemble renders the program's code, which is what the debugger and the
-// compiler's tests read.
+// Disassemble renders the program's code, which is what the debugger
+// and the compiler's tests read.
 func (p *Program) Disassemble() string {
 	var b strings.Builder
 	for i := range p.Code {

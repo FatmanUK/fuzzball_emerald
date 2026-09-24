@@ -4,22 +4,24 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// Snapshot is a batch of changes handed to the persister. Objects in it are
-// deep copies taken on the world goroutine, so the persister can take as long
-// as it likes without ever observing a half-written object.
+// Snapshot is a batch of changes handed to the persister. Objects in
+// it are deep copies taken on the world goroutine, so the persister
+// can take as long as it likes without ever observing a half-written
+// object.
 type Snapshot struct {
 	Objects []*Object
 	Deleted []ref.Ref
-	// Tune carries the whole parameter table when it changed, and is nil
-	// otherwise. The table is small and changes rarely, so there is no
-	// point tracking individual parameters.
+	// Tune carries the whole parameter table when it changed, and
+	// is nil otherwise. The table is small and changes rarely, so
+	// there is no point tracking individual parameters.
 	Tune map[string]string
-	// Programs carries the MUF source of every program saved since the last
-	// snapshot. Source is held apart from the object because the editor
-	// rewrites text without changing any field on the object itself.
+	// Programs carries the MUF source of every program saved
+	// since the last snapshot. Source is held apart from the
+	// object because the editor rewrites text without changing
+	// any field on the object itself.
 	Programs map[ref.Ref]string
-	// Macros carries the whole editor macro table when it changed, for the
-	// same reason Tune does.
+	// Macros carries the whole editor macro table when it
+	// changed, for the same reason Tune does.
 	Macros []Macro
 	// Top is the world's ref ceiling at the time of the snapshot.
 	Top ref.Ref
@@ -31,8 +33,8 @@ func (s Snapshot) Empty() bool {
 		len(s.Programs) == 0 && s.Macros == nil
 }
 
-// TakeSnapshot copies out everything changed since the last call and clears
-// the dirty set. It must run on the world goroutine.
+// TakeSnapshot copies out everything changed since the last call and
+// clears the dirty set. It must run on the world goroutine.
 func (w *World) TakeSnapshot() Snapshot {
 	s := Snapshot{Top: w.top}
 
@@ -78,12 +80,12 @@ func (w *World) TakeSnapshot() Snapshot {
 	return s
 }
 
-// DirtyCount reports how many objects are waiting to be written. Tests and
-// diagnostics use it; the flush loop does not need it.
+// DirtyCount reports how many objects are waiting to be written.
+// Tests and diagnostics use it; the flush loop does not need it.
 func (w *World) DirtyCount() int { return len(w.dirty) }
 
-// MarkAllDirty queues every object for writing, which is what a fresh import
-// needs.
+// MarkAllDirty queues every object for writing, which is what a fresh
+// import needs.
 func (w *World) MarkAllDirty() {
 	for r := range w.objs {
 		w.dirty[r] = struct{}{}

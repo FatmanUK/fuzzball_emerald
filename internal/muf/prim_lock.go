@@ -2,10 +2,10 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
 
-// permissions is upstream's permissions(): whether player may act on thing
-// through basic ownership — itself, HOME, an exit owned by them or by no one,
-// or anything else they own outright. A player object never passes except by
-// being thing itself.
+// permissions is upstream's permissions(): whether player may act on
+// thing through basic ownership — itself, HOME, an exit owned by
+// them or by no one, or anything else they own outright. A player
+// object never passes except by being thing itself.
 func permissions(h Host, player, thing ref.Ref) bool {
 	if thing == player || thing == ref.Home {
 		return true
@@ -24,11 +24,12 @@ func permissions(h Host, player, thing ref.Ref) bool {
 
 // progUID approximates upstream's ProgUID/find_uid: the permissions a
 // running program acts with. The full macro also depends on fr->perms
-// (STD_REGUID/SETUID/HARDUID, set by whoever calls interp()) and the STICKY
-// and HAVEN program flags, none of which this codebase threads through yet —
-// see RunLock's own doc comment for the same gap. This covers upstream's
-// common REGUID path: below mucker level 2 a program always runs as its own
-// owner; at or above it, as whoever is running it.
+// (STD_REGUID/SETUID/HARDUID, set by whoever calls interp()) and the
+// STICKY and HAVEN program flags, none of which this codebase threads
+// through yet — see RunLock's own doc comment for the same gap.
+// This covers upstream's common REGUID path: below mucker level 2 a
+// program always runs as its own owner; at or above it, as whoever is
+// running it.
 func (f *Frame) progUID(h Host) ref.Ref {
 	if f.MLevel() < 2 {
 		return h.Owner(f.Prog.Ref)
@@ -36,16 +37,17 @@ func (f *Frame) progUID(h Host) ref.Ref {
 	return h.Owner(f.Caller)
 }
 
-// checkRemote is upstream's CHECKREMOTE macro: below mucker level 2, a
-// primitive may only read x if it is HOME, the running player, something at
-// or holding the player's own location, or something ProgUID controls
-// outright.
+// checkRemote is upstream's CHECKREMOTE macro: below mucker level 2,
+// a primitive may only read x if it is HOME, the running player,
+// something at or holding the player's own location, or something
+// ProgUID controls outright.
 func (f *Frame) checkRemote(h Host, x ref.Ref) error {
 	if f.MLevel() >= 2 || x == ref.Home {
 		return nil
 	}
 	loc := h.Location(f.Caller)
-	if h.Location(x) == f.Caller || h.Location(x) == loc || x == loc || x == f.Caller {
+	if h.Location(x) == f.Caller || h.Location(x) == loc ||
+		x == loc || x == f.Caller {
 		return nil
 	}
 	if controls(h, f.progUID(h), x) {
@@ -55,9 +57,10 @@ func (f *Frame) checkRemote(h Host, x ref.Ref) error {
 }
 
 // TESTLOCK and LOCKED? are ports of prim_testlock (src/p_misc.c) and
-// prim_lockedp (src/p_db.c). Both delegate the actual lock walk to the host,
-// since that needs the world and internal/boolexp; what stays here is
-// argument validation and the recursion guard, which read only the frame.
+// prim_lockedp (src/p_db.c). Both delegate the actual lock walk to
+// the host, since that needs the world and internal/boolexp; what
+// stays here is argument validation and the recursion guard, which
+// read only the frame.
 func init() {
 	register("TESTLOCK", func(f *Frame) (*Result, error) {
 		lockV, err := f.Pop()
@@ -78,7 +81,8 @@ func init() {
 			return nil, err
 		}
 
-		if playerV.Type != TypeObject || !h.Valid(playerV.Ref) ||
+		if playerV.Type != TypeObject ||
+			!h.Valid(playerV.Ref) ||
 			(h.ObjType(playerV.Ref) != ref.TypePlayer && h.ObjType(playerV.Ref) != ref.TypeThing) {
 			return nil, errf("Invalid player or thing argument (1).")
 		}
@@ -117,11 +121,14 @@ func init() {
 			return nil, errf("Interp call loops not allowed.")
 		}
 
-		// Reproduced verbatim from upstream, bug and all: the condition is
-		// written "!= TYPE_PLAYER && == TYPE_THING", so a THING argument is
-		// the one thing this rejects rather than the one it was meant to
-		// allow. Fuzzball 7.2.1's own doc comment claims both are accepted.
-		if playerV.Type != TypeObject || !h.Valid(playerV.Ref) ||
+		// Reproduced verbatim from upstream, bug and all: the
+		// condition is written "!= TYPE_PLAYER && ==
+		// TYPE_THING", so a THING argument is the one thing
+		// this rejects rather than the one it was meant to
+		// allow. Fuzzball 7.2.1's own doc comment claims both
+		// are accepted.
+		if playerV.Type != TypeObject ||
+			!h.Valid(playerV.Ref) ||
 			(h.ObjType(playerV.Ref) != ref.TypePlayer && h.ObjType(playerV.Ref) == ref.TypeThing) {
 			return nil, errf("Invalid player or thing argument. (1)")
 		}
@@ -146,13 +153,14 @@ func init() {
 	})
 }
 
-// GETLOCKSTR, SETLOCKSTR, PARSELOCK, UNPARSELOCK and PRETTYLOCK are ports of
-// prim_getlockstr and prim_setlockstr (src/p_db.c) and prim_parselock,
-// prim_unparselock and prim_prettylock (src/p_misc.c). GETLOCKSTR/SETLOCKSTR
-// read and write the standard @lock property directly; PARSELOCK/
-// UNPARSELOCK/PRETTYLOCK convert between a lock string and a TypeLock value
-// without touching any object — PRETTYLOCK differs from UNPARSELOCK only in
-// rendering dbrefs the way a player would see them, not as bare "#123"s.
+// GETLOCKSTR, SETLOCKSTR, PARSELOCK, UNPARSELOCK and PRETTYLOCK are
+// ports of prim_getlockstr and prim_setlockstr (src/p_db.c) and
+// prim_parselock, prim_unparselock and prim_prettylock
+// (src/p_misc.c). GETLOCKSTR/SETLOCKSTR read and write the standard
+// @lock property directly; PARSELOCK/ UNPARSELOCK/PRETTYLOCK convert
+// between a lock string and a TypeLock value without touching any
+// object — PRETTYLOCK differs from UNPARSELOCK only in rendering
+// dbrefs the way a player would see them, not as bare "#123"s.
 func init() {
 	register("GETLOCKSTR", func(f *Frame) (*Result, error) {
 		obj, err := f.Pop()
@@ -175,7 +183,8 @@ func init() {
 			return nil, err
 		}
 
-		if f.MLevel() < 3 && !permissions(h, f.progUID(h), obj.Ref) {
+		if f.MLevel() < 3 &&
+			!permissions(h, f.progUID(h), obj.Ref) {
 			return nil, errf("Permission denied.")
 		}
 
@@ -207,7 +216,8 @@ func init() {
 			return nil, errf("Invalid argument type (1)")
 		}
 
-		if f.MLevel() < 4 && !permissions(h, f.progUID(h), objV.Ref) {
+		if f.MLevel() < 4 &&
+			!permissions(h, f.progUID(h), objV.Ref) {
 			return nil, errf("Permission denied.")
 		}
 
@@ -263,11 +273,13 @@ func init() {
 		return nil, f.Push(Str(h.PrettyLock(f.progUID(h), v.Lock)))
 	})
 
-	// ARRAY_FILTER_LOCK is a port of prim_array_filter_lock (src/p_array.c):
-	// keep only the dbrefs in an array that pass a lock. It reuses
-	// Host.TestLock per element rather than a bulk Host method, since that
-	// already resolves the consistent_lock_source thing/trig choice — unlike
-	// TESTLOCK, upstream has no recursion guard here, so none is added.
+	// ARRAY_FILTER_LOCK is a port of prim_array_filter_lock
+	// (src/p_array.c): keep only the dbrefs in an array that pass
+	// a lock. It reuses Host.TestLock per element rather than a
+	// bulk Host method, since that already resolves the
+	// consistent_lock_source thing/trig choice — unlike
+	// TESTLOCK, upstream has no recursion guard here, so none is
+	// added.
 	register("ARRAY_FILTER_LOCK", func(f *Frame) (*Result, error) {
 		lockV, err := f.Pop()
 		if err != nil {

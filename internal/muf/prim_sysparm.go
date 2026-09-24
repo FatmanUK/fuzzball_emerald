@@ -2,11 +2,12 @@ package muf
 
 // SYSPARM, SETSYSPARM and SYSPARM_ARRAY are ports of prim_sysparm/
 // prim_setsysparm/prim_sysparm_array (src/p_misc.c), all built on
-// Host.TuneGet/TuneSet/TuneList (internal/game/tune_host.go). All three
-// check a parameter's own read/write mlevel against TUNE_MLEV(player) —
-// the PLAYER's own object mlevel, not the calling program's — which is why
-// none of the three appear in mlev_gen.go: their gate is a per-parameter
-// value, not a fixed floor on the primitive itself.
+// Host.TuneGet/TuneSet/TuneList (internal/game/tune_host.go). All
+// three check a parameter's own read/write mlevel against
+// TUNE_MLEV(player) — the PLAYER's own object mlevel, not the
+// calling program's — which is why none of the three appear in
+// mlev_gen.go: their gate is a per-parameter value, not a fixed floor
+// on the primitive itself.
 func init() {
 	register("SYSPARM", func(f *Frame) (*Result, error) {
 		name, err := f.popStr()
@@ -112,8 +113,9 @@ func init() {
 	})
 }
 
-// trimTuneReset strips SETSYSPARM's own "%name" reset-to-default prefix, so
-// the write-mlev check looks up the real parameter name either way.
+// trimTuneReset strips SETSYSPARM's own "%name" reset-to-default
+// prefix, so the write-mlev check looks up the real parameter name
+// either way.
 func trimTuneReset(name string) string {
 	if len(name) > 0 && name[0] == '%' {
 		return name[1:]

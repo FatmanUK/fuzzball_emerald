@@ -33,7 +33,9 @@ func startWSS(t *testing.T) (url string, client *tls.Config) {
 	macros := make([]world.Macro, 0, len(res.Macros))
 	for _, m := range res.Macros {
 		macros = append(macros, world.Macro{
-			Name: m.Name, Definition: m.Definition, Owner: m.Owner,
+			Name:       m.Name,
+			Definition: m.Definition,
+			Owner:      m.Owner,
 		})
 	}
 	res.World.SetMacros(macros)
@@ -119,8 +121,9 @@ func (c *wsClient) expect(want string) string {
 	}
 }
 
-// TestWSSConnectAndLook checks the WebSocket transport reaches the same world
-// through the same descriptor abstraction as the line transport.
+// TestWSSConnectAndLook checks the WebSocket transport reaches the
+// same world through the same descriptor abstraction as the line
+// transport.
 func TestWSSConnectAndLook(t *testing.T) {
 	url, cfg := startWSS(t)
 	c := dialWSS(t, url, cfg)

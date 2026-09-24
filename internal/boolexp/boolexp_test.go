@@ -46,12 +46,25 @@ func (h *fakeHost) Match(player ref.Ref, name string) ref.Ref {
 	}
 	return ref.Nothing
 }
-func (h *fakeHost) Wizard(player ref.Ref) bool    { return h.wizards[player] }
-func (h *fakeHost) Name(viewer, r ref.Ref) string { return h.names[r] }
-func (h *fakeHost) Valid(r ref.Ref) bool          { _, ok := h.types[r]; return ok }
-func (h *fakeHost) Type(r ref.Ref) ref.ObjType    { return h.types[r] }
-func (h *fakeHost) Owner(r ref.Ref) ref.Ref       { return h.owner[r] }
-func (h *fakeHost) Location(r ref.Ref) ref.Ref    { return h.location[r] }
+func (h *fakeHost) Wizard(player ref.Ref) bool {
+	return h.wizards[player]
+}
+func (h *fakeHost) Name(viewer, r ref.Ref) string {
+	return h.names[r]
+}
+func (h *fakeHost) Valid(r ref.Ref) bool {
+	_, ok := h.types[r]
+	return ok
+}
+func (h *fakeHost) Type(r ref.Ref) ref.ObjType {
+	return h.types[r]
+}
+func (h *fakeHost) Owner(r ref.Ref) ref.Ref {
+	return h.owner[r]
+}
+func (h *fakeHost) Location(r ref.Ref) ref.Ref {
+	return h.location[r]
+}
 func (h *fakeHost) Contents(r ref.Ref) []ref.Ref {
 	return h.contents[r]
 }
@@ -140,7 +153,8 @@ func TestParseProp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if b.Kind != Prop || b.PropName != "foo" || b.PropValue != "bar" {
+	if b.Kind != Prop || b.PropName != "foo" ||
+		b.PropValue != "bar" {
 		t.Fatalf("got %+v", b)
 	}
 }
@@ -184,11 +198,12 @@ func TestParseMatchAmbiguous(t *testing.T) {
 }
 
 // TestParseErrorNotifyFlag checks which parse failures upstream's own
-// parser would have shown to the player (Notify true — a match failure or
-// the hidden-property permission check) against which it fails on silently
-// (Notify false — a bare syntax error). Confirmed against the real server:
-// an unparseable "" PARSELOCK argument produces no message at all, which is
-// only correct if syntax errors stay unnotified.
+// parser would have shown to the player (Notify true — a match
+// failure or the hidden-property permission check) against which it
+// fails on silently (Notify false — a bare syntax error). Confirmed
+// against the real server: an unparseable "" PARSELOCK argument
+// produces no message at all, which is only correct if syntax errors
+// stay unnotified.
 func TestParseErrorNotifyFlag(t *testing.T) {
 	h := newFakeHost()
 	h.matches["ok"] = thing1
@@ -350,9 +365,9 @@ func TestEvalPropWildcard(t *testing.T) {
 }
 
 func TestEvalPropIntZeroMatches(t *testing.T) {
-	// Reproduces the upstream quirk: an int prop of 0 always "matches" a
-	// lock's string-value check, since the value comparison upstream passes
-	// is hard-coded to 0.
+	// Reproduces the upstream quirk: an int prop of 0 always
+	// "matches" a lock's string-value check, since the value
+	// comparison upstream passes is hard-coded to 0.
 	h := newFakeHost()
 	h.setProp(player1, "counter", props.Value{Type: props.Int, Num: 0})
 	b := &Expr{Kind: Prop, PropName: "counter", PropValue: "anything"}

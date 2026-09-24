@@ -9,11 +9,11 @@ import (
 // Result carries what a compile produced beyond the program itself.
 type Result struct {
 	Program *muf.Program
-	// Notes are messages the compiler wants shown: a $echo, or a directive
-	// that could not be honoured.
+	// Notes are messages the compiler wants shown: a $echo, or a
+	// directive that could not be honoured.
 	Notes []string
-	// Props are program properties a directive asked to set, such as
-	// $author and $version.
+	// Props are program properties a directive asked to set, such
+	// as $author and $version.
 	Props map[string]string
 }
 
@@ -34,9 +34,9 @@ func (c *compiler) finish() (*muf.Program, error) {
 		MLevel:      c.opts.MLevel,
 	}
 
-	// Execution starts at the last procedure defined. Upstream pushes each
-	// procedure onto the head of a list and starts at the head, which comes
-	// to the same thing.
+	// Execution starts at the last procedure defined. Upstream
+	// pushes each procedure onto the head of a list and starts at
+	// the head, which comes to the same thing.
 	p.Start = c.procs[c.procOrder[len(c.procOrder)-1]]
 
 	if err := c.checkJumps(); err != nil {
@@ -45,9 +45,9 @@ func (c *compiler) finish() (*muf.Program, error) {
 	return p, nil
 }
 
-// checkJumps verifies every branch target is inside the code. A target out of
-// range means the compiler patched something wrong, and finding it here beats
-// finding it as a crash at run time.
+// checkJumps verifies every branch target is inside the code. A
+// target out of range means the compiler patched something wrong, and
+// finding it here beats finding it as a crash at run time.
 func (c *compiler) checkJumps() error {
 	for i, in := range c.code {
 		switch in.Type {
@@ -62,8 +62,8 @@ func (c *compiler) checkJumps() error {
 	return nil
 }
 
-// CompileResult compiles and returns the notes and properties alongside the
-// program.
+// CompileResult compiles and returns the notes and properties
+// alongside the program.
 func CompileResult(src string, opts Options) (*Result, error) {
 	c := &compiler{
 		lex:     newLexer(src),

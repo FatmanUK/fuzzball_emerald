@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// Format renders a time under a C strftime format, covering the subset MUF
-// and MPI programs use — MUF's TIMEFMT and MPI's {ftime}.
+// Format renders a time under a C strftime format, covering the
+// subset MUF and MPI programs use — MUF's TIMEFMT and MPI's
+// {ftime}.
 func Format(format string, t time.Time) string {
 	var b strings.Builder
 	for i := 0; i < len(format); i++ {

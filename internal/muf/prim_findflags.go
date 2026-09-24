@@ -5,10 +5,10 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// ARRAY_FILTER_FLAGS and FINDNEXT are the two primitives that take a flag
-// expression — see checkflags.go for the language itself. They are together
-// here rather than with the rest of their own modules because the expression
-// is the whole of what they do.
+// ARRAY_FILTER_FLAGS and FINDNEXT are the two primitives that take a
+// flag expression — see checkflags.go for the language itself. They
+// are together here rather than with the rest of their own modules
+// because the expression is the whole of what they do.
 func init() {
 	register("ARRAY_FILTER_FLAGS", func(f *Frame) (*Result, error) {
 		flagsV, err := f.Pop()
@@ -44,10 +44,11 @@ func init() {
 		return nil, f.Push(Arr(NewList(kept)))
 	})
 
-	// FINDNEXT walks the database from one object to the next one matching
-	// an owner, a name pattern and a flag expression — what @find is built
-	// on, exposed so a program can page through the results itself rather
-	// than being handed all of them at once.
+	// FINDNEXT walks the database from one object to the next one
+	// matching an owner, a name pattern and a flag expression —
+	// what @find is built on, exposed so a program can page
+	// through the results itself rather than being handed all of
+	// them at once.
 	register("FINDNEXT", func(f *Frame) (*Result, error) {
 		flagsV, err := f.Pop()
 		if err != nil {
@@ -98,8 +99,9 @@ func init() {
 			}
 		}
 
-		// NOTHING starts the walk at #0; anything else resumes past it, so
-		// feeding the last result back in finds the one after it.
+		// NOTHING starts the walk at #0; anything else
+		// resumes past it, so feeding the last result back in
+		// finds the one after it.
 		start := ref.Ref(0)
 		if startV.Ref != ref.Nothing {
 			start = startV.Ref + 1
@@ -107,13 +109,16 @@ func init() {
 		check := parseFlagCheck(flagsV.Str)
 		pattern := patternV.Str
 		for i := start; i < h.Top(); i++ {
-			if owner != ref.Nothing && h.Owner(i) != owner {
+			if owner != ref.Nothing &&
+				h.Owner(i) != owner {
 				continue
 			}
-			if h.ObjType(i) == ref.TypeGarbage || !check.matches(h, i) {
+			if h.ObjType(i) == ref.TypeGarbage ||
+				!check.matches(h, i) {
 				continue
 			}
-			if pattern != "" && !ascii.SMatch(h.Name(i), pattern) {
+			if pattern != "" &&
+				!ascii.SMatch(h.Name(i), pattern) {
 				continue
 			}
 			return nil, f.Push(Obj(i))

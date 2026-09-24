@@ -10,13 +10,13 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// ignoreProp is upstream's IGNORE_PROP: a hidden reflist under a directory
-// no MUF property-reading primitive can reach, upstream's own
-// SYSTEM_PROPDIR_NOREAD.
+// ignoreProp is upstream's IGNORE_PROP: a hidden reflist under a
+// directory no MUF property-reading primitive can reach, upstream's
+// own SYSTEM_PROPDIR_NOREAD.
 const ignoreProp = "@__sys__/ignore/def"
 
-// nameForbidden is upstream's ok_object_name: characters and whole names no
-// object may be created with, regardless of type.
+// nameForbidden is upstream's ok_object_name: characters and whole
+// names no object may be created with, regardless of type.
 func nameForbidden(name string) bool {
 	if name == "" {
 		return true
@@ -35,12 +35,13 @@ func nameForbidden(name string) bool {
 	return false
 }
 
-// NameOK implements muf.Host for EXT-NAME-OK?, upstream's ok_object_name.
-// Unlike upstream, this does not check tp_reserved_names/
-// tp_reserved_player_names, ok_player_name's length limit, or the 7-bit-only
-// tune flags — Emerald has no object-creation command that enforces any of
-// those either, so adding them only to this one introspection primitive
-// would make it stricter than @create itself.
+// NameOK implements muf.Host for EXT-NAME-OK?, upstream's
+// ok_object_name. Unlike upstream, this does not check
+// tp_reserved_names/ tp_reserved_player_names, ok_player_name's
+// length limit, or the 7-bit-only tune flags — Emerald has no
+// object-creation command that enforces any of those either, so
+// adding them only to this one introspection primitive would make it
+// stricter than @create itself.
 func (h *mufHost) NameOK(name string, t ref.ObjType) bool {
 	if nameForbidden(name) {
 		return false
@@ -55,10 +56,10 @@ func (h *mufHost) NameOK(name string, t ref.ObjType) bool {
 	return true
 }
 
-// UserLog implements muf.Host for USERLOG, upstream's log_user — written to
-// the "muf" diagnostic channel (internal/logging) rather than upstream's own
-// flat tp_file_log_user file, matching how every other MUF-triggered log
-// line in this codebase is recorded.
+// UserLog implements muf.Host for USERLOG, upstream's log_user —
+// written to the "muf" diagnostic channel (internal/logging) rather
+// than upstream's own flat tp_file_log_user file, matching how every
+// other MUF-triggered log line in this codebase is recorded.
 func (h *mufHost) UserLog(player, program ref.Ref, msg string) {
 	logging.On(h.s.log, logging.Muf).Info("USERLOG",
 		"player", player.String(), "player_name", h.Name(player),
@@ -66,8 +67,8 @@ func (h *mufHost) UserLog(player, program ref.Ref, msg string) {
 		"message", msg)
 }
 
-// resolveIgnore is ignore_is_ignoring_sub's own owner/wizard gate, shared by
-// IsIgnoring, IgnoreAdd and IgnoreDel.
+// resolveIgnore is ignore_is_ignoring_sub's own owner/wizard gate,
+// shared by IsIgnoring, IgnoreAdd and IgnoreDel.
 func (h *mufHost) resolveIgnore(player, who ref.Ref) (p, w ref.Ref, ok bool) {
 	if !h.TuneBool("ignore_support") {
 		return 0, 0, false
@@ -83,8 +84,8 @@ func (h *mufHost) resolveIgnore(player, who ref.Ref) (p, w ref.Ref, ok bool) {
 }
 
 // IsIgnoring implements muf.Host for IGNORING?, upstream's
-// ignore_is_ignoring: player's owner is ignoring who's owner, or — when
-// ignore_bidirectional is on — the other way around.
+// ignore_is_ignoring: player's owner is ignoring who's owner, or —
+// when ignore_bidirectional is on — the other way around.
 func (h *mufHost) IsIgnoring(player, who ref.Ref) bool {
 	p, w, ok := h.resolveIgnore(player, who)
 	if !ok {
@@ -96,8 +97,9 @@ func (h *mufHost) IsIgnoring(player, who ref.Ref) bool {
 	return h.TuneBool("ignore_bidirectional") && refListHas(h, w, p)
 }
 
-// IgnoreAdd and IgnoreDel implement muf.Host for IGNORE_ADD/IGNORE_DEL,
-// upstream's ignore_add_player/ignore_remove_player.
+// IgnoreAdd and IgnoreDel implement muf.Host for
+// IGNORE_ADD/IGNORE_DEL, upstream's
+// ignore_add_player/ignore_remove_player.
 func (h *mufHost) IgnoreAdd(player, who ref.Ref) {
 	p, w, ok := h.resolveIgnore(player, who)
 	if !ok {
@@ -129,9 +131,9 @@ func (h *mufHost) IgnoreDel(player, who ref.Ref) {
 }
 
 // refList and joinRefs read and write a reflist property — the same
-// space-separated-dbrefs format internal/muf's own REFLIST_* primitives
-// use, duplicated here rather than shared since those live in package muf
-// and this needs no MUF Value/Frame machinery at all.
+// space-separated-dbrefs format internal/muf's own REFLIST_*
+// primitives use, duplicated here rather than shared since those live
+// in package muf and this needs no MUF Value/Frame machinery at all.
 func refList(h *mufHost, obj ref.Ref) []ref.Ref {
 	v, ok := h.GetProp(obj, ignoreProp)
 	if !ok || v.Str == "" {

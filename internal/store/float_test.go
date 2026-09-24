@@ -10,9 +10,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// TestFloatPropertiesRoundTrip checks the awkward end of the float range. MUF
-// programs can and do store infinities in properties, and a decimal column
-// would not carry them.
+// TestFloatPropertiesRoundTrip checks the awkward end of the float
+// range. MUF programs can and do store infinities in properties, and
+// a decimal column would not carry them.
 func TestFloatPropertiesRoundTrip(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -49,7 +49,8 @@ func TestFloatPropertiesRoundTrip(t *testing.T) {
 			t.Errorf("%s: missing after reload", k)
 			continue
 		}
-		// NaN is never equal to itself, so it needs its own check.
+		// NaN is never equal to itself, so it needs its own
+		// check.
 		if math.IsNaN(want) {
 			if !math.IsNaN(got.Float) {
 				t.Errorf("%s = %v, want NaN", k, got.Float)

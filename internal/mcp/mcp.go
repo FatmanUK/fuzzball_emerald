@@ -1,14 +1,15 @@
-// Package mcp implements MCP 2.1, the out-of-band message protocol MUD
-// clients use to exchange structured data with a server alongside ordinary
-// text.
+// Package mcp implements MCP 2.1, the out-of-band message protocol
+// MUD clients use to exchange structured data with a server alongside
+// ordinary text.
 //
-// The specification is at https://www.moo.mud.org/mcp/. A message is a line
-// beginning "#$#", carrying a package-qualified name and a set of key-value
-// arguments; a value too long or too awkward for one line is sent on
-// continuation lines tied together by a data tag.
+// The specification is at https://www.moo.mud.org/mcp/. A message is
+// a line beginning "#$#", carrying a package-qualified name and a set
+// of key-value arguments; a value too long or too awkward for one
+// line is sent on continuation lines tied together by a data tag.
 //
-// Everything here is per-connection and holds no world state, so it runs
-// wherever the connection does rather than on the world goroutine.
+// Everything here is per-connection and holds no world state, so it
+// runs wherever the connection does rather than on the world
+// goroutine.
 package mcp
 
 import (
@@ -23,18 +24,19 @@ import (
 const (
 	// Prefix introduces an out-of-band message.
 	Prefix = "#$#"
-	// QuotePrefix introduces in-band text that happened to start with the
-	// message prefix, and which the client has quoted so it is not read as
-	// a message.
+	// QuotePrefix introduces in-band text that happened to start
+	// with the message prefix, and which the client has quoted so
+	// it is not read as a message.
 	QuotePrefix = `#$"`
 
-	// InitPackage is the one package name that needs no authentication
-	// key, because it is what establishes the key.
+	// InitPackage is the one package name that needs no
+	// authentication key, because it is what establishes the key.
 	InitPackage = "mcp"
-	// NegotiatePackage carries the list of packages each side supports.
+	// NegotiatePackage carries the list of packages each side
+	// supports.
 	NegotiatePackage = "mcp-negotiate"
-	// DataTag names the argument that ties continuation lines to the
-	// message they belong to.
+	// DataTag names the argument that ties continuation lines to
+	// the message they belong to.
 	DataTag = "_data-tag"
 
 	emptyArg = `""`
@@ -47,8 +49,8 @@ func (v Version) String() string {
 	return strconv.Itoa(v.Major) + "." + strconv.Itoa(v.Minor)
 }
 
-// IsZero reports whether this is the null version, which means "no version in
-// common".
+// IsZero reports whether this is the null version, which means "no
+// version in common".
 func (v Version) IsZero() bool { return v.Major == 0 && v.Minor == 0 }
 
 // less reports whether v sorts before other.
@@ -59,8 +61,8 @@ func (v Version) less(other Version) bool {
 	return v.Minor < other.Minor
 }
 
-// ParseVersion reads "2.1". It stops at the first character that is not part
-// of a version, as upstream's hand-rolled parser does.
+// ParseVersion reads "2.1". It stops at the first character that is
+// not part of a version, as upstream's hand-rolled parser does.
 func ParseVersion(s string) (Version, bool) {
 	major, rest, ok := leadingDigits(s)
 	if !ok || !strings.HasPrefix(rest, ".") {
@@ -88,8 +90,8 @@ func leadingDigits(s string) (int, string, bool) {
 	return n, s[i:], true
 }
 
-// SelectVersion returns the highest version both sides support, or the null
-// version when the ranges do not overlap.
+// SelectVersion returns the highest version both sides support, or
+// the null version when the ranges do not overlap.
 func SelectVersion(minA, maxA, minB, maxB Version) Version {
 	if maxA.less(minB) || maxB.less(minA) {
 		return Version{}
@@ -100,8 +102,8 @@ func SelectVersion(minA, maxA, minB, maxB Version) Version {
 	return maxB
 }
 
-// Arg is one argument of a message. A value may run to several lines, which
-// is what the continuation lines are for.
+// Arg is one argument of a message. A value may run to several lines,
+// which is what the continuation lines are for.
 type Arg struct {
 	Name  string
 	Lines []string
@@ -109,14 +111,14 @@ type Arg struct {
 
 // Message is one MCP message.
 type Message struct {
-	// Package is the package name, and Name the message within it. A
-	// message named only by its package has an empty Name.
+	// Package is the package name, and Name the message within
+	// it. A message named only by its package has an empty Name.
 	Package string
 	Name    string
 	Args    []Arg
 
-	// dataTag ties continuation lines to this message while it is still
-	// being received.
+	// dataTag ties continuation lines to this message while it is
+	// still being received.
 	dataTag string
 	// incomplete is set while arguments are still arriving.
 	incomplete bool
@@ -181,8 +183,8 @@ func (m *Message) removeArg(name string) {
 	m.Args = kept
 }
 
-// FullName is how the message is written on the wire: the package, then the
-// message name after a hyphen when there is one.
+// FullName is how the message is written on the wire: the package,
+// then the message name after a hyphen when there is one.
 func (m *Message) FullName() string {
 	if m.Name == "" {
 		return m.Package
@@ -194,9 +196,9 @@ func (m *Message) FullName() string {
 type Package struct {
 	Name           string
 	MinVer, MaxVer Version
-	// Handle is called for each message in this package once both sides
-	// have agreed on it. It may be nil for a package that is advertised
-	// but whose messages are handled elsewhere.
+	// Handle is called for each message in this package once both
+	// sides have agreed on it. It may be nil for a package that
+	// is advertised but whose messages are handled elsewhere.
 	Handle func(f *Frame, m *Message, v Version)
 }
 
@@ -214,9 +216,10 @@ func escapeArg(s string) string {
 	return b.String()
 }
 
-// errNoPackage is returned when a message names a package the other side has
-// not agreed to.
+// errNoPackage is returned when a message names a package the other
+// side has not agreed to.
 var errNoPackage = fmt.Errorf("mcp: the client does not support that package")
 
-// errNotEnabled is returned when MCP has not been negotiated on a connection.
+// errNotEnabled is returned when MCP has not been negotiated on a
+// connection.
 var errNotEnabled = fmt.Errorf("mcp: not negotiated on this connection")

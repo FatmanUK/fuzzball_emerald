@@ -5,8 +5,9 @@ import "strconv"
 // ObjType is the low three bits of an object's flag word.
 type ObjType uint32
 
-// Object types. These bit values are stored in legacy database dumps and must
-// not be renumbered. 0x5 is unused; Fuzzball never assigned it.
+// Object types. These bit values are stored in legacy database dumps
+// and must not be renumbered. 0x5 is unused; Fuzzball never assigned
+// it.
 const (
 	TypeRoom    ObjType = 0x0
 	TypeThing   ObjType = 0x1
@@ -43,10 +44,11 @@ func (t ObjType) String() string {
 // Flags is an object's flag word, type bits included.
 type Flags uint32
 
-// Object flags. Bit positions are dump-format compatible with Fuzzball 7.
+// Object flags. Bit positions are dump-format compatible with
+// Fuzzball 7.
 //
-// Flags marked "internal" describe live server state rather than anything
-// worth persisting; see DumpMask.
+// Flags marked "internal" describe live server state rather than
+// anything worth persisting; see DumpMask.
 const (
 	Wizard        Flags = 0x10       // gets automatic control
 	LinkOK        Flags = 0x20       // anybody can link to this
@@ -75,8 +77,8 @@ const (
 	Overt         Flags = 0x80000000 // overt
 )
 
-// DumpMask is the set of flags that describe live server state. They are
-// cleared when an object is loaded and never written back.
+// DumpMask is the set of flags that describe live server state. They
+// are cleared when an object is loaded and never written back.
 const DumpMask = Interactive | ObjectChanged | Listener | ReadMode | SaneBit
 
 // Mucker levels.
@@ -99,8 +101,8 @@ func (f Flags) WithType(t ObjType) Flags {
 // Has reports whether every flag in mask is set.
 func (f Flags) Has(mask Flags) bool { return f&mask == mask }
 
-// RawMLevel is the mucker level encoded in the MUCKER and SMUCKER bits alone,
-// between 0 and 3. It ignores the WIZARD bit.
+// RawMLevel is the mucker level encoded in the MUCKER and SMUCKER
+// bits alone, between 0 and 3. It ignores the WIZARD bit.
 func (f Flags) RawMLevel() int {
 	lvl := 0
 	if f&Mucker != 0 {
@@ -112,8 +114,9 @@ func (f Flags) RawMLevel() int {
 	return lvl
 }
 
-// MLevel is the effective mucker level, between 0 and 4. A wizard with either
-// mucker bit set is level 4; otherwise the raw bits decide.
+// MLevel is the effective mucker level, between 0 and 4. A wizard
+// with either mucker bit set is level 4; otherwise the raw bits
+// decide.
 func (f Flags) MLevel() int {
 	if f&Wizard != 0 && f&(Mucker|SMucker) != 0 {
 		return MLevWizard
@@ -121,7 +124,8 @@ func (f Flags) MLevel() int {
 	return f.RawMLevel()
 }
 
-// SetMLevel returns f with its mucker bits set to level, clamped to 0..3.
+// SetMLevel returns f with its mucker bits set to level, clamped to
+// 0..3.
 func (f Flags) SetMLevel(level int) Flags {
 	f &^= Mucker | SMucker
 	if level >= 2 {
@@ -134,7 +138,9 @@ func (f Flags) SetMLevel(level int) Flags {
 }
 
 // IsWizard reports whether the object has unquelled wizard powers.
-func (f Flags) IsWizard() bool { return f&Wizard != 0 && f&Quell == 0 }
+func (f Flags) IsWizard() bool {
+	return f&Wizard != 0 && f&Quell == 0
+}
 
 // IsTrueWizard reports whether the WIZARD bit is set, quelled or not.
 func (f Flags) IsTrueWizard() bool { return f&Wizard != 0 }
@@ -142,13 +148,14 @@ func (f Flags) IsTrueWizard() bool { return f&Wizard != 0 }
 // CanBuild reports whether the object may use construction commands.
 func (f Flags) CanBuild() bool { return f&(Wizard|Builder) != 0 }
 
-// typeCodes maps an object type to its @examine letter. Things render as no
-// letter at all.
+// typeCodes maps an object type to its @examine letter. Things render
+// as no letter at all.
 //
-// Fuzzball 7 indexes the literal "R-EPFG" by type, which is off by one for
-// TYPE_GARBAGE (0x6): it reads the string's NUL terminator, so upstream
-// @examine prints an empty flag string for garbage. Type 0x5 was freed and
-// garbage renumbered without the table following. We render the intended 'G'.
+// Fuzzball 7 indexes the literal "R-EPFG" by type, which is off by
+// one for TYPE_GARBAGE (0x6): it reads the string's NUL terminator,
+// so upstream @examine prints an empty flag string for garbage. Type
+// 0x5 was freed and garbage renumbered without the table following.
+// We render the intended 'G'.
 var typeCodes = map[ObjType]byte{
 	TypeRoom:    'R',
 	TypeExit:    'E',
@@ -157,7 +164,8 @@ var typeCodes = map[ObjType]byte{
 	TypeGarbage: 'G',
 }
 
-// flagLetters lists the flag letters in the order @examine prints them.
+// flagLetters lists the flag letters in the order @examine prints
+// them.
 var flagLetters = []struct {
 	bit    Flags
 	letter byte
@@ -168,9 +176,9 @@ var flagLetters = []struct {
 	{Zombie, 'Z'}, {Yield, 'Y'}, {Overt, 'O'},
 }
 
-// Unparse renders a flag word the way @examine and the object matchers do: a
-// leading type letter (omitted for things) followed by one letter per flag,
-// then M1/M2/M3 for the mucker level.
+// Unparse renders a flag word the way @examine and the object
+// matchers do: a leading type letter (omitted for things) followed by
+// one letter per flag, then M1/M2/M3 for the mucker level.
 func (f Flags) Unparse() string {
 	buf := make([]byte, 0, 24)
 	if c, ok := typeCodes[f.Type()]; ok {

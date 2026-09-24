@@ -1,14 +1,15 @@
-// Package ansi holds the terminal attribute tags MUF's TEXTATTR and MPI's
-// {attr} both accept, and the escape sequences they stand for.
+// Package ansi holds the terminal attribute tags MUF's TEXTATTR and
+// MPI's {attr} both accept, and the escape sequences they stand for.
 package ansi
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 
-// Reset ends every run of attributes, so text after one is unaffected.
+// Reset ends every run of attributes, so text after one is
+// unaffected.
 const Reset = "\x1b[0m"
 
-// codes is the tag table from fuzzball/include/color.h. Several tags have
-// two spellings, both of which upstream accepts.
+// codes is the tag table from fuzzball/include/color.h. Several tags
+// have two spellings, both of which upstream accepts.
 var codes = map[string]string{
 	"reset": Reset, "normal": Reset,
 	"bold": "\x1b[1m", "dim": "\x1b[2m", "italic": "\x1b[3m",
@@ -29,8 +30,9 @@ func Code(tag string) (string, bool) {
 	return c, ok
 }
 
-// TagList is the wording both callers use when a tag is not recognised. It
-// is upstream's own, listing the tags rather than naming the bad one.
+// TagList is the wording both callers use when a tag is not
+// recognised. It is upstream's own, listing the tags rather than
+// naming the bad one.
 const TagList = "reset, bold, dim, italic, underline, flash, reverse, " +
 	"overstrike, black, red, green, yellow, blue, magenta, cyan, white, " +
 	"bg_black, bg_red, bg_green, bg_yellow, bg_blue, bg_magenta, " +

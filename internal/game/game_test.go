@@ -13,13 +13,15 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// harness runs a server over an in-memory descriptor, with no sockets.
+// harness runs a server over an in-memory descriptor, with no
+// sockets.
 //
-// Output is drained on demand rather than by a background goroutine: a
-// descriptor's Send happens synchronously on the world goroutine, so once a
-// round trip through the engine has completed, everything the command produced
-// is already sitting in the channel buffer. Collecting it in the background
-// would race with the test reading it.
+// Output is drained on demand rather than by a background goroutine:
+// a descriptor's Send happens synchronously on the world goroutine,
+// so once a round trip through the engine has completed, everything
+// the command produced is already sitting in the channel buffer.
+// Collecting it in the background would race with the test reading
+// it.
 type harness struct {
 	t      *testing.T
 	s      *Server
@@ -38,9 +40,9 @@ func newHarness(t *testing.T) *harness {
 	room := w.Create("The Study", ref.TypeRoom, ref.God)
 	wiz := w.Create("Wizard", ref.TypePlayer, ref.Nothing)
 	wiz.Owner = wiz.Ref
-	// A wizard with no mucker bits has mucker level 0, so programs it owns
-	// are capped there: find_mlev takes the lower of the program's level
-	// and its owner's.
+	// A wizard with no mucker bits has mucker level 0, so
+	// programs it owns are capped there: find_mlev takes the
+	// lower of the program's level and its owner's.
 	wiz.Flags |= ref.Wizard | ref.Builder
 	wiz.Flags = wiz.Flags.SetMLevel(3)
 	wiz.Home = room.Ref
@@ -89,8 +91,9 @@ func (h *harness) send(line string) {
 // sync waits until everything queued before now has run.
 func (h *harness) sync() {
 	h.t.Helper()
-	// A no-op submitted after the command runs after it, so its completion
-	// proves the command finished and all its output was queued.
+	// A no-op submitted after the command runs after it, so its
+	// completion proves the command finished and all its output
+	// was queued.
 	if err := h.engine.Do(context.Background(), func(*world.World) {}); err != nil {
 		if h.d.Closed() {
 			return // the command disconnected us, which is fine
@@ -102,7 +105,8 @@ func (h *harness) sync() {
 // out returns everything sent since the last call.
 func (h *harness) out() string { return drainDescriptor(h.d) }
 
-// drainDescriptor takes whatever is buffered for a descriptor without waiting.
+// drainDescriptor takes whatever is buffered for a descriptor without
+// waiting.
 func drainDescriptor(d *session.Descriptor) string {
 	var lines []string
 	for {
@@ -157,13 +161,13 @@ func TestLoginRejectsBadPassword(t *testing.T) {
 	}
 }
 
-// TestEveryCommandRuns drives each command with plausible arguments and with
-// none at all.
+// TestEveryCommandRuns drives each command with plausible arguments
+// and with none at all.
 //
-// The point is not the output but the absence of a panic: a handler that
-// panics is caught by the engine, so without a check like this a broken
-// command looks like one that silently does nothing. That is exactly how a
-// wrong @tune parameter name hid during development.
+// The point is not the output but the absence of a panic: a handler
+// that panics is caught by the engine, so without a check like this a
+// broken command looks like one that silently does nothing. That is
+// exactly how a wrong @tune parameter name hid during development.
 func TestEveryCommandRuns(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -208,8 +212,9 @@ func TestQuitIsCaseSensitive(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	// Lowercase "quit" is not the interface command: it falls through so a
-	// world can shadow it with an exit, which the starter world does.
+	// Lowercase "quit" is not the interface command: it falls
+	// through so a world can shadow it with an exit, which the
+	// starter world does.
 	h.send("quit")
 	if h.d.Closed() {
 		t.Fatal("lowercase quit disconnected; it must fall through to exits")
@@ -231,7 +236,8 @@ func TestWhoIsCaseSensitiveAndTakesAFilter(t *testing.T) {
 
 	h.send("WHO")
 	got := h.out()
-	if !strings.Contains(got, "Wizard") || !strings.Contains(got, "player connected") {
+	if !strings.Contains(got, "Wizard") ||
+		!strings.Contains(got, "player connected") {
 		t.Errorf("WHO output:\n%s", got)
 	}
 
@@ -279,7 +285,8 @@ func TestExitsShadowBuiltins(t *testing.T) {
 		t.Errorf("the exit did not shadow the built-in:\n%s", got)
 	}
 
-	// A wizard's '!' prefix skips exit matching to reach the built-in.
+	// A wizard's '!' prefix skips exit matching to reach the
+	// built-in.
 	h.send("!look")
 	got = h.out()
 	if strings.Contains(got, "The exit fired.") {
@@ -301,8 +308,8 @@ func TestAtCommandPrefixMatching(t *testing.T) {
 		t.Errorf("@vers = %q, want the version", got)
 	}
 
-	// An ambiguous prefix matches nothing rather than picking arbitrarily.
-	// "@d" could be @dig, @describe or @dump.
+	// An ambiguous prefix matches nothing rather than picking
+	// arbitrarily. "@d" could be @dig, @describe or @dump.
 	h.send("@d")
 	if got := h.out(); !strings.Contains(got, "Huh?") {
 		t.Errorf("@d = %q, want the unknown-command message", got)
@@ -339,8 +346,8 @@ func TestSpeechReachesOthersInTheRoom(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	// A second connection for the same player is not another listener, so
-	// bring in a genuinely separate character.
+	// A second connection for the same player is not another
+	// listener, so bring in a genuinely separate character.
 	var other ref.Ref
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		here := w.Get(h.wizRef()).Location
@@ -358,7 +365,8 @@ func TestSpeechReachesOthersInTheRoom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Bind the second descriptor without going through a password.
+	// Bind the second descriptor without going through a
+	// password.
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		h.s.Hub().Bind(d2, other, w.Now())
 	}); err != nil {
@@ -379,7 +387,8 @@ func TestOutputOverflowDisconnectsRatherThanStalling(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	// A descriptor nobody is draining must not be able to block the world.
+	// A descriptor nobody is draining must not be able to block
+	// the world.
 	d2, err := h.s.Connect(session.TransportLine, "stuck")
 	if err != nil {
 		t.Fatal(err)
@@ -404,9 +413,9 @@ func TestOutputOverflowDisconnectsRatherThanStalling(t *testing.T) {
 // dbrefFrom pulls a "#123" out of a creation message.
 func dbrefFrom(t *testing.T, s string) string {
 	t.Helper()
-	// Creation messages name the new object the way examine does, as
-	// "Name(#123FLAGS)", so the dbref runs from the '#' to the first
-	// non-digit after it.
+	// Creation messages name the new object the way examine does,
+	// as "Name(#123FLAGS)", so the dbref runs from the '#' to the
+	// first non-digit after it.
 	i := strings.Index(s, "(#")
 	if i < 0 {
 		t.Fatalf("no dbref in %q", s)
@@ -422,8 +431,8 @@ func dbrefFrom(t *testing.T, s string) string {
 	return rest[:end]
 }
 
-// installProgram compiles a program into the test world and gives it an exit,
-// returning the exit's name.
+// installProgram compiles a program into the test world and gives it
+// an exit, returning the exit's name.
 func (h *harness) installProgram(t *testing.T, name, src string) string {
 	t.Helper()
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
@@ -446,13 +455,13 @@ func (h *harness) installProgram(t *testing.T, name, src string) string {
 	return name
 }
 
-// TestMufReadTakesTheNextLine covers what the golden harness structurally
-// cannot: a program that waits for input.
+// TestMufReadTakesTheNextLine covers what the golden harness
+// structurally cannot: a program that waits for input.
 //
-// The harness marks the end of a command's output by sending a pose and
-// reading until it appears, and a program waiting on a READ consumes that
-// marker as its input. There is no marker a READ would not eat, so the
-// behaviour is pinned here instead.
+// The harness marks the end of a command's output by sending a pose
+// and reading until it appears, and a program waiting on a READ
+// consumes that marker as its input. There is no marker a READ would
+// not eat, so the behaviour is pinned here instead.
 func TestMufReadTakesTheNextLine(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -479,8 +488,8 @@ func TestMufReadTakesTheNextLine(t *testing.T) {
 	}
 }
 
-// TestBreakEscapesARead checks that a player can get out of a program that is
-// waiting on them.
+// TestBreakEscapesARead checks that a player can get out of a program
+// that is waiting on them.
 func TestBreakEscapesARead(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -505,14 +514,14 @@ func TestBreakEscapesARead(t *testing.T) {
 	}
 }
 
-// TestProcessListing checks that a suspended program shows up in @ps and can
-// be killed.
+// TestProcessListing checks that a suspended program shows up in @ps
+// and can be killed.
 func TestProcessListing(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	// A sleeping program rather than a reading one: a program waiting on a
-	// READ would consume the "@ps" as its input.
+	// A sleeping program rather than a reading one: a program
+	// waiting on a READ would consume the "@ps" as its input.
 	h.installProgram(t, "naps", `: main
   me @ "sleeping" notify
   30 sleep

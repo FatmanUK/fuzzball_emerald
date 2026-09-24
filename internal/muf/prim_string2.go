@@ -9,11 +9,11 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 )
 
-// The remaining string primitives: ANSI handling, character conversion,
-// tokenising, and regular expressions.
+// The remaining string primitives: ANSI handling, character
+// conversion, tokenising, and regular expressions.
 
-// ansiPattern matches an ANSI escape sequence, which the ANSI_* primitives
-// treat as taking no width.
+// ansiPattern matches an ANSI escape sequence, which the ANSI_*
+// primitives treat as taking no width.
 var ansiPattern = regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]")
 
 func init() {
@@ -28,13 +28,15 @@ func init() {
 		return nil, f.Push(Int(int64(len(ansiPattern.ReplaceAllString(s, "")))))
 	})
 	register("ANSI_MIDSTR", func(f *Frame) (*Result, error) {
-		// Positions count visible characters, so the escapes between
-		// them come along without being counted.
+		// Positions count visible characters, so the escapes
+		// between them come along without being counted.
 		v, err := f.PopN(3)
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeInteger || v[2].Type != TypeInteger {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeInteger ||
+			v[2].Type != TypeInteger {
 			return nil, errf("Invalid argument type.")
 		}
 		return nil, f.Push(Str(ansiSlice(v[0].Str, int(v[1].Num), int(v[2].Num))))
@@ -70,8 +72,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// Only printable characters convert; anything else yields the
-		// empty string rather than a control code.
+		// Only printable characters convert; anything else
+		// yields the empty string rather than a control code.
 		if n < 32 || n > 126 {
 			return nil, f.Push(Str(""))
 		}
@@ -134,8 +136,9 @@ func init() {
 	})
 
 	register("TOKENSPLIT", func(f *Frame) (*Result, error) {
-		// "string delimiters escape tokensplit": split at the first
-		// unescaped delimiter, reporting which one it was.
+		// "string delimiters escape tokensplit": split at the
+		// first unescaped delimiter, reporting which one it
+		// was.
 		escape, err := f.popStr()
 		if err != nil {
 			return nil, err
@@ -159,8 +162,9 @@ func init() {
 	})
 
 	register("NOTIFY_NOLISTEN", func(f *Frame) (*Result, error) {
-		// The listener propqueues arrive with the event machinery; with
-		// none running, this is an ordinary notify.
+		// The listener propqueues arrive with the event
+		// machinery; with none running, this is an ordinary
+		// notify.
 		if _, err := f.Pop(); err != nil {
 			return nil, err
 		}
@@ -182,8 +186,9 @@ func init() {
 		return nil, nil
 	})
 
-	// Every connection is encrypted, so the insecure half of these can
-	// never be reached; the secure message is always the one sent.
+	// Every connection is encrypted, so the insecure half of
+	// these can never be reached; the secure message is always
+	// the one sent.
 	register("NOTIFY_SECURE", func(f *Frame) (*Result, error) {
 		secure, err := f.popStrArg(3)
 		if err != nil {
@@ -225,7 +230,8 @@ func init() {
 		}
 		m := re.FindStringSubmatchIndex(s)
 		if m == nil {
-			// No match: an empty array of matches and of positions.
+			// No match: an empty array of matches and of
+			// positions.
 			if err := f.Push(Arr(NewList(nil))); err != nil {
 				return nil, err
 			}
@@ -236,7 +242,8 @@ func init() {
 		for i, g := range groups {
 			vals[i] = Str(g)
 		}
-		// Positions come back as one-based start and length pairs.
+		// Positions come back as one-based start and length
+		// pairs.
 		var spans []Value
 		for i := 0; i*2 < len(m); i++ {
 			start, end := m[i*2], m[i*2+1]
@@ -296,7 +303,8 @@ func init() {
 	register("REGSPLIT_NOEMPTY", regSplit(true))
 }
 
-// Regex flags, which docs/man.txt documents as $defines a program writes.
+// Regex flags, which docs/man.txt documents as $defines a program
+// writes.
 const (
 	regexICase    = 1
 	regexAll      = 2
@@ -308,9 +316,9 @@ var captureRefs = regexp.MustCompile(`\\(\d)`)
 
 // compileRegex builds a pattern with the flags MUF passes.
 //
-// Go's regexp is RE2, which has no backreferences or lookaround. A pattern
-// using them fails to compile here rather than behaving differently, which is
-// the safer of the two.
+// Go's regexp is RE2, which has no backreferences or lookaround. A
+// pattern using them fails to compile here rather than behaving
+// differently, which is the safer of the two.
 func compileRegex(pattern string, flags int64) (*regexp.Regexp, error) {
 	var prefix string
 	if flags&regexICase != 0 {
@@ -350,9 +358,10 @@ func regSplit(dropEmpty bool) primFunc {
 		}
 		var vals []Value
 		parts := re.Split(s, -1)
-		// Upstream's loop runs "while (*text)", so it stops at the end
-		// of the string and never appends the empty field a trailing
-		// delimiter would leave. Leading and interior empties are kept.
+		// Upstream's loop runs "while (*text)", so it stops
+		// at the end of the string and never appends the
+		// empty field a trailing delimiter would leave.
+		// Leading and interior empties are kept.
 		if s == "" {
 			parts = nil
 		} else if n := len(parts); n > 0 && parts[n-1] == "" {
@@ -368,15 +377,16 @@ func regSplit(dropEmpty bool) primFunc {
 	}
 }
 
-// caseIndex builds INSTRING and RINSTRING, which are the case-insensitive
-// forms of INSTR and RINSTR.
+// caseIndex builds INSTRING and RINSTRING, which are the
+// case-insensitive forms of INSTR and RINSTR.
 func caseIndex(fromEnd bool) primFunc {
 	return func(f *Frame) (*Result, error) {
 		v, err := f.PopN(2)
 		if err != nil {
 			return nil, err
 		}
-		if v[0].Type != TypeString || v[1].Type != TypeString {
+		if v[0].Type != TypeString ||
+			v[1].Type != TypeString {
 			return nil, errf("Non-string argument.")
 		}
 		hay, needle := ascii.Fold(v[0].Str), ascii.Fold(v[1].Str)
@@ -390,12 +400,13 @@ func caseIndex(fromEnd bool) primFunc {
 	}
 }
 
-// ansiIndex converts a visible-character position to a byte offset, skipping
-// escape sequences.
+// ansiIndex converts a visible-character position to a byte offset,
+// skipping escape sequences.
 func ansiIndex(s string, visible int) int {
 	seen, i := 0, 0
 	for i < len(s) {
-		if loc := ansiPattern.FindStringIndex(s[i:]); loc != nil && loc[0] == 0 {
+		if loc := ansiPattern.FindStringIndex(s[i:]); loc != nil &&
+			loc[0] == 0 {
 			i += loc[1]
 			continue
 		}
@@ -408,8 +419,8 @@ func ansiIndex(s string, visible int) int {
 	return len(s)
 }
 
-// ansiSlice takes a substring by visible position, one-based, keeping the
-// escapes that fall inside it.
+// ansiSlice takes a substring by visible position, one-based, keeping
+// the escapes that fall inside it.
 func ansiSlice(s string, start, length int) string {
 	if start < 1 || length <= 0 {
 		return ""
@@ -419,7 +430,8 @@ func ansiSlice(s string, start, length int) string {
 	return s[from:to]
 }
 
-// tokenSplit splits at the first unescaped delimiter, reporting which one.
+// tokenSplit splits at the first unescaped delimiter, reporting which
+// one.
 func tokenSplit(s, delims, escape string) (before, after, found string) {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {

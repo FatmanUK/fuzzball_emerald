@@ -6,13 +6,14 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// Controls implements muf.Host for PROGRAM_GETLINES's own controls() check.
+// Controls implements muf.Host for PROGRAM_GETLINES's own controls()
+// check.
 func (h *mufHost) Controls(who, target ref.Ref) bool {
 	return h.s.controls(h.w, who, target)
 }
 
-// CompiledSize, Compile and Uncompile implement muf.Host for COMPILED?,
-// COMPILE and UNCOMPILE.
+// CompiledSize, Compile and Uncompile implement muf.Host for
+// COMPILED?, COMPILE and UNCOMPILE.
 func (h *mufHost) CompiledSize(prog ref.Ref) int {
 	c, ok := h.s.programs[prog]
 	if !ok || c.prog == nil {

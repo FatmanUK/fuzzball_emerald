@@ -10,8 +10,9 @@ import (
 
 // Floating-point primitives.
 //
-// MUF signals arithmetic trouble with the error flags rather than by failing,
-// so these set a flag and return a defined value where the C would.
+// MUF signals arithmetic trouble with the error flags rather than by
+// failing, so these set a flag and return a defined value where the C
+// would.
 
 func init() {
 	register("PI", constant(math.Pi))
@@ -26,7 +27,8 @@ func init() {
 			return nil, err
 		}
 		if x < 0 {
-			// The root of a negative is imaginary, which MUF flags.
+			// The root of a negative is imaginary, which
+			// MUF flags.
 			f.ErrorFlags.Imaginary = true
 			return nil, f.Push(Float(0))
 		}
@@ -106,9 +108,10 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// "%#.15g": fifteen significant digits with the trailing zeros
-		// kept, which is what the '#' asks for. Go and C agree on this
-		// format exactly, exponents included.
+		// "%#.15g": fifteen significant digits with the
+		// trailing zeros kept, which is what the '#' asks
+		// for. Go and C agree on this format exactly,
+		// exponents included.
 		return nil, f.Push(Str(fmt.Sprintf("%#.15g", x)))
 	})
 	register("FTOSTRC", func(f *Frame) (*Result, error) {
@@ -136,7 +139,8 @@ func init() {
 	})
 }
 
-// popFloat takes a number from the stack, accepting an integer for one.
+// popFloat takes a number from the stack, accepting an integer for
+// one.
 func (f *Frame) popFloat() (float64, error) {
 	v, err := f.Pop()
 	if err != nil {
@@ -193,7 +197,8 @@ func float2(fn func(a, b float64) float64) primFunc {
 	}
 }
 
-// boundedTrig builds asin and acos, whose argument must lie in [-1, 1].
+// boundedTrig builds asin and acos, whose argument must lie in [-1,
+// 1].
 func boundedTrig(fn func(float64) float64) primFunc {
 	return func(f *Frame) (*Result, error) {
 		x, err := f.popFloat()
@@ -228,14 +233,15 @@ func logPrim(fn func(float64) float64) primFunc {
 	}
 }
 
-// The remaining float primitives: the power operator and the coordinate
-// conversions.
+// The remaining float primitives: the power operator and the
+// coordinate conversions.
 
 func init() {
 	register("**", float2(math.Pow))
 
 	register("DIFF3", func(f *Frame) (*Result, error) {
-		// Two points, six numbers, giving the vector between them.
+		// Two points, six numbers, giving the vector between
+		// them.
 		v, err := f.popFloats(6)
 		if err != nil {
 			return nil, err

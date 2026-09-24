@@ -115,8 +115,8 @@ func init() {
 		return nil, err
 	})
 
-	// Variable access. "@" reads whatever kind of variable reference is on
-	// the stack, and "!" writes one.
+	// Variable access. "@" reads whatever kind of variable
+	// reference is on the stack, and "!" writes one.
 	register("@", func(f *Frame) (*Result, error) {
 		v, err := f.Pop()
 		if err != nil {
@@ -154,12 +154,14 @@ func init() {
 		return nil, f.Push(Mark())
 	})
 	register("}", func(f *Frame) (*Result, error) {
-		// Count what has been pushed since the matching mark and replace
-		// the mark with that count, which is what array_make consumes.
+		// Count what has been pushed since the matching mark
+		// and replace the mark with that count, which is what
+		// array_make consumes.
 		n := 0
 		for i := len(f.Stack) - 1; i >= 0; i-- {
 			if f.Stack[i].Type == TypeMark {
-				// Drop the mark, leaving the values above it.
+				// Drop the mark, leaving the values
+				// above it.
 				copy(f.Stack[i:], f.Stack[i+1:])
 				f.Stack = f.Stack[:len(f.Stack)-1]
 				return nil, f.Push(Int(int64(n)))
@@ -180,7 +182,8 @@ func init() {
 	})
 }
 
-// typeTest builds a primitive that reports whether the top value has a type.
+// typeTest builds a primitive that reports whether the top value has
+// a type.
 func typeTest(want Type) primFunc {
 	return func(f *Frame) (*Result, error) {
 		v, err := f.Pop()
@@ -243,8 +246,9 @@ func (f *Frame) popInt() (int64, error) {
 	return v.Num, nil
 }
 
-// popStrArg takes a string, naming which argument it was when the type is
-// wrong. Upstream's messages carry that number and programs match on them.
+// popStrArg takes a string, naming which argument it was when the
+// type is wrong. Upstream's messages carry that number and programs
+// match on them.
 func (f *Frame) popStrArg(n int) (string, error) {
 	v, err := f.Pop()
 	if err != nil {
@@ -280,8 +284,8 @@ func (f *Frame) popRef() (ref.Ref, error) {
 	return v.Ref, nil
 }
 
-// Stack primitives that move several values at once, and the remaining type
-// and mode queries.
+// Stack primitives that move several values at once, and the
+// remaining type and mode queries.
 
 func init() {
 	register("ROTATE", func(f *Frame) (*Result, error) {
@@ -432,8 +436,8 @@ func init() {
 		return nil, f.Push(Value{Type: TypeLVar, Num: n})
 	})
 
-	// The multitasking modes. Real scheduling arrives with the process
-	// queue; for now a program may set and read its mode.
+	// The multitasking modes. Real scheduling arrives with the
+	// process queue; for now a program may set and read its mode.
 	register("MODE", func(f *Frame) (*Result, error) {
 		return nil, f.Push(Int(int64(f.Mode)))
 	})
@@ -463,9 +467,10 @@ func init() {
 
 func init() {
 	register("CHECKARGS", func(f *Frame) (*Result, error) {
-		// CHECKARGS validates the stack against a type signature. The
-		// signature language is not implemented; accepting the string
-		// and checking nothing is wrong in a way that would hide a
+		// CHECKARGS validates the stack against a type
+		// signature. The signature language is not
+		// implemented; accepting the string and checking
+		// nothing is wrong in a way that would hide a
 		// program's own bugs, so it reports itself instead.
 		return nil, errf("CHECKARGS is not implemented yet")
 	})
@@ -489,8 +494,9 @@ func init() {
 	})
 
 	register("SECURE_SYSVARS", func(f *Frame) (*Result, error) {
-		// Reset me, loc and trigger to what the interpreter started
-		// with, so a program that was handed altered ones can recover.
+		// Reset me, loc and trigger to what the interpreter
+		// started with, so a program that was handed altered
+		// ones can recover.
 		if len(f.Vars) >= ReservedVars {
 			f.Vars[VarMe] = Obj(f.Caller)
 			f.Vars[VarTrigger] = Obj(f.Trig)

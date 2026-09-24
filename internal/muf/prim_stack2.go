@@ -2,13 +2,13 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
 
-// INTERP runs another program as a subroutine and takes back whatever it left
-// on its stack, src/p_stack.c's one remaining primitive.
+// INTERP runs another program as a subroutine and takes back whatever
+// it left on its stack, src/p_stack.c's one remaining primitive.
 //
-// Unlike CALL, the program runs as its own frame with its own variables and
-// its own mucker level rather than borrowing the caller's, which is why it
-// takes a trigger of its own: it is closer to the exit-triggered run of a
-// program than to a function call.
+// Unlike CALL, the program runs as its own frame with its own
+// variables and its own mucker level rather than borrowing the
+// caller's, which is why it takes a trigger of its own: it is closer
+// to the exit-triggered run of a program than to a function call.
 func init() {
 	register("INTERP", func(f *Frame) (*Result, error) {
 		arg, err := f.Pop()
@@ -37,9 +37,11 @@ func init() {
 		if arg.Type != TypeString {
 			return nil, errf("Expected a string. (3)")
 		}
-		// The trigger is what the run is attributed to, so below mucker
-		// level 3 a program may only name one it already owns.
-		if f.MLevel() < 3 && h.Owner(trigV.Ref) != h.Owner(f.Prog.Ref) {
+		// The trigger is what the run is attributed to, so
+		// below mucker level 3 a program may only name one it
+		// already owns.
+		if f.MLevel() < 3 &&
+			h.Owner(trigV.Ref) != h.Owner(f.Prog.Ref) {
 			return nil, errf("Permission denied.")
 		}
 		if f.Level > 8 {
@@ -47,8 +49,9 @@ func init() {
 		}
 		v, ok := h.Interp(f.Descr, f.Level, progV.Ref, trigV.Ref, arg.Str)
 		if !ok {
-			// A program that aborted, blocked or finished with an empty
-			// stack yields the empty string rather than failing the caller.
+			// A program that aborted, blocked or finished
+			// with an empty stack yields the empty string
+			// rather than failing the caller.
 			return nil, f.Push(Str(""))
 		}
 		return nil, f.Push(v)

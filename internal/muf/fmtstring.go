@@ -14,20 +14,21 @@ const refNothing = ref.Nothing
 // The sprintf-alike shared by FMTSTRING and ARRAY_FMTSTRINGS.
 //
 // Upstream implements the two separately — its own comment on
-// prim_array_fmtstrings calls the overlap "a nasty amount" and the merge too
-// big a job — but they are one grammar with two ways of reaching an argument:
-// FMTSTRING pops each from the stack as it goes, ARRAY_FMTSTRINGS looks each
-// up in a dictionary by the "[name]" the directive carries. That difference
-// is the fmtDialect below; everything else is common.
+// prim_array_fmtstrings calls the overlap "a nasty amount" and the
+// merge too big a job — but they are one grammar with two ways of
+// reaching an argument: FMTSTRING pops each from the stack as it
+// goes, ARRAY_FMTSTRINGS looks each up in a dictionary by the
+// "[name]" the directive carries. That difference is the fmtDialect
+// below; everything else is common.
 //
 // A directive is
 //
 //	% [- or |] [+ or space] [0] [width or *] [.precision or .*] [[field]] verb
 //
-// where '-' left-justifies, '|' centres, and the verbs are i (integer),
-// s and S (string), d (a dbref as "#123"), D (a dbref as its name),
-// l (a lock), f/e/g (a float), ? (the value's type name) and ~ (whichever of
-// those suits the value's own type).
+// where '-' left-justifies, '|' centres, and the verbs are i
+// (integer), s and S (string), d (a dbref as "#123"), D (a dbref as
+// its name), l (a lock), f/e/g (a float), ? (the value's type name)
+// and ~ (whichever of those suits the value's own type).
 
 func init() {
 	register("ARRAY_FMTSTRINGS", func(f *Frame) (*Result, error) {
@@ -65,11 +66,12 @@ func init() {
 	})
 }
 
-// stackDialect is FMTSTRING's: each directive takes the next value off the
-// stack, and '*' takes a width from there too.
+// stackDialect is FMTSTRING's: each directive takes the next value
+// off the stack, and '*' takes a width from there too.
 //
-// Upstream pops as it walks the format left to right, so the first directive
-// gets whatever is on top — "1 2 \"%i and %i\" fmtstring" reads as "2 and 1".
+// Upstream pops as it walks the format left to right, so the first
+// directive gets whatever is on top — "1 2 \"%i and %i\" fmtstring"
+// reads as "2 and 1".
 func (f *Frame) stackDialect() fmtDialect {
 	return fmtDialect{
 		arg: func(string, byte) (Value, error) { return f.Pop() },
@@ -86,12 +88,13 @@ func (f *Frame) stackDialect() fmtDialect {
 	}
 }
 
-// rowDialect is ARRAY_FMTSTRINGS's: each directive names a key in the row it
-// is rendering, looked up as an integer first and then as a string.
+// rowDialect is ARRAY_FMTSTRINGS's: each directive names a key in the
+// row it is rendering, looked up as an integer first and then as a
+// string.
 //
-// A key the row does not hold is not an error; the directive gets an empty
-// value of whatever type its verb asks for, so one missing field leaves a
-// gap rather than failing the whole array.
+// A key the row does not hold is not an error; the directive gets an
+// empty value of whatever type its verb asks for, so one missing
+// field leaves a gap rather than failing the whole array.
 func rowDialect(row *Array) fmtDialect {
 	return fmtDialect{
 		needField: true,
@@ -109,8 +112,9 @@ func rowDialect(row *Array) fmtDialect {
 	}
 }
 
-// emptyForVerb is what ARRAY_FMTSTRINGS substitutes for a field the row does
-// not have: a zero value of the type the verb was going to want.
+// emptyForVerb is what ARRAY_FMTSTRINGS substitutes for a field the
+// row does not have: a zero value of the type the verb was going to
+// want.
 func emptyForVerb(verb byte) Value {
 	switch verb {
 	case 'l':
@@ -128,29 +132,33 @@ func emptyForVerb(verb byte) Value {
 
 // fmtDialect is what differs between the two primitives.
 type fmtDialect struct {
-	// arg supplies one directive's value. field is the "[name]" text, empty
-	// when the directive carried none.
+	// arg supplies one directive's value. field is the "[name]"
+	// text, empty when the directive carried none.
 	arg func(field string, verb byte) (Value, error)
-	// star reads a '*' width or precision from the stack. ARRAY_FMTSTRINGS
-	// has no dynamic widths, and leaves this nil.
+	// star reads a '*' width or precision from the stack.
+	// ARRAY_FMTSTRINGS has no dynamic widths, and leaves this
+	// nil.
 	star func() (int, error)
-	// needField is set by the dialect whose directives must name a field.
+	// needField is set by the dialect whose directives must name
+	// a field.
 	needField bool
 }
 
 // formatWith renders one format string.
 func formatWith(h Host, format string, d fmtDialect) (string, error) {
 	var b strings.Builder
-	// tabStop counts the characters written since the last tab stop or
-	// carriage return, which is what "\t" in a format aligns against.
+	// tabStop counts the characters written since the last tab
+	// stop or carriage return, which is what "\t" in a format
+	// aligns against.
 	tabStop := 0
 
 	for i := 0; i < len(format); i++ {
 		if format[i] != '%' {
 			switch {
 			case format[i] == '\\' && i+1 < len(format) && format[i+1] == 't':
-				// Upstream advances to the next multiple of eight, always
-				// writing at least one space.
+				// Upstream advances to the next
+				// multiple of eight, always writing
+				// at least one space.
 				b.WriteByte(' ')
 				for tabStop = tabStop + 1; tabStop%8 != 0; tabStop++ {
 					b.WriteByte(' ')
@@ -208,8 +216,8 @@ type directive struct {
 	verb      byte
 }
 
-// parseDirective reads one directive starting just past its '%', returning
-// the index of its last character.
+// parseDirective reads one directive starting just past its '%',
+// returning the index of its last character.
 func parseDirective(format string, i int, d fmtDialect) (directive, int, error) {
 	spec := directive{width: -1, precision: -1}
 	invalid := errf("Invalid format string.")
@@ -266,8 +274,9 @@ func parseDirective(format string, i int, d fmtDialect) (directive, int, error) 
 	return spec, i, nil
 }
 
-// fmtNumber reads a literal width or precision, or a '*' standing for one
-// taken off the stack. It reports -1 when the directive gave neither.
+// fmtNumber reads a literal width or precision, or a '*' standing for
+// one taken off the stack. It reports -1 when the directive gave
+// neither.
 func fmtNumber(format string, i int, d fmtDialect, invalid error) (int, int, error) {
 	if i < len(format) && format[i] == '*' {
 		if d.star == nil {
@@ -296,7 +305,8 @@ func (spec directive) render(h Host, d fmtDialect) (string, error) {
 
 	verb := spec.verb
 	if verb == '~' {
-		// '~' takes whichever verb suits the value it was handed.
+		// '~' takes whichever verb suits the value it was
+		// handed.
 		switch v.Type {
 		case TypeObject:
 			verb = 'd'
@@ -361,9 +371,9 @@ func (spec directive) render(h Host, d fmtDialect) (string, error) {
 	}
 }
 
-// numeric builds the printf spec for a number. Go's numeric verbs take the
-// same flags as C's and render identically, so these are handed straight to
-// fmt rather than padded by hand.
+// numeric builds the printf spec for a number. Go's numeric verbs
+// take the same flags as C's and render identically, so these are
+// handed straight to fmt rather than padded by hand.
 func (spec directive) numeric(verb byte) string {
 	var b strings.Builder
 	b.WriteByte('%')
@@ -391,14 +401,15 @@ func (spec directive) numeric(verb byte) string {
 
 // text renders a string-shaped value into its field.
 //
-// This pads by hand rather than through fmt because C ignores the '0', '+'
-// and ' ' flags on a string and Go honours them: "%08s" pads with spaces
-// there and zeros here.
+// This pads by hand rather than through fmt because C ignores the
+// '0', '+' and ' ' flags on a string and Go honours them: "%08s" pads
+// with spaces there and zeros here.
 //
-// The width counts visible characters, so any ANSI escape in the string is
-// added back on top of it — otherwise a coloured name would be padded as
-// though its escape bytes were letters, which is how upstream's own "repair
-// the lengths to account for ansi codes" pass reads.
+// The width counts visible characters, so any ANSI escape in the
+// string is added back on top of it — otherwise a coloured name
+// would be padded as though its escape bytes were letters, which is
+// how upstream's own "repair the lengths to account for ansi codes"
+// pass reads.
 func (spec directive) text(s string) string {
 	width, prec := spec.width, spec.precision
 	if prec >= 0 {
@@ -418,9 +429,10 @@ func (spec directive) text(s string) string {
 	return s
 }
 
-// pad applies the centring pass, which upstream runs over already-formatted
-// output rather than as a justification of its own: it shifts the text left
-// by half of whatever leading whitespace the field gave it.
+// pad applies the centring pass, which upstream runs over
+// already-formatted output rather than as a justification of its own:
+// it shifts the text left by half of whatever leading whitespace the
+// field gave it.
 func (spec directive) pad(s string) string {
 	if spec.just != justifyCentre {
 		return s
@@ -453,7 +465,8 @@ func fmtTypeName(v Value) string {
 	}
 }
 
-// visibleLen counts a string's characters, skipping ANSI escape sequences.
+// visibleLen counts a string's characters, skipping ANSI escape
+// sequences.
 func visibleLen(s string) int {
 	n := 0
 	for i := 0; i < len(s); {
@@ -467,8 +480,8 @@ func visibleLen(s string) int {
 	return n
 }
 
-// truncateVisible cuts a string to max visible characters, keeping whole
-// escape sequences.
+// truncateVisible cuts a string to max visible characters, keeping
+// whole escape sequences.
 func truncateVisible(s string, max int) string {
 	n := 0
 	for i := 0; i < len(s); {
@@ -485,9 +498,10 @@ func truncateVisible(s string, max int) string {
 	return s
 }
 
-// ansiRun reports the length of the escape sequence starting at i, or 0 if
-// there is none. It is upstream's own ANSI_STRLEN scan: ESC, then either a
-// bare character or "[", digits and semicolons, and an "m".
+// ansiRun reports the length of the escape sequence starting at i, or
+// 0 if there is none. It is upstream's own ANSI_STRLEN scan: ESC,
+// then either a bare character or "[", digits and semicolons, and an
+// "m".
 func ansiRun(s string, i int) int {
 	if s[i] != 0x1b {
 		return 0
@@ -500,7 +514,8 @@ func ansiRun(s string, i int) int {
 		return 2
 	}
 	j++
-	for j < len(s) && (s[j] >= '0' && s[j] <= '9' || s[j] == ';') {
+	for j < len(s) &&
+		(s[j] >= '0' && s[j] <= '9' || s[j] == ';') {
 		j++
 	}
 	if j < len(s) && s[j] == 'm' {

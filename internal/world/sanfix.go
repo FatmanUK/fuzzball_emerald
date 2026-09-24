@@ -7,27 +7,31 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// Fix repairs what Check reports, and returns a log of what it changed.
+// Fix repairs what Check reports, and returns a log of what it
+// changed.
 //
-// The order matters: every object's own fields are corrected first, and the
-// containment chains are rebuilt afterwards from the locations that correction
-// left behind. Upstream has to do the reverse — cut the bad chains, then guess
-// where the loose objects belong — because a chain is the only record it has
-// of where something is. Emerald stores each object's location as well, so a
-// damaged chain can simply be discarded and rebuilt from what the objects
-// themselves say.
+// The order matters: every object's own fields are corrected first,
+// and the containment chains are rebuilt afterwards from the
+// locations that correction left behind. Upstream has to do the
+// reverse — cut the bad chains, then guess where the loose objects
+// belong — because a chain is the only record it has of where
+// something is. Emerald stores each object's location as well, so a
+// damaged chain can simply be discarded and rebuilt from what the
+// objects themselves say.
 //
-// Some damage cannot be repaired, only reported: an object of an unknown type
-// has nothing left to reason from. Those come back in the returned violations,
-// and mean the database still needs a person.
+// Some damage cannot be repaired, only reported: an object of an
+// unknown type has nothing left to reason from. Those come back in
+// the returned violations, and mean the database still needs a
+// person.
 func (w *World) Fix() (log []string, unfixed []Violation) {
 	note := func(format string, args ...any) {
 		log = append(log, fmt.Sprintf(format, args...))
 	}
 
-	// A player_start that is not a room would send every repaired player
-	// nowhere, so it is the first thing checked.
-	if start := w.Get(w.Tune.Ref("player_start")); start == nil || start.Type() != ref.TypeRoom {
+	// A player_start that is not a room would send every repaired
+	// player nowhere, so it is the first thing checked.
+	if start := w.Get(w.Tune.Ref("player_start")); start == nil ||
+		start.Type() != ref.TypeRoom {
 		_ = w.SetTune("player_start", ref.GlobalEnvironment.String())
 		note("Reset invalid player_start to %v", ref.GlobalEnvironment)
 	}
@@ -47,7 +51,8 @@ func (w *World) Fix() (log []string, unfixed []Violation) {
 		}
 		if !knownType(o.Type()) {
 			unfixed = append(unfixed, Violation{
-				Ref: r, Problem: "has an unknown object type, and its flags may also be corrupt",
+				Ref:     r,
+				Problem: "has an unknown object type, and its flags may also be corrupt",
 			})
 			continue
 		}
@@ -61,9 +66,9 @@ func (w *World) Fix() (log []string, unfixed []Violation) {
 		w.fixLinks(o, &log)
 	}
 
-	// The global environment is the root: it is inside nothing and on no
-	// chain, and a copy of it appearing in one would make it reachable
-	// twice.
+	// The global environment is the root: it is inside nothing
+	// and on no chain, and a copy of it appearing in one would
+	// make it reachable twice.
 	if root := w.objs[ref.GlobalEnvironment]; root != nil {
 		if root.Next != ref.Nothing {
 			note("Removed the global environment %v from a chain", ref.GlobalEnvironment)
@@ -101,8 +106,8 @@ func knownType(t ref.ObjType) bool {
 	return false
 }
 
-// fixName gives a nameless object one, because a name is how everything else
-// refers to it.
+// fixName gives a nameless object one, because a name is how
+// everything else refers to it.
 func (w *World) fixName(o *Object, log *[]string) {
 	if o.Name != "" {
 		return
@@ -127,8 +132,9 @@ func (w *World) fixName(o *Object, log *[]string) {
 	w.Modified(o.Ref)
 }
 
-// fixOwner points an object at a real player, because permission checks read
-// the owner and an owner that is not a player answers nothing.
+// fixOwner points an object at a real player, because permission
+// checks read the owner and an owner that is not a player answers
+// nothing.
 func (w *World) fixOwner(o *Object, lostAndFound func() (ref.Ref, ref.Ref), log *[]string) {
 	owner := w.Get(o.Owner)
 	if owner != nil && owner.Type() == ref.TypePlayer {
@@ -154,8 +160,8 @@ func (w *World) fixLocation(o *Object, lostAndFound func() (ref.Ref, ref.Ref), l
 			ok = false
 		case ref.TypePlayer:
 			// A player inside a player is how a toad or a
-			// half-finished move leaves things, and neither can
-			// get out on their own.
+			// half-finished move leaves things, and
+			// neither can get out on their own.
 			ok = o.Type() != ref.TypePlayer
 		}
 	}
@@ -188,8 +194,8 @@ func (w *World) fixGarbage(o *Object, log *[]string) {
 	}
 }
 
-// fixLinks corrects the type-specific references: a room's drop-to, a home, an
-// exit's destinations.
+// fixLinks corrects the type-specific references: a room's drop-to, a
+// home, an exit's destinations.
 func (w *World) fixLinks(o *Object, log *[]string) {
 	switch o.Type() {
 	case ref.TypeRoom:
@@ -210,8 +216,9 @@ func (w *World) fixLinks(o *Object, log *[]string) {
 
 	case ref.TypeThing:
 		h := w.Get(o.Home)
-		if h != nil && (h.Type() == ref.TypeRoom || h.Type() == ref.TypeThing ||
-			h.Type() == ref.TypePlayer) {
+		if h != nil &&
+			(h.Type() == ref.TypeRoom || h.Type() == ref.TypeThing ||
+				h.Type() == ref.TypePlayer) {
 			return
 		}
 		*log = append(*log, fmt.Sprintf("Setting the home on %s to %s, its owner",
@@ -220,7 +227,8 @@ func (w *World) fixLinks(o *Object, log *[]string) {
 		w.Modified(o.Ref)
 
 	case ref.TypePlayer:
-		if h := w.Get(o.Home); h != nil && h.Type() == ref.TypeRoom {
+		if h := w.Get(o.Home); h != nil &&
+			h.Type() == ref.TypeRoom {
 			return
 		}
 		o.Home = w.Tune.Ref("player_start")
@@ -231,7 +239,8 @@ func (w *World) fixLinks(o *Object, log *[]string) {
 	case ref.TypeExit:
 		kept := o.Dest[:0]
 		for _, d := range o.Dest {
-			if w.Valid(d) || d == ref.Home || d == ref.Nil {
+			if w.Valid(d) || d == ref.Home ||
+				d == ref.Nil {
 				kept = append(kept, d)
 				continue
 			}
@@ -245,14 +254,14 @@ func (w *World) fixLinks(o *Object, log *[]string) {
 	}
 }
 
-// createLostAndFound makes somewhere to put objects whose owner or location
-// cannot be worked out, so nothing has to be thrown away to make the database
-// consistent.
+// createLostAndFound makes somewhere to put objects whose owner or
+// location cannot be worked out, so nothing has to be thrown away to
+// make the database consistent.
 //
-// The player it creates has no usable password: it exists to own things, not
-// to be logged into. Upstream generates a random one and writes it to the
-// repair log; leaving it unset is the same thing without a credential lying
-// around in a file.
+// The player it creates has no usable password: it exists to own
+// things, not to be logged into. Upstream generates a random one and
+// writes it to the repair log; leaving it unset is the same thing
+// without a credential lying around in a file.
 func (w *World) createLostAndFound(log *[]string) (room, player ref.Ref) {
 	r := w.Create("lost+found", ref.TypeRoom, ref.Nothing)
 	r.Location = ref.GlobalEnvironment
@@ -279,8 +288,8 @@ func (w *World) createLostAndFound(log *[]string) (room, player ref.Ref) {
 	return r.Ref, p.Ref
 }
 
-// describe renders an object for a repair log: its name and dbref, or what
-// went wrong if there is no object there.
+// describe renders an object for a repair log: its name and dbref, or
+// what went wrong if there is no object there.
 func (w *World) describe(r ref.Ref) string {
 	o := w.Get(r)
 	if o == nil {

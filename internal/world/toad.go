@@ -7,12 +7,13 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// SendHome moves an object to where it belongs when its container is going
-// away: a thing or player to its home, anything else to the global
-// environment.
+// SendHome moves an object to where it belongs when its container is
+// going away: a thing or player to its home, anything else to the
+// global environment.
 //
-// A home that no longer exists, or that would put the object inside itself,
-// falls back to the lost-and-found room, which is what that parameter is for.
+// A home that no longer exists, or that would put the object inside
+// itself, falls back to the lost-and-found room, which is what that
+// parameter is for.
 func (w *World) SendHome(r ref.Ref) error {
 	o := w.Get(r)
 	if o == nil {
@@ -33,10 +34,11 @@ func (w *World) SendHome(r ref.Ref) error {
 
 // Toad turns a player into a thing, which is how a player is deleted.
 //
-// The object survives, because things all over the database point at it — as
-// an owner, a home, a lock — and removing it outright would leave those
-// dangling. It stops being a player instead: it loses its password, leaves the
-// player index so the name can be taken again, and belongs to whoever did it.
+// The object survives, because things all over the database point at
+// it — as an owner, a home, a lock — and removing it outright
+// would leave those dangling. It stops being a player instead: it
+// loses its password, leaves the player index so the name can be
+// taken again, and belongs to whoever did it.
 func (w *World) Toad(victim, newOwner ref.Ref, newName string) error {
 	o := w.objs[victim]
 	if o == nil {
@@ -50,8 +52,9 @@ func (w *World) Toad(victim, newOwner ref.Ref, newName string) error {
 	o.Name = newName
 	o.PasswordHash = ""
 	o.Owner = newOwner
-	// Every flag goes, not just the type: upstream assigns TYPE_THING over
-	// the whole word, so a toaded wizard keeps none of their powers.
+	// Every flag goes, not just the type: upstream assigns
+	// TYPE_THING over the whole word, so a toaded wizard keeps
+	// none of their powers.
 	o.Flags = ref.Flags(0).WithType(ref.TypeThing)
 	if owner := w.Get(newOwner); owner != nil {
 		o.Home = owner.Home

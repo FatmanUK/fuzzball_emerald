@@ -10,7 +10,9 @@ import (
 )
 
 // fixedClock makes timestamps predictable.
-func fixedClock(t time.Time) func() time.Time { return func() time.Time { return t } }
+func fixedClock(t time.Time) func() time.Time {
+	return func() time.Time { return t }
+}
 
 func newTestWorld(t *testing.T) *World {
 	t.Helper()
@@ -73,7 +75,8 @@ func TestRenameRejectsTakenPlayerName(t *testing.T) {
 	w.Create("Taken", ref.TypePlayer, ref.God)
 	other := w.Create("Other", ref.TypePlayer, ref.God)
 
-	// Case-insensitively taken, as upstream's player table treats it.
+	// Case-insensitively taken, as upstream's player table treats
+	// it.
 	if err := w.Rename(other.Ref, "TAKEN"); err == nil {
 		t.Error("renaming onto an existing player name should fail")
 	}
@@ -95,7 +98,8 @@ func TestMoveToLinksContentsChain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Fuzzball pushes onto the head, so the newest object comes first.
+	// Fuzzball pushes onto the head, so the newest object comes
+	// first.
 	want := []ref.Ref{b.Ref, a.Ref}
 	if got := w.Contents(room.Ref); !reflect.DeepEqual(got, want) {
 		t.Errorf("Contents = %v, want %v", got, want)
@@ -139,8 +143,8 @@ func TestMoveToUnlinksFromPreviousContainer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Move the middle of the chain, which is the case that exercises the
-	// relink rather than just moving the head.
+	// Move the middle of the chain, which is the case that
+	// exercises the relink rather than just moving the head.
 	if err := w.MoveTo(b.Ref, r2.Ref); err != nil {
 		t.Fatal(err)
 	}
@@ -236,8 +240,8 @@ func TestRecycle(t *testing.T) {
 	if p.Props.Len() != 0 {
 		t.Error("recycling should clear properties")
 	}
-	// The ref itself survives, so dangling references resolve to garbage
-	// rather than to some unrelated later object.
+	// The ref itself survives, so dangling references resolve to
+	// garbage rather than to some unrelated later object.
 	if w.Get(p.Ref) == nil {
 		t.Error("the ref should still resolve, to garbage")
 	}

@@ -2,14 +2,15 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
 
-// COMPILE, COMPILED?, UNCOMPILE, PROGRAM_GETLINES and NEXTENTRANCE are
-// ports of the more tractable primitives left in src/p_db.c.
+// COMPILE, COMPILED?, UNCOMPILE, PROGRAM_GETLINES and NEXTENTRANCE
+// are ports of the more tractable primitives left in src/p_db.c.
 // NEWPLAYER, COPYPLAYER, TOADPLAYER, PNAME_HISTORY, COPYOBJ, DUMP,
-// PROGRAM_SETLINES and FINDNEXT are not ported this phase: the first six
-// are player-lifecycle and object-cloning features needing real design
-// work (creation cost accounting, an editor-interaction check for
-// PROGRAM_SETLINES); FINDNEXT needs the same init_checkflags/checkflags
-// flag-matching mini-language ARRAY_FILTER_FLAGS does, not yet built.
+// PROGRAM_SETLINES and FINDNEXT are not ported this phase: the first
+// six are player-lifecycle and object-cloning features needing real
+// design work (creation cost accounting, an editor-interaction check
+// for PROGRAM_SETLINES); FINDNEXT needs the same
+// init_checkflags/checkflags flag-matching mini-language
+// ARRAY_FILTER_FLAGS does, not yet built.
 func init() {
 	register("COMPILED?", func(f *Frame) (*Result, error) {
 		progV, err := f.Pop()
@@ -20,7 +21,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
+			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid program object.")
 		}
 		return nil, f.Push(Int(int64(h.CompiledSize(progV.Ref))))
@@ -42,7 +44,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
+			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid program argument. (1)")
 		}
 		if verboseV.Type != TypeInteger {
@@ -70,7 +73,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
+			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid program argument. (1)")
 		}
 		if h.Instances(progV.Ref) > 0 {
@@ -97,7 +101,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if progV.Type != TypeObject || !h.Valid(progV.Ref) || h.ObjType(progV.Ref) != ref.TypeProgram {
+		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
+			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Invalid pRogram dbref. (1)")
 		}
 		if startV.Type != TypeInteger {
@@ -116,7 +121,9 @@ func init() {
 		if end != 0 && start > end {
 			return nil, errf("Illogical line range.")
 		}
-		if f.MLevel() < 4 && !h.Controls(f.progUID(h), progV.Ref) && h.Flags(progV.Ref)&ref.Vehicle == 0 {
+		if f.MLevel() < 4 &&
+			!h.Controls(f.progUID(h), progV.Ref) &&
+			h.Flags(progV.Ref)&ref.Vehicle == 0 {
 			return nil, errf("Permission denied.")
 		}
 
@@ -151,10 +158,12 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if linkV.Type != TypeObject || (!h.Valid(linkV.Ref) && linkV.Ref != ref.Nothing && linkV.Ref != ref.Home) {
+		if linkV.Type != TypeObject ||
+			(!h.Valid(linkV.Ref) && linkV.Ref != ref.Nothing && linkV.Ref != ref.Home) {
 			return nil, errf("Invalid link reference object (2)")
 		}
-		if startV.Type != TypeObject || (!h.Valid(startV.Ref) && startV.Ref != ref.Nothing) {
+		if startV.Type != TypeObject ||
+			(!h.Valid(startV.Ref) && startV.Ref != ref.Nothing) {
 			return nil, errf("Invalid reference object (1)")
 		}
 		linkref := linkV.Ref

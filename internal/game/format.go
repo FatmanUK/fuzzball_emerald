@@ -7,8 +7,9 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 )
 
-// sprintf formats a message, treating a format string with no arguments as a
-// literal so a stray '%' in player text cannot corrupt output.
+// sprintf formats a message, treating a format string with no
+// arguments as a literal so a stray '%' in player text cannot corrupt
+// output.
 func sprintf(format string, args ...any) string {
 	if len(args) == 0 {
 		return format

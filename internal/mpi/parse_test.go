@@ -11,7 +11,9 @@ type stubHost struct {
 	props map[string]string
 }
 
-func newStub() *stubHost { return &stubHost{props: map[string]string{}} }
+func newStub() *stubHost {
+	return &stubHost{props: map[string]string{}}
+}
 
 func (h *stubHost) Name(obj Ref) string { return "Object" }
 func (h *stubHost) GetPropStr(obj Ref, path string) string {
@@ -29,8 +31,8 @@ func (h *stubHost) BlessProp(Ref, string, bool)       {}
 
 func (h *stubHost) Location(Ref) Ref { return 0 }
 func (h *stubHost) Parent(obj Ref) Ref {
-	// A flat world: everything sits directly in #0, and #0 has no parent,
-	// so an environment walk terminates after one step.
+	// A flat world: everything sits directly in #0, and #0 has no
+	// parent, so an environment walk terminates after one step.
 	if obj == 0 {
 		return -1
 	}
@@ -90,8 +92,9 @@ func TestNesting(t *testing.T) {
 	}
 }
 
-// TestBacktickTogglesLiteralness covers the one delimiter the golden cases
-// cannot carry, because a backtick also ends Go's raw string literals.
+// TestBacktickTogglesLiteralness covers the one delimiter the golden
+// cases cannot carry, because a backtick also ends Go's raw string
+// literals.
 func TestBacktickTogglesLiteralness(t *testing.T) {
 	in := "`{add:1,2}`"
 	if got := parse(t, in); got != "{add:1,2}" {
@@ -152,15 +155,16 @@ func TestWithBindsAVariable(t *testing.T) {
 }
 
 func TestShortCircuit(t *testing.T) {
-	// {and} must not evaluate past a false, and {or} not past a true. A
-	// call to an unknown function in the skipped part would fail if it were
-	// evaluated.
+	// {and} must not evaluate past a false, and {or} not past a
+	// true. A call to an unknown function in the skipped part
+	// would fail if it were evaluated.
 	for _, in := range []string{"{and:0,{nosuchfunc:x}}", "{or:1,{nosuchfunc:x}}"} {
 		if _, err := Parse(newEnv(newStub()), in); err != nil {
 			t.Errorf("parse(%q) should have stopped early: %v", in, err)
 		}
 	}
-	// And they do evaluate when they must, so the failure surfaces.
+	// And they do evaluate when they must, so the failure
+	// surfaces.
 	if _, err := Parse(newEnv(newStub()), "{and:1,{nosuchfunc:x}}"); err == nil {
 		t.Error("{and} should evaluate its second argument when the first is true")
 	}
@@ -176,7 +180,8 @@ func TestIfDoesNotEvaluateTheUntakenBranch(t *testing.T) {
 }
 
 func TestRecursionIsBounded(t *testing.T) {
-	// A property that evaluates itself would otherwise loop forever.
+	// A property that evaluates itself would otherwise loop
+	// forever.
 	env := newEnv(newStub())
 	deep := strings.Repeat("{concat:", 0) // no nesting needed; depth comes from Parse
 	_ = deep
@@ -213,13 +218,15 @@ func TestArityIsChecked(t *testing.T) {
 }
 
 func TestEvalReportsRatherThanPropagates(t *testing.T) {
-	// A failure in a description must not break the look that read it.
+	// A failure in a description must not break the look that
+	// read it.
 	h := newStub()
 	env := newEnv(h)
 	if got := Eval(env, "before {nosuchfunc:x} after"); got != "" {
 		t.Errorf("Eval returned %q, want empty on failure", got)
 	}
-	if len(h.told) != 1 || !strings.Contains(h.told[0], "Unrecognized function") {
+	if len(h.told) != 1 ||
+		!strings.Contains(h.told[0], "Unrecognized function") {
 		t.Errorf("the failure should have been reported: %v", h.told)
 	}
 }
@@ -231,8 +238,9 @@ func TestFunctionTableIsPopulated(t *testing.T) {
 	t.Logf("%d of %d MPI functions implemented", Implemented(), Count())
 }
 
-// The rest of Host is stubbed out: these tests cover the parser rather than
-// the world it reaches, so each answers the least interesting thing it can.
+// The rest of Host is stubbed out: these tests cover the parser
+// rather than the world it reaches, so each answers the least
+// interesting thing it can.
 func (h *stubHost) NotifyExcept(Ref, []Ref, string) {}
 func (h *stubHost) TypeName(obj Ref) string {
 	if obj == 1 {
@@ -253,13 +261,17 @@ func (h *stubHost) Locked(int, Ref, Ref) bool { return false }
 func (h *stubHost) TestLock(int, Ref, Ref, string) (bool, error) {
 	return false, nil
 }
-func (h *stubHost) OnlinePlayers() []Ref              { return nil }
-func (h *stubHost) Idle(Ref) int                      { return 0 }
-func (h *stubHost) OnTime(Ref) int                    { return 0 }
-func (h *stubHost) Width(Ref) int                     { return 0 }
-func (h *stubHost) Height(Ref) int                    { return 0 }
-func (h *stubHost) TuneGet(string) (string, bool)     { return "", false }
-func (h *stubHost) MuckName() string                  { return "Test" }
+func (h *stubHost) OnlinePlayers() []Ref { return nil }
+func (h *stubHost) Idle(Ref) int         { return 0 }
+func (h *stubHost) OnTime(Ref) int       { return 0 }
+func (h *stubHost) Width(Ref) int        { return 0 }
+func (h *stubHost) Height(Ref) int       { return 0 }
+func (h *stubHost) TuneGet(string) (string, bool) {
+	return "", false
+}
+func (h *stubHost) MuckName() string {
+	return "Test"
+}
 func (h *stubHost) PronounSub(_ Ref, s string) string { return s }
 func (h *stubHost) Force(int, Ref, string)            {}
 func (h *stubHost) Kill(int) bool                     { return false }

@@ -10,24 +10,26 @@ import (
 // maxInlineValue is how long an argument may be before it is sent on
 // continuation lines instead of inline.
 //
-// Upstream compares against half of whatever is left of its line buffer, which
-// comes to about this for a message with a few short arguments. The exact
-// threshold is not observable — a client must accept either form — so a fixed
-// number is used rather than reproducing the arithmetic.
+// Upstream compares against half of whatever is left of its line
+// buffer, which comes to about this for a message with a few short
+// arguments. The exact threshold is not observable — a client must
+// accept either form — so a fixed number is used rather than
+// reproducing the arithmetic.
 const maxInlineValue = 400
 
 // SendMessage writes a message to the client.
 //
-// An argument that is multi-line, or too long to sit comfortably on the first
-// line, is announced with a "*" and sent afterwards on its own lines, tied to
-// the message by a data tag.
+// An argument that is multi-line, or too long to sit comfortably on
+// the first line, is announced with a "*" and sent afterwards on its
+// own lines, tied to the message by a data tag.
 func (f *Frame) SendMessage(msg *Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.sendMessage(msg)
 }
 
-// sendMessage is SendMessage without the lock, for callers that hold it.
+// sendMessage is SendMessage without the lock, for callers that hold
+// it.
 func (f *Frame) sendMessage(msg *Message) error {
 	if !f.enabled && !ascii.EqualFold(msg.Package, InitPackage) {
 		return errNotEnabled
@@ -38,9 +40,9 @@ func (f *Frame) sendMessage(msg *Message) error {
 	b.WriteString(Prefix)
 	b.WriteString(name)
 
-	// Every message but the opening one carries the key, and every
-	// message outside the negotiation package needs the client to have
-	// agreed to that package first.
+	// Every message but the opening one carries the key, and
+	// every message outside the negotiation package needs the
+	// client to have agreed to that package first.
 	if !ascii.EqualFold(name, InitPackage) {
 		b.WriteString(" ")
 		b.WriteString(f.authKey)
@@ -86,8 +88,9 @@ func (f *Frame) sendMessage(msg *Message) error {
 	return nil
 }
 
-// splitLines breaks any embedded line endings out into separate lines, so a
-// value carrying a newline is sent as the several lines it really is.
+// splitLines breaks any embedded line endings out into separate
+// lines, so a value carrying a newline is sent as the several lines
+// it really is.
 func splitLines(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, s := range in {
@@ -98,11 +101,11 @@ func splitLines(in []string) []string {
 	return out
 }
 
-// SendInband writes ordinary text to a client that has MCP enabled, quoting it
-// if it would otherwise be read as a message.
+// SendInband writes ordinary text to a client that has MCP enabled,
+// quoting it if it would otherwise be read as a message.
 //
-// Without this, a player who types a line beginning "#$#" could make every
-// other client in the room act on it.
+// Without this, a player who types a line beginning "#$#" could make
+// every other client in the room act on it.
 func (f *Frame) SendInband(line string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

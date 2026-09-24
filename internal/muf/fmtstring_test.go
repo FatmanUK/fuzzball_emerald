@@ -11,7 +11,9 @@ type fmtTestHost struct {
 	Host
 }
 
-func (h *fmtTestHost) Valid(r ref.Ref) bool  { return r == ref.Ref(7) }
+func (h *fmtTestHost) Valid(r ref.Ref) bool {
+	return r == ref.Ref(7)
+}
 func (h *fmtTestHost) Name(r ref.Ref) string { return "Rusty Key" }
 
 func fmtOne(t *testing.T, format string, args ...Value) string {
@@ -46,10 +48,12 @@ func TestFormatDirectives(t *testing.T) {
 		{"%5s", []Value{Str("abc")}, "  abc"},
 		{"%-5s|", []Value{Str("abc")}, "abc  |"},
 		{"%.2s", []Value{Str("abcdef")}, "ab"},
-		// C ignores the zero flag on a string; Go would pad with zeros.
+		// C ignores the zero flag on a string; Go would pad
+		// with zeros.
 		{"%05s", []Value{Str("abc")}, "  abc"},
 
-		// A dbref prints as "#123" under %d and as its name under %D.
+		// A dbref prints as "#123" under %d and as its name
+		// under %D.
 		{"%d", []Value{Obj(ref.Ref(7))}, "#7"},
 		{"%D", []Value{Obj(ref.Ref(7))}, "Rusty Key"},
 
@@ -65,8 +69,8 @@ func TestFormatDirectives(t *testing.T) {
 		{"%?", []Value{Float(1)}, "FLOAT"},
 
 		{"100%% done", nil, "100% done"},
-		// The width counts visible characters, so an ANSI escape does not
-		// eat into the padding.
+		// The width counts visible characters, so an ANSI
+		// escape does not eat into the padding.
 		{"%6s|", []Value{Str("\x1b[1mab\x1b[0m")}, "    \x1b[1mab\x1b[0m|"},
 	}
 	for _, tt := range tests {

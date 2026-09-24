@@ -6,11 +6,11 @@ import (
 )
 
 // ARRAY_INSERTRANGE, ARRAY_SORT_INDEXED, ARRAY_PUT_PROPVALS,
-// ARRAY_GET_IGNORELIST, ARRAY_INTERPRET and ARRAY_NOTIFY_SECURE are ports
-// of the more tractable primitives left in src/p_array.c.
-// ARRAY_FILTER_FLAGS is not ported: it needs init_checkflags/checkflags, a
-// flag-matching mini-language (the same one @find would need) that nothing
-// in this codebase has built yet.
+// ARRAY_GET_IGNORELIST, ARRAY_INTERPRET and ARRAY_NOTIFY_SECURE are
+// ports of the more tractable primitives left in src/p_array.c.
+// ARRAY_FILTER_FLAGS is not ported: it needs
+// init_checkflags/checkflags, a flag-matching mini-language (the same
+// one @find would need) that nothing in this codebase has built yet.
 func init() {
 	register("ARRAY_INSERTRANGE", func(f *Frame) (*Result, error) {
 		itemsV, err := f.Pop()
@@ -28,7 +28,8 @@ func init() {
 		if itemsV.Type != TypeArray {
 			return nil, errf("Argument not an array. (3)")
 		}
-		if startV.Type != TypeInteger && startV.Type != TypeString {
+		if startV.Type != TypeInteger &&
+			startV.Type != TypeString {
 			return nil, errf("Argument not an integer or string. (2)")
 		}
 		if arrV.Type != TypeArray {
@@ -72,7 +73,8 @@ func init() {
 		if flagsV.Type != TypeInteger {
 			return nil, errf("Expected integer argument to specify sort type. (2)")
 		}
-		if indexKey.Type != TypeInteger && indexKey.Type != TypeString {
+		if indexKey.Type != TypeInteger &&
+			indexKey.Type != TypeString {
 			return nil, errf("Index argument not an integer or string. (3)")
 		}
 
@@ -141,9 +143,10 @@ func init() {
 		return nil, nil
 	})
 
-	// ARRAY_GET_IGNORELIST's own "if (mlev < 3)" uses the dispatcher's own
-	// generic wording, so mlev_gen.go's generated floor (via primMLevel)
-	// already gates it before this ever runs — no inline check needed.
+	// ARRAY_GET_IGNORELIST's own "if (mlev < 3)" uses the
+	// dispatcher's own generic wording, so mlev_gen.go's
+	// generated floor (via primMLevel) already gates it before
+	// this ever runs — no inline check needed.
 	register("ARRAY_GET_IGNORELIST", func(f *Frame) (*Result, error) {
 		obj, h, err := f.refAndHost()
 		if err != nil {
@@ -192,11 +195,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// Every connection here is TLS, so upstream's insecure-message
-		// array and its listen-prop triggering (only reachable from that
-		// branch upstream, despite what its own doc comment claims) never
-		// apply — see internal/muf/prim_connects.go's own DESCRSECURE?
-		// comment for the same "always true here" divergence.
+		// Every connection here is TLS, so upstream's
+		// insecure-message array and its listen-prop
+		// triggering (only reachable from that branch
+		// upstream, despite what its own doc comment claims)
+		// never apply — see internal/muf/prim_connects.go's
+		// own DESCRSECURE? comment for the same "always true
+		// here" divergence.
 		insecureV, err := f.Pop()
 		if err != nil {
 			return nil, err
@@ -228,7 +233,8 @@ func init() {
 	})
 }
 
-// ignorePropPath is upstream's IGNORE_PROP — see internal/game/misc_host.go
-// for why the same literal is duplicated rather than shared: that side
-// needs no MUF Value/Frame machinery, this side is package muf.
+// ignorePropPath is upstream's IGNORE_PROP — see
+// internal/game/misc_host.go for why the same literal is duplicated
+// rather than shared: that side needs no MUF Value/Frame machinery,
+// this side is package muf.
 const ignorePropPath = "@__sys__/ignore/def"

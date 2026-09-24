@@ -10,11 +10,11 @@ import (
 )
 
 // TestNextFirstLastDescrOrderByConnectionOrder checks Host.NextDescr,
-// Host.FirstDescr and Host.LastDescr's global form (player == ref.Nothing)
-// against two real connections — descriptor ids are assigned by a
-// monotonic counter (internal/session.Hub.Add), so ascending id order is
-// connection order here, the same thing upstream's own doubly-linked list
-// walk answers.
+// Host.FirstDescr and Host.LastDescr's global form (player ==
+// ref.Nothing) against two real connections — descriptor ids are
+// assigned by a monotonic counter (internal/session.Hub.Add), so
+// ascending id order is connection order here, the same thing
+// upstream's own doubly-linked list walk answers.
 func TestNextFirstLastDescrOrderByConnectionOrder(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -45,10 +45,11 @@ func TestNextFirstLastDescrOrderByConnectionOrder(t *testing.T) {
 	}
 }
 
-// TestFirstLastDescrPlayerScopedAsymmetry checks the real asymmetry this
-// phase found in the C: prim_firstdescr's player-scoped branch answers a
-// player's newest connection, and prim_lastdescr's answers their oldest —
-// the opposite way around from the global form's own naming.
+// TestFirstLastDescrPlayerScopedAsymmetry checks the real asymmetry
+// this phase found in the C: prim_firstdescr's player-scoped branch
+// answers a player's newest connection, and prim_lastdescr's answers
+// their oldest — the opposite way around from the global form's own
+// naming.
 func TestFirstLastDescrPlayerScopedAsymmetry(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -79,9 +80,9 @@ func TestFirstLastDescrPlayerScopedAsymmetry(t *testing.T) {
 	}
 }
 
-// TestDescrLeastMostIdleAcrossTwoConnections checks Host.DescrLeastIdle and
-// Host.DescrMostIdle: the connection that has seen input most recently is
-// least idle, and the other is most idle.
+// TestDescrLeastMostIdleAcrossTwoConnections checks
+// Host.DescrLeastIdle and Host.DescrMostIdle: the connection that has
+// seen input most recently is least idle, and the other is most idle.
 func TestDescrLeastMostIdleAcrossTwoConnections(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -89,10 +90,10 @@ func TestDescrLeastMostIdleAcrossTwoConnections(t *testing.T) {
 	who, dOld := connectAs(t, h, "Multi", false)
 	dNew := secondSessionFor(t, h, who)
 
-	// dOld has not been touched since connecting; dNew just sent a line via
-	// secondSessionFor's own login bind — but LastActive there is only set
-	// by Bind. Send a real line on dNew so its LastActive moves ahead of
-	// dOld's.
+	// dOld has not been touched since connecting; dNew just sent
+	// a line via secondSessionFor's own login bind — but
+	// LastActive there is only set by Bind. Send a real line on
+	// dNew so its LastActive moves ahead of dOld's.
 	sendAs(t, h, dNew, "look")
 
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
@@ -118,10 +119,10 @@ func TestDescrLeastMostIdleAcrossTwoConnections(t *testing.T) {
 	}
 }
 
-// TestDescrBootDisconnectsAndAnnounces checks Host.DescrBoot: it tears the
-// descriptor down the same way Server.Disconnect does — announcing the
-// departure and freeing the connection — but runs synchronously since the
-// caller is already on the world goroutine.
+// TestDescrBootDisconnectsAndAnnounces checks Host.DescrBoot: it
+// tears the descriptor down the same way Server.Disconnect does —
+// announcing the departure and freeing the connection — but runs
+// synchronously since the caller is already on the world goroutine.
 func TestDescrBootDisconnectsAndAnnounces(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -158,8 +159,8 @@ func TestDescrBootDisconnectsAndAnnounces(t *testing.T) {
 	}
 }
 
-// TestDescrNotifySendsRawTextToTheDescriptor checks Host.DescrNotify: it
-// reaches a specific connection directly, bypassing any object or
+// TestDescrNotifySendsRawTextToTheDescriptor checks Host.DescrNotify:
+// it reaches a specific connection directly, bypassing any object or
 // listen-prop machinery.
 func TestDescrNotifySendsRawTextToTheDescriptor(t *testing.T) {
 	h := newHarness(t)
@@ -192,12 +193,13 @@ func TestDescrNotifySendsRawTextToTheDescriptor(t *testing.T) {
 	}
 }
 
-// TestSetUserSwitchesADescriptorsPlayer checks Host.SetUser: it moves a live
-// descriptor onto a different player, announcing the old player's departure
-// and the new one's arrival, and going back to a pre-login state — Player
-// ref.Nothing, Connected false — when who is ref.Nothing, unlike upstream's
-// own pset_user, which leaves that case's state ambiguous (see the host
-// method's own doc comment).
+// TestSetUserSwitchesADescriptorsPlayer checks Host.SetUser: it moves
+// a live descriptor onto a different player, announcing the old
+// player's departure and the new one's arrival, and going back to a
+// pre-login state — Player ref.Nothing, Connected false — when
+// who is ref.Nothing, unlike upstream's own pset_user, which leaves
+// that case's state ambiguous (see the host method's own doc
+// comment).
 func TestSetUserSwitchesADescriptorsPlayer(t *testing.T) {
 	h := newHarness(t)
 	h.login()

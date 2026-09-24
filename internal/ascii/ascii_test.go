@@ -6,7 +6,8 @@ func TestFoldIsASCIIOnly(t *testing.T) {
 	if got := Fold("MiXeD"); got != "mixed" {
 		t.Errorf("Fold(MiXeD) = %q", got)
 	}
-	// Non-ASCII must survive untouched; strcasecmp does not fold it.
+	// Non-ASCII must survive untouched; strcasecmp does not fold
+	// it.
 	for _, s := range []string{"Ä", "É", "Ω", "日本"} {
 		if got := Fold(s); got != s {
 			t.Errorf("Fold(%q) = %q, want it unchanged", s, got)
@@ -39,7 +40,8 @@ func TestCompareOrdersCaseInsensitively(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := Compare(c.a, c.b)
-		if (got < 0) != (c.want < 0) || (got > 0) != (c.want > 0) {
+		if (got < 0) != (c.want < 0) ||
+			(got > 0) != (c.want > 0) {
 			t.Errorf("Compare(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
 		}
 	}

@@ -2,13 +2,13 @@ package session
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/mcp"
 
-// MCPPackages lists the out-of-band packages this server offers, with the
-// version ranges from src/mcp.c.
+// MCPPackages lists the out-of-band packages this server offers, with
+// the version ranges from src/mcp.c.
 //
-// Most are advertised without a handler here: what they mean belongs to the
-// game, which attaches its own handling. The negotiation package is the
-// exception, because agreeing on what the other side supports is the
-// protocol's own business.
+// Most are advertised without a handler here: what they mean belongs
+// to the game, which attaches its own handling. The negotiation
+// package is the exception, because agreeing on what the other side
+// supports is the protocol's own business.
 func MCPPackages() []mcp.Package {
 	one := mcp.Version{Major: 1, Minor: 0}
 	two := mcp.Version{Major: 2, Minor: 0}

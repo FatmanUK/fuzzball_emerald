@@ -7,19 +7,20 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 )
 
-// strptime parses a time string against a C-style format, which is what
-// CONVTIME and FMTTIME both do — the second under whatever format the caller
-// supplies, the first under a fixed one.
+// strptime parses a time string against a C-style format, which is
+// what CONVTIME and FMTTIME both do — the second under whatever
+// format the caller supplies, the first under a fixed one.
 //
-// The directives covered are the ones strftime emits, which is what a MUF
-// program has any way of producing in the first place. Anything else in the
-// format fails the parse rather than being skipped, so a program gets the
-// same "does not match" answer it would from strptime returning NULL.
+// The directives covered are the ones strftime emits, which is what a
+// MUF program has any way of producing in the first place. Anything
+// else in the format fails the parse rather than being skipped, so a
+// program gets the same "does not match" answer it would from
+// strptime returning NULL.
 //
-// The result is read in UTC, as strftime's own rendering is. Upstream's mktime
-// reads it in the server's local zone instead; a server and its MUF programs
-// that agree on one zone are unaffected, and Emerald has no per-world zone to
-// agree on.
+// The result is read in UTC, as strftime's own rendering is.
+// Upstream's mktime reads it in the server's local zone instead; a
+// server and its MUF programs that agree on one zone are unaffected,
+// and Emerald has no per-world zone to agree on.
 func Parse(value, format string) (time.Time, bool) {
 	p := &timeParser{s: value}
 	year, mon, day := 1900, 1, 1
@@ -30,7 +31,8 @@ func Parse(value, format string) (time.Time, bool) {
 	for i := 0; i < len(format); i++ {
 		c := format[i]
 		if c != '%' {
-			// Whitespace in a format matches any run of it, including none.
+			// Whitespace in a format matches any run of
+			// it, including none.
 			if isSpaceByte(c) {
 				p.skipSpace()
 				continue
@@ -55,7 +57,8 @@ func Parse(value, format string) (time.Time, bool) {
 		case 'y':
 			year, ok = p.number(2)
 			if ok {
-				// strptime's own window: 69-99 is the 1900s, 0-68 the 2000s.
+				// strptime's own window: 69-99 is the
+				// 1900s, 0-68 the 2000s.
 				if year >= 69 {
 					year += 1900
 				} else {
@@ -74,8 +77,9 @@ func Parse(value, format string) (time.Time, bool) {
 		case 'S':
 			sec, ok = p.number(2)
 		case 'j':
-			// A day of the year counts from January, which time.Date
-			// normalises past the end of the month for us.
+			// A day of the year counts from January,
+			// which time.Date normalises past the end of
+			// the month for us.
 			mon = 1
 			day, ok = p.number(3)
 		case 'b', 'h', 'B':
@@ -94,7 +98,8 @@ func Parse(value, format string) (time.Time, bool) {
 	}
 
 	if hasPM {
-		// %I counts 1-12, so noon and midnight each need moving.
+		// %I counts 1-12, so noon and midnight each need
+		// moving.
 		hour %= 12
 		if pm {
 			hour += 12
@@ -103,8 +108,8 @@ func Parse(value, format string) (time.Time, bool) {
 	return time.Date(year, time.Month(mon), day, hour, min, sec, 0, time.UTC), true
 }
 
-// expandCompound rewrites the directives that stand for a fixed sequence of
-// simpler ones, so the parse itself is a single pass.
+// expandCompound rewrites the directives that stand for a fixed
+// sequence of simpler ones, so the parse itself is a single pass.
 func expandCompound(format string) string {
 	for _, sub := range [][2]string{
 		{"%D", "%m/%d/%y"},
@@ -137,12 +142,14 @@ func (p *timeParser) literal(c byte) bool {
 	return true
 }
 
-// number reads up to max digits, which is what strptime does: a field is as
-// wide as the digits actually present, not padded to its nominal width.
+// number reads up to max digits, which is what strptime does: a field
+// is as wide as the digits actually present, not padded to its
+// nominal width.
 func (p *timeParser) number(max int) (int, bool) {
 	start := p.i
 	n := 0
-	for p.i < len(p.s) && p.i-start < max && p.s[p.i] >= '0' && p.s[p.i] <= '9' {
+	for p.i < len(p.s) && p.i-start < max && p.s[p.i] >= '0' &&
+		p.s[p.i] <= '9' {
 		n = n*10 + int(p.s[p.i]-'0')
 		p.i++
 	}
@@ -181,7 +188,8 @@ func (p *timeParser) meridiem() (bool, bool) {
 }
 
 // word matches a name, full form first and then its three-letter
-// abbreviation, comparing the way the rest of the server does: ASCII only.
+// abbreviation, comparing the way the rest of the server does: ASCII
+// only.
 func (p *timeParser) word(name string) bool {
 	rest := p.s[p.i:]
 	forms := [2]string{name, name}
@@ -189,7 +197,8 @@ func (p *timeParser) word(name string) bool {
 		forms[1] = name[:3]
 	}
 	for _, form := range forms {
-		if len(rest) >= len(form) && ascii.EqualFold(rest[:len(form)], form) {
+		if len(rest) >= len(form) &&
+			ascii.EqualFold(rest[:len(form)], form) {
 			p.i += len(form)
 			return true
 		}
@@ -207,13 +216,14 @@ var dayNames = [7]string{
 	"Saturday",
 }
 
-// fmtTimeSeconds is upstream's time_string_to_seconds, which FMTTIME exposes
-// directly and CONVTIME calls with a fixed format.
+// fmtTimeSeconds is upstream's time_string_to_seconds, which FMTTIME
+// exposes directly and CONVTIME calls with a fixed format.
 //
-// The "%T%t%D" special case is upstream's own: %D's year is two digits, so a
-// string carrying four would read the century as the whole year. Upstream
-// looks ahead for how many digits the year actually has and swaps in an
-// equivalent format with %Y when there are four.
+// The "%T%t%D" special case is upstream's own: %D's year is two
+// digits, so a string carrying four would read the century as the
+// whole year. Upstream looks ahead for how many digits the year
+// actually has and swaps in an equivalent format with %Y when there
+// are four.
 func Seconds(value, format string) (int64, bool) {
 	if format == "%T%t%D" && yearDigits(value) == 4 {
 		format = "%T%t%m/%d/%Y"
@@ -225,8 +235,9 @@ func Seconds(value, format string) (int64, bool) {
 	return t.Unix(), true
 }
 
-// yearDigits counts the digits in the third slash-separated field of the date
-// half of a "%T%t%D" string, upstream's own hand-rolled lookahead.
+// yearDigits counts the digits in the third slash-separated field of
+// the date half of a "%T%t%D" string, upstream's own hand-rolled
+// lookahead.
 func yearDigits(s string) int {
 	i := strings.IndexAny(s, " \t\n\r\v\f")
 	if i < 0 {

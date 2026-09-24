@@ -5,13 +5,16 @@ import "sort"
 // Array is a MUF array, which is either a list indexed by consecutive
 // integers from zero, or a dictionary keyed by integers or strings.
 //
-// Fuzzball keeps both in one type and lets a program move between them, so
-// this does too: keys preserve insertion-independent order by sorting, which
-// is what array_keys and the iteration primitives expose.
+// Fuzzball keeps both in one type and lets a program move between
+// them, so this does too: keys preserve insertion-independent order
+// by sorting, which is what array_keys and the iteration primitives
+// expose.
 type Array struct {
-	// list holds a packed array's values. It is nil for a dictionary.
+	// list holds a packed array's values. It is nil for a
+	// dictionary.
 	list []Value
-	// dict holds a dictionary's entries, keyed by a value's comparable form.
+	// dict holds a dictionary's entries, keyed by a value's
+	// comparable form.
 	dict map[arrayKey]Value
 	// keys keeps the dictionary's keys in sorted order.
 	keys []Value
@@ -56,7 +59,8 @@ func (a *Array) Len() int {
 // Get returns the value at a key.
 func (a *Array) Get(key Value) (Value, bool) {
 	if a.IsList() {
-		if key.Type != TypeInteger || key.Num < 0 || int(key.Num) >= len(a.list) {
+		if key.Type != TypeInteger || key.Num < 0 ||
+			int(key.Num) >= len(a.list) {
 			return Value{}, false
 		}
 		return a.list[key.Num], true
@@ -69,11 +73,12 @@ func (a *Array) Get(key Value) (Value, bool) {
 	return v, found
 }
 
-// Set stores a value at a key, converting a list to a dictionary when the key
-// does not extend it.
+// Set stores a value at a key, converting a list to a dictionary when
+// the key does not extend it.
 func (a *Array) Set(key, val Value) {
 	if a.IsList() {
-		if key.Type == TypeInteger && key.Num >= 0 && int(key.Num) <= len(a.list) {
+		if key.Type == TypeInteger && key.Num >= 0 &&
+			int(key.Num) <= len(a.list) {
 			if int(key.Num) == len(a.list) {
 				a.list = append(a.list, val)
 			} else {
@@ -97,7 +102,8 @@ func (a *Array) Set(key, val Value) {
 // Delete removes a key.
 func (a *Array) Delete(key Value) {
 	if a.IsList() {
-		if key.Type != TypeInteger || key.Num < 0 || int(key.Num) >= len(a.list) {
+		if key.Type != TypeInteger || key.Num < 0 ||
+			int(key.Num) >= len(a.list) {
 			return
 		}
 		a.list = append(a.list[:key.Num], a.list[key.Num+1:]...)
@@ -128,7 +134,8 @@ func (a *Array) Append(val Value) {
 	a.list = append(a.list, val)
 }
 
-// Keys returns the keys in order: 0..n-1 for a list, sorted for a dictionary.
+// Keys returns the keys in order: 0..n-1 for a list, sorted for a
+// dictionary.
 func (a *Array) Keys() []Value {
 	if a.IsList() {
 		out := make([]Value, len(a.list))
@@ -153,7 +160,8 @@ func (a *Array) Values() []Value {
 	return out
 }
 
-// Copy returns a shallow copy, which is what MUF's assignment semantics give.
+// Copy returns a shallow copy, which is what MUF's assignment
+// semantics give.
 func (a *Array) Copy() *Array {
 	if a.IsList() {
 		return NewList(a.list)
@@ -179,7 +187,8 @@ func (a *Array) toDict() {
 	a.dict, a.keys, a.list = d, keys, nil
 }
 
-// sortKeys orders a dictionary's keys: integers before strings, each ascending.
+// sortKeys orders a dictionary's keys: integers before strings, each
+// ascending.
 func (a *Array) sortKeys() {
 	sort.SliceStable(a.keys, func(i, j int) bool {
 		x, y := a.keys[i], a.keys[j]
@@ -193,8 +202,8 @@ func (a *Array) sortKeys() {
 	})
 }
 
-// Insert adds a value at a key, shifting a list's later entries up rather than
-// replacing one.
+// Insert adds a value at a key, shifting a list's later entries up
+// rather than replacing one.
 func (a *Array) Insert(key, val Value) {
 	if a.IsList() && key.Type == TypeInteger {
 		i := int(key.Num)
@@ -214,7 +223,8 @@ func (a *Array) Insert(key, val Value) {
 
 // Range returns the entries between two keys, inclusive.
 func (a *Array) Range(from, to Value) *Array {
-	if a.IsList() && from.Type == TypeInteger && to.Type == TypeInteger {
+	if a.IsList() && from.Type == TypeInteger &&
+		to.Type == TypeInteger {
 		lo, hi := int(from.Num), int(to.Num)
 		if lo < 0 {
 			lo = 0
@@ -243,8 +253,8 @@ func inRange(k, from, to Value) bool {
 	return !valueLess(k, from, false) && !valueLess(to, k, false)
 }
 
-// Cut splits an array at a key, returning what comes before it and what comes
-// from it onwards.
+// Cut splits an array at a key, returning what comes before it and
+// what comes from it onwards.
 func (a *Array) Cut(at Value) (*Array, *Array) {
 	keys, vals := a.Keys(), a.Values()
 	split := len(keys)

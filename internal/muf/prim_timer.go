@@ -1,12 +1,13 @@
 package muf
 
-// TIMER_START, TIMER_STOP and EVENT_SEND: the three primitives that put an
-// event on a frame's queue from outside the instruction that asks for it.
+// TIMER_START, TIMER_STOP and EVENT_SEND: the three primitives that
+// put an event on a frame's queue from outside the instruction that
+// asks for it.
 //
 // A timer is how a program waits for something with a deadline —
-// EVENT_WAITFOR on both the thing it wants and the timer's own event, so
-// whichever happens first wakes it. Upstream's own timed READ is compiled
-// out of exactly that pair.
+// EVENT_WAITFOR on both the thing it wants and the timer's own event,
+// so whichever happens first wakes it. Upstream's own timed READ is
+// compiled out of exactly that pair.
 func init() {
 	register("TIMER_START", func(f *Frame) (*Result, error) {
 		idV, err := f.Pop()
@@ -39,7 +40,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// Upstream numbers this argument (2) despite it being the only one.
+		// Upstream numbers this argument (2) despite it being
+		// the only one.
 		if idV.Type != TypeString {
 			return nil, errf("Expected a string timer id. (2)")
 		}
@@ -78,8 +80,9 @@ func init() {
 			return nil, err
 		}
 
-		// The receiver is handed a dictionary describing where the event
-		// came from, with the sent value under "data".
+		// The receiver is handed a dictionary describing
+		// where the event came from, with the sent value
+		// under "data".
 		env := NewDict()
 		env.Set(Str("data"), deepCopy(data))
 		env.Set(Str("caller_pid"), Int(int64(f.PID)))
@@ -91,8 +94,9 @@ func init() {
 
 		name := userEventName(idV.Str)
 		if int(pidV.Num) == f.PID {
-			// A program sending to itself never leaves the frame, so there
-			// is no process to look up.
+			// A program sending to itself never leaves
+			// the frame, so there is no process to look
+			// up.
 			f.AddEvent(name, Arr(env))
 			return nil, nil
 		}
@@ -101,8 +105,9 @@ func init() {
 	})
 }
 
-// userEventName is upstream's "USER.%.32s": the namespace EVENT_SEND's own
-// events live in, so a program cannot forge one of the server's.
+// userEventName is upstream's "USER.%.32s": the namespace
+// EVENT_SEND's own events live in, so a program cannot forge one of
+// the server's.
 func userEventName(id string) string {
 	const maxEventID = 32
 	if len(id) > maxEventID {

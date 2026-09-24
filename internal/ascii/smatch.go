@@ -2,9 +2,9 @@ package ascii
 
 import "strings"
 
-// SMatch implements MUCK pattern matching, which is not a regular expression:
-// '*' matches any run, '?' any single character, '{a|b}' any alternative, and
-// everything is case-insensitive.
+// SMatch implements MUCK pattern matching, which is not a regular
+// expression: '*' matches any run, '?' any single character, '{a|b}'
+// any alternative, and everything is case-insensitive.
 func SMatch(s, pattern string) bool {
 	return smatchAt(Fold(s), Fold(pattern))
 }
@@ -13,7 +13,8 @@ func smatchAt(s, p string) bool {
 	for len(p) > 0 {
 		switch p[0] {
 		case '*':
-			// Collapse a run of stars, then try every split.
+			// Collapse a run of stars, then try every
+			// split.
 			for len(p) > 0 && p[0] == '*' {
 				p = p[1:]
 			}
@@ -42,7 +43,8 @@ func smatchAt(s, p string) bool {
 				continue
 			}
 			for _, alt := range strings.Split(p[1:end], "|") {
-				if strings.HasPrefix(s, alt) && smatchAt(s[len(alt):], p[end+1:]) {
+				if strings.HasPrefix(s, alt) &&
+					smatchAt(s[len(alt):], p[end+1:]) {
 					return true
 				}
 			}

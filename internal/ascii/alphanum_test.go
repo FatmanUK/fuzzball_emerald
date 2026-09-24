@@ -2,10 +2,11 @@ package ascii
 
 import "testing"
 
-// TestAlphanumCompare checks against values taken from the C itself rather
-// than from what the ordering ought to be: several of these are quirks of
-// upstream's own zero-backtracking, and callers compare the result against
-// zero in both directions, so the sign has to match and not merely the order.
+// TestAlphanumCompare checks against values taken from the C itself
+// rather than from what the ordering ought to be: several of these
+// are quirks of upstream's own zero-backtracking, and callers compare
+// the result against zero in both directions, so the sign has to
+// match and not merely the order.
 func TestAlphanumCompare(t *testing.T) {
 	tests := []struct {
 		a, b string

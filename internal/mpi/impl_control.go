@@ -4,10 +4,11 @@ import "strings"
 
 // The looping and evaluating functions.
 //
-// These are the ones whose table entries do not pre-evaluate their arguments,
-// because a loop body has to be evaluated once per iteration rather than once
-// before the loop starts. Each therefore calls Parse itself on whichever
-// arguments it wants evaluated, and exactly once on those it does not.
+// These are the ones whose table entries do not pre-evaluate their
+// arguments, because a loop body has to be evaluated once per
+// iteration rather than once before the loop starts. Each therefore
+// calls Parse itself on whichever arguments it wants evaluated, and
+// exactly once on those it does not.
 func init() {
 	// Evaluating text and properties.
 	register("EVAL", evalText(false))
@@ -25,8 +26,9 @@ func init() {
 			if !truthy(cond) {
 				return out.String(), nil
 			}
-			// Upstream overwrites its output buffer each time round rather
-			// than appending, so a {while} yields only its last iteration.
+			// Upstream overwrites its output buffer each
+			// time round rather than appending, so a
+			// {while} yields only its last iteration.
 			out.Reset()
 			body, err := Parse(env, args[1])
 			if err != nil {
@@ -61,23 +63,25 @@ func init() {
 
 		var out strings.Builder
 		n := 0
-		for i := start; (step >= 0 && i <= end) || (step < 0 && i >= end); i += step {
+		for i := start; (step >= 0 && i <= end) ||
+			(step < 0 && i >= end); i += step {
 			if n++; n >= maxListLen {
 				return "", errf("FOR", "Iteration limit exceeded")
 			}
 			if err := env.SetVar(name, itoa(i)); err != nil {
 				return "", err
 			}
-			// As with {while}, each pass replaces the last rather than
-			// adding to it.
+			// As with {while}, each pass replaces the
+			// last rather than adding to it.
 			out.Reset()
 			body, err := Parse(env, args[4])
 			if err != nil {
 				return "", err
 			}
 			out.WriteString(body)
-			// A zero step would never reach the end, so stop after one pass
-			// rather than running to the iteration limit.
+			// A zero step would never reach the end, so
+			// stop after one pass rather than running to
+			// the iteration limit.
 			if step == 0 {
 				break
 			}
@@ -181,9 +185,9 @@ func init() {
 	})
 
 	register("FOLD", func(env *Env, _ *Func, args []string) (string, error) {
-		// "{fold:accvar,itemvar,list,body[,sep]}" — the accumulator starts
-		// as the list's first item, so a fold over one item never runs the
-		// body at all.
+		// "{fold:accvar,itemvar,list,body[,sep]}" — the
+		// accumulator starts as the list's first item, so a
+		// fold over one item never runs the body at all.
 		accName, err := Parse(env, args[0])
 		if err != nil {
 			return "", err
@@ -223,10 +227,10 @@ func init() {
 		return acc, nil
 	})
 
-	// {func} defines a macro for the rest of this evaluation. Its body is
-	// wrapped in a {with} per named parameter, binding each to the
-	// positional argument the call supplies — which is how a language with
-	// no stack gets named parameters.
+	// {func} defines a macro for the rest of this evaluation. Its
+	// body is wrapped in a {with} per named parameter, binding
+	// each to the positional argument the call supplies — which
+	// is how a language with no stack gets named parameters.
 	register("FUNC", func(env *Env, _ *Func, args []string) (string, error) {
 		name, err := Parse(env, args[0])
 		if err != nil {
@@ -251,16 +255,18 @@ func init() {
 	})
 }
 
-// maxFuncs is upstream's MAX_MFUN_LIST_LEN reused as the function-table
-// bound, matching its "Too many functions defined." check.
+// maxFuncs is upstream's MAX_MFUN_LIST_LEN reused as the
+// function-table bound, matching its "Too many functions defined."
+// check.
 const maxFuncs = 64
 
-// evalText builds {eval} and {eval!}, which evaluate their argument a second
-// time — the table has already evaluated it once.
+// evalText builds {eval} and {eval!}, which evaluate their argument a
+// second time — the table has already evaluated it once.
 //
-// The two differ only in permissions: {eval!} keeps whatever blessing the
-// message has, and {eval} drops it, so text from an untrusted source cannot
-// borrow a blessed property's authority by being run through it.
+// The two differ only in permissions: {eval!} keeps whatever blessing
+// the message has, and {eval} drops it, so text from an untrusted
+// source cannot borrow a blessed property's authority by being run
+// through it.
 func evalText(keepBlessed bool) impl {
 	return func(env *Env, _ *Func, args []string) (string, error) {
 		if keepBlessed {
@@ -272,8 +278,8 @@ func evalText(keepBlessed bool) impl {
 	}
 }
 
-// execProp builds {exec} and {exec!}: read a property and run it as MPI.
-// {exec} searches the environment for it, {exec!} does not.
+// execProp builds {exec} and {exec!}: read a property and run it as
+// MPI. {exec} searches the environment for it, {exec!} does not.
 func execProp(walk bool) impl {
 	return func(env *Env, f *Func, args []string) (string, error) {
 		obj, err := env.resolve(f.Name, args, 1)
@@ -291,8 +297,8 @@ func execProp(walk bool) impl {
 	}
 }
 
-// parseList evaluates a looping function's list argument and splits it on its
-// separator, which is itself an optional argument.
+// parseList evaluates a looping function's list argument and splits
+// it on its separator, which is itself an optional argument.
 func (env *Env) parseList(args []string, at, sepAt int, fn string) ([]string, error) {
 	list, err := Parse(env, args[at])
 	if err != nil {
@@ -327,9 +333,10 @@ func (env *Env) parseSep(args []string, at int, fn, fallback string) (string, er
 	return sep, nil
 }
 
-// sepOr evaluates the input separator so it can stand in as the output one,
-// which is what the functions taking both do when only the first is given. A
-// failure here is reported when that argument is evaluated for real.
+// sepOr evaluates the input separator so it can stand in as the
+// output one, which is what the functions taking both do when only
+// the first is given. A failure here is reported when that argument
+// is evaluated for real.
 func (env *Env) sepOr(args []string, at int) string {
 	if at >= len(args) {
 		return "\r"

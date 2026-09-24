@@ -10,12 +10,13 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// connectAs brings in a second, separate player with a live connection,
-// bound without going through a password — the pattern
-// TestSpeechReachesOthersInTheRoom uses. The harness's own login'd player
-// (created second in newHarness, after the room) lands on dbref #1 == God,
-// which bypasses NOGUEST and ownership checks entirely; testing those checks
-// needs a player who is neither God nor a wizard.
+// connectAs brings in a second, separate player with a live
+// connection, bound without going through a password — the pattern
+// TestSpeechReachesOthersInTheRoom uses. The harness's own login'd
+// player (created second in newHarness, after the room) lands on
+// dbref #1 == God, which bypasses NOGUEST and ownership checks
+// entirely; testing those checks needs a player who is neither God
+// nor a wizard.
 func connectAs(t *testing.T, h *harness, name string, wizard bool) (ref.Ref, *session.Descriptor) {
 	t.Helper()
 	var who ref.Ref
@@ -48,7 +49,8 @@ func connectAs(t *testing.T, h *harness, name string, wizard bool) (ref.Ref, *se
 	return who, d
 }
 
-// sendAs sends a line as a connected player and returns what came back.
+// sendAs sends a line as a connected player and returns what came
+// back.
 func sendAs(t *testing.T, h *harness, d *session.Descriptor, line string) string {
 	t.Helper()
 	h.s.Input(d, line)
@@ -73,7 +75,8 @@ func TestLockCommandSetReportClear(t *testing.T) {
 	}
 
 	h.send("@lock down")
-	if got := h.out(); !strings.Contains(got, "Lock:") || !strings.Contains(got, "Wizard") {
+	if got := h.out(); !strings.Contains(got, "Lock:") ||
+		!strings.Contains(got, "Wizard") {
 		t.Fatalf("@lock report: %q", got)
 	}
 
@@ -155,17 +158,19 @@ func TestLockCommandNoForce(t *testing.T) {
 		t.Fatalf("@flock under force: %q", got)
 	}
 
-	// @lock has no NOFORCE guard and should go through unaffected.
+	// @lock has no NOFORCE guard and should go through
+	// unaffected.
 	h.send("@lock me=me")
 	if got := h.out(); !strings.Contains(got, "Lock set.") {
 		t.Fatalf("@lock under force should still work: %q", got)
 	}
 }
 
-// TestLockCommandBadKey checks both messages a bad key produces: the match
-// failure's own ("I don't see ... here."), which comes from inside
-// boolexp.Parse itself, and _set_lock's own generic one after it. The golden
-// harness caught this exact gap once — the first message was being dropped.
+// TestLockCommandBadKey checks both messages a bad key produces: the
+// match failure's own ("I don't see ... here."), which comes from
+// inside boolexp.Parse itself, and _set_lock's own generic one after
+// it. The golden harness caught this exact gap once — the first
+// message was being dropped.
 func TestLockCommandBadKey(t *testing.T) {
 	h := newHarness(t)
 	h.login()
@@ -184,9 +189,9 @@ func TestLockCommandPermissionDenied(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	// A non-wizard player trying to lock something they do not own and did
-	// not create — owned by the harness's wizard, who is not who is
-	// connected here.
+	// A non-wizard player trying to lock something they do not
+	// own and did not create — owned by the harness's wizard,
+	// who is not who is connected here.
 	if err := h.engine.Do(context.Background(), func(w *world.World) {
 		wiz := h.wizRef()
 		here := w.Get(wiz).Location
