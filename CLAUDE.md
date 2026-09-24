@@ -53,6 +53,9 @@ make pod-stop         # stop it
 make golden-build     # build Fuzzball 7 from the C, once
 make golden           # diff this server against it
 
+make build-config     # build ./fbeconfig, the web configurator
+make config           # run it against the local database
+
 ./fbemerald help-seed          # write the built-in help into the database
 ./fbemerald help-seed -force   # ...replacing topics edited in-game
 
@@ -163,6 +166,7 @@ sequences would rewrite every container on every boot.
 - `internal/session` — descriptors, the connection hub, telnet negotiation
 - `internal/game` — login, command dispatch, the commands
 - `internal/help` — the built-in help texts, seeded into the database
+- `internal/web` — the optional configurator, a separate binary
 - `internal/transport/{tlsline,wss}` — the two listeners, terminating into one
   descriptor abstraction so session logic is written once
 
@@ -505,6 +509,50 @@ The lock is scoped to the **schema**, not the database, because a schema is
 what holds a world and the store tests each make their own. `LeaseHeld` reads
 `pg_locks` rather than taking the lock and letting go, so a probe cannot make a
 server starting at the same moment fail for no reason.
+
+## The configurator
+
+`cmd/fbeconfig` and `internal/web` are an optional second binary: a small
+administrative interface over the same Postgres database and the same `FBE_*`
+variables. Stdlib only — `net/http` and `html/template`, with the pages
+embedded.
+
+**It reads the database directly rather than loading a world.** It has to: the
+server may be running and holding the authoritative graph in its own memory, so
+a world loaded here would be a copy that went stale the moment it was taken.
+`internal/store/admin.go` holds those queries.
+
+**Whether the server is running decides what it may do**, and that is enforced
+in exactly one place — `readOnlyGuard`, on every request that is not a GET.
+Leaving the inputs out of the templates is the cosmetic half; a form posted from
+a page loaded before the server started, or a request made by hand, has to be
+refused at the middleware or not at all. A lease that cannot be *read* is
+treated as held, because not knowing is not a reason to write. `/login` and
+`/logout` are the exceptions: refusing a sign-in while a server runs would make
+the interface useless for the case it exists to report on.
+
+**Authentication is the world's own wizards** — the same name and password they
+connect to the MUCK with, read out of `objects` and checked with
+`internal/password`. There is no separate account store, because anyone who can
+be trusted here is already a wizard. Two details matter:
+
+- **A legacy password is not rehashed on login here**, which the MUCK does.
+  Writing is exactly what this process may be forbidden to do, and a login that
+  sometimes writes is worse than one that never does.
+- **A wrong name, a wrong password and a mortal all give the same message.**
+  Distinguishing them would turn the login page into a way to enumerate
+  wizards. The log records which it was; the page does not.
+
+Names are matched with `lower()` in SQL to narrow and `ascii.EqualFold` in Go to
+confirm, so the locale Postgres runs under cannot fold two distinct player names
+together.
+
+`ValidateWeb` is separate from `Validate` rather than an extension of it:
+`Validate` hard-requires the MUCK listener's TLS material and at least one MUCK
+listener, and the configurator has neither. Its TLS material falls back to the
+MUCK listener's pair and is required either way. `FBE_WEB_ADDR` defaults to
+loopback and binding it wider is a logged warning, not a refusal — unlike
+`FBE_PPROF_ADDR`, which is refused outright.
 
 ## Sanity checking
 

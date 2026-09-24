@@ -1,0 +1,16 @@
+{{template "head" .}}
+<form method="post" action="/login">
+  <label>
+    <span>Character</span>
+    <input type="text" name="name" autocomplete="username"
+           autofocus required>
+  </label>
+  <label>
+    <span>Password</span>
+    <input type="password" name="password"
+           autocomplete="current-password" required>
+  </label>
+  <button>Sign in</button>
+</form>
+<p>Sign in with a wizard's name and MUCK password.</p>
+{{template "foot" .}}

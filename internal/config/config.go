@@ -9,7 +9,9 @@
 package config
 
 import (
+	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -70,12 +72,37 @@ type Config struct {
 	// they are not @tune parameters.
 	Limits Limits
 
+	// Web configures the optional configurator, which is a
+	// separate binary against the same database and the same
+	// FBE_* variables.
+	Web Web
+
 	// PprofAddr, when set, serves net/http/pprof there. It is
 	// refused unless it binds to a loopback address: the handlers
 	// expose goroutine stacks and heap contents, which is a
 	// debugging aid on a host an operator already has and a
 	// disclosure to anyone else.
 	PprofAddr string
+}
+
+// Web configures the configurator. It is separate from the MUCK
+// listener's settings because the two are validated apart: a
+// configurator needs no MUCK listener, and a server needs no web
+// listener.
+type Web struct {
+	// Addr is where the configurator listens. It defaults to
+	// loopback, and binding it anywhere else is a deliberate act:
+	// this interface can rewrite passwords and ownership.
+	Addr string
+
+	// CertFile and KeyFile default to the MUCK listener's pair,
+	// so a deployment that already has a certificate needs no
+	// second one.
+	CertFile string
+	KeyFile  string
+
+	// SessionTTL is how long a login lasts.
+	SessionTTL time.Duration
 }
 
 // Limits bound incoming connections. A zero field means that limit is
@@ -103,6 +130,10 @@ func Default() Config {
 		FlushInterval: time.Second,
 		LogLevel:      "info",
 		LogFormat:     "text",
+		Web: Web{
+			Addr:       "127.0.0.1:4204",
+			SessionTTL: 2 * time.Hour,
+		},
 		// Chosen to be generous for a real player — several
 		// clients and a reconnect or two — and stingy for a
 		// script. A shared address behind NAT is the case
@@ -137,6 +168,9 @@ func FromEnv() (Config, error) {
 	str("FBE_LOG_LEVEL", &c.LogLevel)
 	str("FBE_LOG_FORMAT", &c.LogFormat)
 	str("FBE_PPROF_ADDR", &c.PprofAddr)
+	str("FBE_WEB_ADDR", &c.Web.Addr)
+	str("FBE_WEB_TLS_CERT_FILE", &c.Web.CertFile)
+	str("FBE_WEB_TLS_KEY_FILE", &c.Web.KeyFile)
 
 	num := func(key string, dst *int) error {
 		v, ok := os.LookupEnv(key)
@@ -188,6 +222,15 @@ func FromEnv() (Config, error) {
 		}
 		c.TLS.AutoReload = b
 	}
+	if v, ok := os.LookupEnv("FBE_WEB_SESSION_TTL"); ok {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return c, fmt.Errorf(
+				"FBE_WEB_SESSION_TTL: %w", err)
+		}
+		c.Web.SessionTTL = d
+	}
+
 	if v, ok := os.LookupEnv("FBE_FLUSH_INTERVAL"); ok {
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -218,6 +261,55 @@ func (c Config) Validate() error {
 		return fmt.Errorf("FBE_PPROF_ADDR must bind to localhost, got %q", c.PprofAddr)
 	}
 	return nil
+}
+
+// ValidateWeb reports whether the configuration can start the
+// configurator.
+//
+// It is separate from Validate rather than an extension of it: that
+// one hard-requires the MUCK listener's TLS material and at least one
+// MUCK listener, and the configurator has neither. What they share is
+// the database URL.
+//
+// The TLS material falls back to the MUCK listener's, so a deployment
+// that already has a certificate needs no second one, and is required
+// either way — this interface carries a wizard's password and can
+// rewrite anyone's.
+func (c *Config) ValidateWeb() error {
+	if c.DatabaseURL == "" {
+		return fmt.Errorf(
+			"no database URL (set FBE_DATABASE_URL)")
+	}
+	if c.Web.CertFile == "" {
+		c.Web.CertFile = c.TLS.CertFile
+	}
+	if c.Web.KeyFile == "" {
+		c.Web.KeyFile = c.TLS.KeyFile
+	}
+	if c.Web.CertFile == "" || c.Web.KeyFile == "" {
+		return fmt.Errorf("the configurator needs a TLS " +
+			"certificate and key (set " +
+			"FBE_WEB_TLS_CERT_FILE and " +
+			"FBE_WEB_TLS_KEY_FILE)")
+	}
+	if c.Web.Addr == "" {
+		return fmt.Errorf("no web address (set FBE_WEB_ADDR)")
+	}
+	if c.Web.SessionTTL <= 0 {
+		return fmt.Errorf("the session lifetime must be "+
+			"positive, got %v", c.Web.SessionTTL)
+	}
+	return nil
+}
+
+// WebTLS builds the configurator's TLS configuration from its own
+// certificate pair, reusing the cipher policy and the loader the MUCK
+// listener uses.
+func (c Config) WebTLS(log *slog.Logger) (*tls.Config, error) {
+	sub := c
+	sub.TLS.CertFile = c.Web.CertFile
+	sub.TLS.KeyFile = c.Web.KeyFile
+	return sub.BuildTLS(log)
 }
 
 // isLoopback reports whether an address binds only to the local

@@ -8,6 +8,7 @@
 #   make pod-run LINE_PORT=5202
 
 BINARY      := fbemerald
+CONFIG_BIN  := fbeconfig
 IMAGE       ?= localhost/fbemerald
 TAG         ?= dev
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -23,6 +24,8 @@ CERT_DAYS   ?= 365
 # Listener ports on the host.
 LINE_PORT   ?= 4202
 WSS_PORT    ?= 4203
+# The configurator, which is optional and binds to loopback.
+WEB_PORT    ?= 4204
 
 # Postgres, run as a container for local work.
 DB_NAME     ?= fbemerald
@@ -80,6 +83,18 @@ help: ## Show this help
 .PHONY: build
 build: ## Build the server binary
 	$(GO) build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/fbemerald
+
+.PHONY: build-config
+build-config: ## Build the web configurator binary
+	$(GO) build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
+		-o $(CONFIG_BIN) ./cmd/fbeconfig
+
+.PHONY: config
+config: build-config ## Run the configurator against the local database
+	FBE_DATABASE_URL="$(DB_URL)" \
+	FBE_WEB_TLS_CERT_FILE="$(CERT_FILE)" \
+	FBE_WEB_TLS_KEY_FILE="$(KEY_FILE)" \
+	FBE_WEB_ADDR="127.0.0.1:$(WEB_PORT)" ./$(CONFIG_BIN)
 
 .PHONY: generate
 generate: ## Regenerate the @tune table from the Fuzzball sources

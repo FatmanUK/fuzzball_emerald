@@ -1,0 +1,25 @@
+{{template "head" .}}
+{{template "lease" .}}
+{{with .Data}}
+<h2>The world</h2>
+<table>
+  <tr><th>Rooms</th><td>{{.Counts.Rooms}}</td></tr>
+  <tr><th>Things</th><td>{{.Counts.Things}}</td></tr>
+  <tr><th>Exits</th><td>{{.Counts.Exits}}</td></tr>
+  <tr><th>Players</th><td>{{.Counts.Players}}</td></tr>
+  <tr><th>Programs</th><td>{{.Counts.Programs}}</td></tr>
+  <tr><th>Garbage</th><td>{{.Counts.Garbage}}</td></tr>
+  <tr><th>Total</th><td>{{.Counts.Total}}</td></tr>
+</table>
+
+<h2>Database</h2>
+<table>
+  <tr><th>Next dbref</th>
+      <td>{{if .HasTop}}<code>#{{.Top}}</code>{{else}}not recorded{{end}}</td></tr>
+  <tr><th>Help content</th>
+      <td>{{if .HasSeed}}version {{.Seeded}}{{else}}never seeded{{end}}</td></tr>
+  <tr><th>Server</th>
+      <td>{{if .Live}}running{{else}}stopped{{end}}</td></tr>
+</table>
+{{end}}
+{{template "foot" .}}
