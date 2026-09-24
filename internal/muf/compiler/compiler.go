@@ -54,6 +54,11 @@ type Options struct {
 	// built-ins, whose values come from the running server.
 	MuckName string
 	Version  string
+
+	// CommentsStrict starts the compile in non-recursive comment
+	// mode, which is the muf_comments_strict parameter. $pragma
+	// overrides it from inside the source.
+	CommentsStrict bool
 }
 
 // control is an open control structure awaiting its closing word.
@@ -128,6 +133,10 @@ type compiler struct {
 
 	ctrl []control
 
+	// altStart is the address $entrypoint chose, or -1 for the
+	// default of starting at the last procedure defined.
+	altStart int
+
 	// defs holds $define substitutions, as the text they expand
 	// to.
 	defs map[string]string
@@ -148,15 +157,25 @@ type compiler struct {
 	line int
 }
 
+// newCompiler prepares a compile of src.
+func newCompiler(src string, opts Options) *compiler {
+	c := &compiler{
+		lex:      newLexer(src),
+		opts:     opts,
+		procs:    map[string]int{},
+		publics:  map[string]*muf.Public{},
+		defs:     map[string]string{},
+		altStart: -1,
+	}
+	if opts.CommentsStrict {
+		c.lex.comments = commentStrict
+	}
+	return c
+}
+
 // Compile turns MUF source into a program.
 func Compile(src string, opts Options) (*muf.Program, error) {
-	c := &compiler{
-		lex:     newLexer(src),
-		opts:    opts,
-		procs:   map[string]int{},
-		publics: map[string]*muf.Public{},
-		defs:    map[string]string{},
-	}
+	c := newCompiler(src, opts)
 	if err := c.init(); err != nil {
 		return nil, err
 	}

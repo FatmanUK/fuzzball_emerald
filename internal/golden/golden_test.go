@@ -1059,6 +1059,22 @@ public foo
   "{dist:1}" show
 ;`,
 	},
+	{
+		// The three directives that used to fail the compile
+		// outright. The interesting part is that this program
+		// compiles at all; $entrypoint is what makes the
+		// output observable, since without it the program
+		// would start at "main" and say so.
+		Name: "directives",
+		Source: `$language "muf"
+$pragma comment_recurse
+` + tellPrelude + `: alpha
+  ( a (nested) comment )
+  "alpha" ts
+;
+: main "main" ts ;
+$entrypoint alpha`,
+	},
 }
 
 // TestAgainstFuzzball runs every case against the C server and

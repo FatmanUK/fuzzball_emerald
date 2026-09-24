@@ -547,7 +547,13 @@ func (s *Server) compileEdited(c *ctx, e *editSession) {
 // than logs whenever the player is interactive, so "p" and "u" name
 // the bad line just as "c" does.
 func (s *Server) compileForEditor(c *ctx, program ref.Ref, src string) (*muf.Program, bool) {
-	prog, err := s.compileSource(c.w, program, src)
+	prog, notes, err := s.compileSource(c.w, program, src)
+	// Notes come before the verdict, because a $echo or a pragma
+	// warning is about the source that was read, not about
+	// whether it compiled.
+	for _, n := range notes {
+		c.send(n)
+	}
 	if err != nil {
 		c.send(compileErrorText(err))
 		return nil, false

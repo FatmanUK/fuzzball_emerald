@@ -484,7 +484,9 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 		return nil, err
 	}
 
-	prog, err := s.compileSource(w, r, src)
+	// Nobody asked for this compile, so its notes have no
+	// audience; the editor's path is the one that shows them.
+	prog, _, err := s.compileSource(w, r, src)
 	s.programs[r] = compiled{prog: prog, err: err}
 	return prog, err
 }
@@ -492,7 +494,14 @@ func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error)
 // compileSource compiles text as if it were a program's source,
 // without consulting or updating the cache. The editor needs this to
 // check a buffer that has not been saved.
-func (s *Server) compileSource(w *world.World, r ref.Ref, src string) (*muf.Program, error) {
+//
+// It returns the compiler's notes for the caller to show, and applies
+// the properties the directives asked for itself — $author and
+// $version are documentation, but $pubdef and $libdef are how a
+// library exports anything at all, so a compile that did not write
+// them would leave the library callable by nobody.
+func (s *Server) compileSource(w *world.World, r ref.Ref,
+	src string) (*muf.Program, []string, error) {
 	// A program runs at the lower of its own mucker level and its
 	// owner's, which is what find_mlev computes. A programmer
 	// cannot grant a program more authority than they hold by
@@ -511,15 +520,62 @@ func (s *Server) compileSource(w *world.World, r ref.Ref, src string) (*muf.Prog
 		}
 	}
 
-	return compiler.Compile(src, compiler.Options{
-		Ref:      r,
-		MLevel:   mlev,
-		Defines:  s.definesFor(w, r),
-		Macros:   w.MacroTable(),
-		Include:  s.includerFor(w),
-		MuckName: w.Tune.String("muckname"),
-		Version:  Version,
+	res, err := compiler.CompileResult(src, compiler.Options{
+		Ref:            r,
+		MLevel:         mlev,
+		Defines:        s.definesFor(w, r),
+		Macros:         w.MacroTable(),
+		Include:        s.includerFor(w),
+		MuckName:       w.Tune.String("muckname"),
+		Version:        Version,
+		CommentsStrict: w.Tune.Bool("muf_comments_strict"),
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	applyCompileProps(w, r, res.Props)
+	return res.Program, res.Notes, nil
+}
+
+// applyCompileProps writes what the documentation and export
+// directives asked for onto the program object.
+//
+// Upstream writes each one as the directive is read, so a compile
+// that fails later still leaves the earlier properties behind. These
+// are applied only on success instead: a half-written _defs propdir
+// is worse than none, because $include would then read an export list
+// describing a program that does not compile.
+func applyCompileProps(w *world.World, r ref.Ref,
+	writes []compiler.PropWrite) {
+	o := w.Get(r)
+	if o == nil || len(writes) == 0 {
+		return
+	}
+	// A program is recompiled whenever its cache is cold, so most
+	// of these writes change nothing. Only a real change marks
+	// the object, or every boot would rewrite every library.
+	changed := false
+	for _, pw := range writes {
+		switch {
+		case pw.Delete:
+			// Upstream's remove_property frees the whole
+			// subtree, which is what "$pubdef :" is for:
+			// clearing everything the library exported.
+			if o.Props.DeleteDir(pw.Path) > 0 {
+				changed = true
+			}
+		case pw.KeepExisting && o.Props.Exists(pw.Path):
+		default:
+			if old, ok := o.Props.Get(pw.Path); !ok ||
+				old.StringValue() != pw.Value {
+				o.Props.SetString(pw.Path, pw.Value)
+				changed = true
+			}
+		}
+	}
+	if changed {
+		w.Touch(r)
+	}
 }
 
 // InvalidateProgram drops a program's cached compile, which an edit

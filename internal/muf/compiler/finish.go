@@ -9,12 +9,25 @@ import (
 // Result carries what a compile produced beyond the program itself.
 type Result struct {
 	Program *muf.Program
-	// Notes are messages the compiler wants shown: a $echo, or a
-	// directive that could not be honoured.
+	// Notes are messages the compiler wants shown: a $echo, a
+	// $pragma warning, or a directive that could not be honoured.
 	Notes []string
-	// Props are program properties a directive asked to set, such
-	// as $author and $version.
-	Props map[string]string
+	// Props are program properties the directives asked for, in
+	// the order they were written. They are a list rather than a
+	// map because $pubdef may ask for the same path twice and the
+	// last one wins, as it would have upstream.
+	Props []PropWrite
+}
+
+// PropWrite is one property change a directive asked for on the
+// program object.
+type PropWrite struct {
+	Path  string
+	Value string
+	// Delete removes the property instead of setting it.
+	Delete bool
+	// KeepExisting leaves a property that is already set alone.
+	KeepExisting bool
 }
 
 // finish resolves the program's entry point and assembles the result.
@@ -36,8 +49,12 @@ func (c *compiler) finish() (*muf.Program, error) {
 
 	// Execution starts at the last procedure defined. Upstream
 	// pushes each procedure onto the head of a list and starts at
-	// the head, which comes to the same thing.
+	// the head, which comes to the same thing. $entrypoint names
+	// a different one, and set_start prefers it.
 	p.Start = c.procs[c.procOrder[len(c.procOrder)-1]]
+	if c.altStart >= 0 {
+		p.Start = c.altStart
+	}
 
 	if err := c.checkJumps(); err != nil {
 		return nil, err
@@ -65,13 +82,7 @@ func (c *compiler) checkJumps() error {
 // CompileResult compiles and returns the notes and properties
 // alongside the program.
 func CompileResult(src string, opts Options) (*Result, error) {
-	c := &compiler{
-		lex:     newLexer(src),
-		opts:    opts,
-		procs:   map[string]int{},
-		publics: map[string]*muf.Public{},
-		defs:    map[string]string{},
-	}
+	c := newCompiler(src, opts)
 	if err := c.init(); err != nil {
 		return nil, err
 	}
@@ -83,9 +94,14 @@ func CompileResult(src string, opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	props := make(map[string]string, len(c.props))
+	props := make([]PropWrite, 0, len(c.props))
 	for _, ps := range c.props {
-		props[ps.name] = ps.value
+		props = append(props, PropWrite{
+			Path:         ps.path,
+			Value:        ps.value,
+			Delete:       ps.delete,
+			KeepExisting: ps.keepExisting,
+		})
 	}
 	return &Result{Program: p, Notes: c.notes, Props: props}, nil
 }

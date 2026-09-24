@@ -304,6 +304,16 @@ low mucker level is worth checking against the C.
 **A program runs at its own mucker level**, bounded by its owner's — not at its
 owner's level.
 
+**Some compiler directives write properties, and the compiler cannot.**
+`$author`, `$note`, `$version`, `$lib-version`, `$doccmd`, `$pubdef` and
+`$libdef` all set a property on the program object, but `internal/muf/compiler`
+is deliberately given no world. They are collected on `Result.Props` and applied
+by `Server.compileSource`, so a caller that uses `Compile` rather than
+`CompileResult` silently drops them — which is how `$libdef` came to compile
+without exporting anything. `$pubdef` and `$libdef` write under `_defs/`, the
+same propdir `$include` reads back, so dropping them breaks libraries rather
+than just their documentation.
+
 **TRY takes a count off the stack**: how many items the guarded block
 consumes. Catching unwinds to exactly the depth below them, so the idiom is
 `0 try ... catch ... endcatch`, not a bare `try`.

@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
@@ -14,6 +15,12 @@ import (
 // database, so they are recognised and skipped rather than evaluated;
 // a program that depends on one compiles as though the condition were
 // false.
+//
+// Several of them do not affect the code at all: $author, $note,
+// $version, $lib-version, $doccmd, $pubdef and $libdef each ask for a
+// property on the program object, which the caller applies from
+// Result.Props. Nothing reaches the database from here, so the
+// compiler still needs no world.
 func (c *compiler) directive(word string) error {
 	name := ascii.Fold(strings.TrimPrefix(word, string(beginDirective)))
 	if name == "" {
@@ -79,8 +86,30 @@ func (c *compiler) directive(word string) error {
 	// Directives that set a property on the program object. The
 	// value is recorded so the caller can apply it; none of them
 	// affect the code.
-	case "author", "note", "version", "lib-version", "libdef", "pubdef", "doccmd":
-		c.props = append(c.props, propSet{name: name, value: c.lex.restOfLine()})
+	case "author", "note", "version", "lib-version":
+		c.props = append(c.props, propSet{
+			path:  metaProps[name],
+			value: c.lex.restOfLine(),
+		})
+	case "doccmd":
+		// One of the two directives whose value is written
+		// with __PROG__ expanded, so "__PROG__ #help" names
+		// the program being compiled.
+		c.props = append(c.props, propSet{
+			path:  metaProps[name],
+			value: c.expandProg(c.lex.restOfLine()),
+		})
+	case "pubdef":
+		return c.pubdef()
+	case "libdef":
+		return c.libdef()
+
+	case "pragma":
+		return c.pragma()
+	case "entrypoint":
+		return c.entrypoint()
+	case "language":
+		return c.language()
 
 	case "include":
 		tok, ok, err := c.argToken("$include")
@@ -110,12 +139,242 @@ func (c *compiler) include(target string) (map[string]string, bool) {
 	return c.opts.Include(target)
 }
 
+// Directive diagnostics, worded as upstream's so a programmer who
+// searches the manual for one finds it. The long ones are split only
+// to fit the column limit.
+const (
+	errPragmaArg      = "Pragma requires at least one argument."
+	warnPragmaUnknown = "Warning on line %d: Pragma %.64s " +
+		"unrecognized.  Ignoring."
+	warnPragmaExtra = "Warning on line %d: Ignoring extra " +
+		"pragma arguments: %.256s"
+
+	errEntryArg  = "$entrypoint - function name is required."
+	errEntryName = "$entrypoint - unrecognized function " +
+		"name '%s'."
+
+	errLangArg    = "$language - argument is required."
+	errLangQuotes = "$language - argument must be enclosed " +
+		"in double quotes."
+	errLangUnknown = "$language - '%s' is not implemented " +
+		"on this server."
+
+	errPubdefName = "Unexpected end of file looking for " +
+		"$pubdef name."
+	errLibdefName = "Unexpected end of file looking for " +
+		"$libdef name."
+	errDefName = "Invalid %s name.  No /, :, @ nor ~ are allowed."
+)
+
+// pragma changes how the rest of the source is parsed.
+//
+// Only the comment pragmas exist. An unrecognised one is a warning
+// rather than an error, so a program written for a server with more
+// of them still compiles here.
+func (c *compiler) pragma() error {
+	tok, ok, err := c.lineArgToken()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return c.errf(errPragmaArg)
+	}
+
+	switch ascii.Fold(tok.text) {
+	case "comment_strict":
+		c.lex.comments = commentStrict
+	case "comment_recurse":
+		c.lex.comments = commentRecurse
+	case "comment_loose":
+		c.lex.comments = commentLoose
+	default:
+		c.notes = append(c.notes, fmt.Sprintf(
+			warnPragmaUnknown, c.line, tok.text))
+		// The rest of the line belonged to a pragma nobody
+		// understands, so it is discarded rather than
+		// compiled.
+		c.lex.restOfLineRaw()
+		return nil
+	}
+
+	if rest := c.lex.restOfLineRaw(); rest != "" {
+		c.notes = append(c.notes, fmt.Sprintf(
+			warnPragmaExtra, c.line, rest))
+	}
+	return nil
+}
+
+// entrypoint names the procedure the program starts at instead of the
+// last one defined.
+//
+// The procedure must already have been compiled, because upstream
+// searches the procedure list it has built so far — so a
+// $entrypoint above its target is an error, not a forward reference.
+func (c *compiler) entrypoint() error {
+	tok, ok, err := c.lineArgToken()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return c.errf(errEntryArg)
+	}
+	addr, found := c.procs[ascii.Fold(tok.text)]
+	if !found {
+		return c.errf(errEntryName, tok.text)
+	}
+	c.altStart = addr
+	return nil
+}
+
+// language asserts what the source is written in. MUF is the only
+// answer this server has, so the directive is a compile-time check
+// rather than a switch.
+func (c *compiler) language() error {
+	tok, ok, err := c.lineArgToken()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return c.errf(errLangArg)
+	}
+	if !tok.isString {
+		return c.errf(errLangQuotes)
+	}
+	if !ascii.EqualFold(tok.text, "muf") {
+		return c.errf(errLangUnknown, tok.text)
+	}
+	return nil
+}
+
+// pubdef exports a definition from a library, as a property under
+// _defs that $include reads back.
+func (c *compiler) pubdef() error {
+	tok, ok, err := c.rawNext()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return c.errf(errPubdefName)
+	}
+
+	// A bare colon clears everything the library exports. It is
+	// checked before the name rules, which would otherwise refuse
+	// it.
+	if tok.text == ":" {
+		c.lex.restOfLineRaw()
+		c.props = append(c.props,
+			propSet{path: definesPropdir, delete: true})
+		return nil
+	}
+	if err := c.checkDefName("$pubdef", tok.text); err != nil {
+		return err
+	}
+
+	name, keep := strings.CutPrefix(tok.text, string(beginEscape))
+	value := c.expandProg(c.lex.restOfLine())
+	c.props = append(c.props, propSet{
+		path:         definesPropdir + "/" + name,
+		value:        value,
+		delete:       value == "",
+		keepExisting: keep,
+	})
+	return nil
+}
+
+// libdef exports a caller for a public function: the property it
+// writes expands, in whoever includes it, to the three words that
+// call the function on this program.
+//
+// This is the part that was missing. Recording the directive without
+// writing the property left a library that compiled but exported
+// nothing.
+func (c *compiler) libdef() error {
+	tok, ok, err := c.rawNext()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return c.errf(errLibdefName)
+	}
+	if err := c.checkDefName("$libdef", tok.text); err != nil {
+		return err
+	}
+	// $libdef takes no value; anything after the name is dropped.
+	c.lex.restOfLineRaw()
+
+	name, keep := strings.CutPrefix(tok.text, string(beginEscape))
+	c.props = append(c.props, propSet{
+		path: definesPropdir + "/" + name,
+		value: c.opts.Ref.String() + " \"" + name +
+			"\" call",
+		keepExisting: keep,
+	})
+	return nil
+}
+
+// checkDefName refuses a $pubdef or $libdef name that would land
+// somewhere other than one entry under _defs, or that would carry a
+// property permission character.
+//
+// Upstream also tests Prop_System, which is redundant: a system
+// property starts with '@', which Prop_Hidden has already refused.
+func (c *compiler) checkDefName(what, name string) error {
+	bad := strings.ContainsAny(name, "/:") ||
+		name != "" && (name[0] == '~' || name[0] == '@')
+	if !bad {
+		return nil
+	}
+	return c.errf(errDefName, what)
+}
+
+// expandProg substitutes __PROG__ for the program's own dbref, which
+// $pubdef and $doccmd do to their values.
+func (c *compiler) expandProg(s string) string {
+	return strings.ReplaceAll(s, "__PROG__", c.opts.Ref.String())
+}
+
+// lineArgToken reads a directive argument that must be on the
+// directive's own line.
+//
+// Upstream's handlers skip whitespace and test for end of line before
+// calling next_token_raw, so a directive with nothing after it
+// reports its own missing argument rather than swallowing the next
+// line's first word.
+func (c *compiler) lineArgToken() (token, bool, error) {
+	if len(c.pending) == 0 && !c.lex.moreOnLine() {
+		return token{}, false, nil
+	}
+	tok, ok, err := c.rawNext()
+	return tok, ok, err
+}
+
 // propSet is a property a directive asked to be written on the
 // program.
 type propSet struct {
-	name  string
+	path  string
 	value string
+	// delete removes the property rather than setting it, which
+	// an empty $pubdef value and a bare "$pubdef :" both ask for.
+	delete bool
+	// keepExisting is the "\name" form: write only when nothing
+	// is there already, so a library can offer a default its
+	// owner may override.
+	keepExisting bool
 }
+
+// metaProps are the property names the documentation directives
+// write, from include/compile.h.
+var metaProps = map[string]string{
+	"author":      "_author",
+	"doccmd":      "_docs",
+	"note":        "_note",
+	"version":     "_version",
+	"lib-version": "_lib-version",
+}
+
+// definesPropdir is DEFINES_PROPDIR: where $pubdef and $libdef put
+// what a library exports, and where $include reads it back.
+const definesPropdir = "_defs"
 
 // argToken reads a directive's argument.
 //
