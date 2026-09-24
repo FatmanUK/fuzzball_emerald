@@ -45,6 +45,26 @@ func init() {
 	// registered names.
 	atCommands["@force_lock"] = atCommands["@flock"]
 	atCommands["@chown_lock"] = atCommands["@chlock"]
+
+	atCommands["@unlock"] = (*Server).cmdUnlock
+}
+
+// cmdUnlock is do_unlock: clear the ordinary lock, and only that one.
+//
+// "@lock <thing>=" with nothing after the "=" already does this and
+// says "Lock cleared."; upstream keeps the separate spelling with its
+// own shorter message, and programs and players both know it.
+func (s *Server) cmdUnlock(c *ctx) {
+	if isGuest(c.w, c.who) {
+		c.tell("Guests are not allowed to @unlock.")
+		return
+	}
+	target, ok := s.resolveControlled(c, strings.TrimSpace(c.arg))
+	if !ok {
+		return
+	}
+	c.w.SetProp(target, propLock, props.Value{Type: props.Lock})
+	c.tell("Unlocked.")
 }
 
 // cmdSetLock implements set_standard_lock: with no "=" it reports the

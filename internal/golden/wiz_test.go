@@ -65,6 +65,24 @@ var wizScript = Script{
 	"@toad Nobody",
 	"@toad One",
 	"@toad One=Nobody",
+
+	// @chown. The last two are the reason it exists here at all:
+	// "@chown" is a prefix of "@chown_lock", and before the
+	// command was added it resolved to that, so a transfer of
+	// ownership quietly set a lock instead.
+	"@chown",
+	"@chown nosuchthing",
+	"@chown nosuchthing=One",
+	"@create trinket",
+	"@chown trinket",
+	"@chown trinket=Nobody",
+	"@pcreate Heir=hunter2",
+	"@chown trinket=Heir",
+	"ex trinket",
+	"@chown here",
+	"@chown me",
+	"@chown test.muf=Heir",
+	"ex test.muf",
 }
 
 // TestWizardCommandsMatchFuzzball checks @stats, @boot, @force and
@@ -96,7 +114,14 @@ func TestWizardCommandsMatchFuzzball(t *testing.T) {
 		if i < len(emerald) {
 			got = emerald[i]
 		}
-		if diffs := Compare(want, got); len(diffs) > 0 {
+		// The script ends with two examines, to show that
+		// @chown moved the ownership rather than only saying
+		// so. Those carry the timestamp and memory lines the
+		// two servers cannot agree on, which maskVariable
+		// keeps in place and blanks.
+		diffs := Compare(maskVariable(want),
+			maskVariable(got))
+		if len(diffs) > 0 {
 			t.Errorf("%q\n%s", cmd, Render(diffs))
 		}
 	}

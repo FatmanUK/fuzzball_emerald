@@ -2,11 +2,12 @@ Fuzzball Emerald -- player command help
 
 Type "help <topic>" for detail on any of these.
 
-  Getting around    look  go  home  exits
+  Getting around    look  go  home
   Talking           say  pose  page  whisper
-  Things            inventory  get  drop  give
+  Things            inventory  get  drop
   Finding out       examine  WHO  @version  @stats
   Building          @create  @dig  @open  @link  @name  @describe  @set
+                    @chown
   Locks             @lock  @flock  @conlock  @linklock  @readlock
   Programs          @program  @edit  @list  man  mpi
   Wizards           @tune  @teleport  @toad  @boot  @force  @sanity
@@ -158,6 +159,8 @@ levels.
 @lock|@unlock
 @lock <thing>=<key>     set the lock that says who may use it
 @lock <thing>           show the lock
+@lock <thing>=          clear it
+@unlock <thing>         clear it, in fewer words
 
   @flock       who may @force it
   @chlock      who may @chown it
@@ -166,7 +169,20 @@ levels.
   @ownlock     who may pick it up
   @readlock    who may read its properties
 
+@unlock clears only the ordinary lock. The rest are cleared with an
+empty key: "@readlock <thing>=".
+
 Locks are boolean expressions over names, dbrefs and properties.
+~
+@chown
+@chown <thing>          take ownership of something
+@chown <thing>=<player> give it to somebody else
+
+Giving it to somebody else needs wizard powers. Without them you can
+take a thing you are carrying, the room you are standing in, an exit
+you may link, or anything set CHOWN_OK whose chown lock you pass --
+and taking somebody else's exit costs exit_cost, which is paid to
+them.
 ~
 @find
 @find [<name>]          list what you own whose name matches

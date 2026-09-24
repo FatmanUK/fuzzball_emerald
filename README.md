@@ -396,6 +396,17 @@ other query would silently land in `public`. Each test asserts its isolation
 before doing anything, so a regression there fails loudly instead of quietly
 writing to a real database.
 
+## Upstream coverage
+
+[`docs/upstream-coverage.md`](docs/upstream-coverage.md) audits Emerald against
+Fuzzball 7's three manuals. In short: **MPI is complete**, **MUF is complete**
+— every primitive and every compiler directive — and **40 of about 112
+player commands are missing**, mostly the verbs that set message and lock
+properties whose engine already works.
+
+It also answers two architecture questions: Emerald is partly crash-only by
+design, and deliberately does not conform to 12-factor.
+
 ## Compatibility notes
 
 `@tune` parameter names are a runtime API, not labels — MUF looks them up by

@@ -37,17 +37,21 @@ func (s *Server) requireWizard(c *ctx) bool {
 	return false
 }
 
-// resolveControlled finds an object the player may modify.
+// resolveControlled finds an object the player may modify, which is
+// upstream's match_controlled.
+//
+// A failed match is reported by noisyMatch, which is
+// noisy_match_result: "I don't understand 'X'." Every upstream
+// command that lands here reaches it through that function, directly
+// or through match_controlled, so the wording is shared and programs
+// match on it. An earlier version said "I don't see that here.",
+// which belongs to the commands that match quietly and complain in
+// their own words.
 func (s *Server) resolveControlled(c *ctx, name string) (ref.Ref, bool) {
 	// Player() is included so a wizard can name someone who is
 	// elsewhere in the game, which @teleport and @set both need.
 	r := match.New(c.w, c.who, name).Everything().Player().Result()
-	switch r {
-	case ref.Nothing:
-		c.tell("I don't see that here.")
-		return ref.Nothing, false
-	case ref.Ambiguous:
-		c.tell("I don't know which one you mean.")
+	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
 	}
 	if !s.controls(c.w, c.who, r) {

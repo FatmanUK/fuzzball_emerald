@@ -49,6 +49,18 @@ var lockCmdScript = Script{
 	// @force; @lock does not.
 	"@force me=@flock down=me",
 	"@force me=@lock down=me",
+
+	// @unlock clears the ordinary lock and only that one, with a
+	// message of its own.
+	"@unlock",
+	"@lock me=me",
+	"@readlock me=me",
+	"@unlock me",
+	"@lock me",
+	"@readlock me",
+	"@unlock nosuchthing",
+	"@lock nosuchthing=me",
+	"@readlock nosuchthing",
 }
 
 // TestLockCommandsMatchFuzzball checks the @lock family against the C

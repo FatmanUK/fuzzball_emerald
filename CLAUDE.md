@@ -632,6 +632,21 @@ Worth knowing before "fixing" something that looks wrong:
   names or primitive names. `DESCRSECURE?`, `NOTIFY_SECURE` and
   `ARRAY_NOTIFY_SECURE` keep their names and change meaning instead.
 
+## Upstream coverage
+
+`docs/upstream-coverage.md` audits this against Fuzzball 7's three manuals and
+answers the crash-only and 12-factor questions. MPI and MUF are complete; about
+40 player commands are not, mostly the verbs that set message and lock
+properties whose engine already works. Regenerate the command diff by listing
+the keys of `commands` and `atCommands` against `Matched(...)`,
+`strcasecmp(command, ...)` and `string_prefix(..., command)` in
+`fuzzball/src/game.c`.
+
+**A missing command is not always a silent gap.** `@chown` was absent while
+being a *prefix* of `@chown_lock`, so `lookupAtCommand` resolved it there and a
+wizard transferring ownership silently set a lock instead. When adding a
+command, check what its name is currently a prefix of.
+
 ## Status
 
 M0–M8 are done.
