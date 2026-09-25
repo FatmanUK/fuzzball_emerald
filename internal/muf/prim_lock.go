@@ -22,17 +22,47 @@ func permissions(h Host, player, thing ref.Ref) bool {
 	}
 }
 
-// progUID approximates upstream's ProgUID/find_uid: the permissions a
-// running program acts with. The full macro also depends on fr->perms
-// (STD_REGUID/SETUID/HARDUID, set by whoever calls interp()) and the
-// STICKY and HAVEN program flags, none of which this codebase threads
-// through yet — see RunLock's own doc comment for the same gap.
-// This covers upstream's common REGUID path: below mucker level 2 a
-// program always runs as its own owner; at or above it, as whoever is
-// running it.
+// progUID is upstream's ProgUID/find_uid: the identity a running
+// program acts with.
+//
+// The four branches, in upstream's order:
+//
+//  1. STICKY, or a SetUID frame — act as the program's own owner. A
+//     sticky program owned by a wizard and also HAVEN inherits its
+//     caller's identity instead, which is the one case not
+//     reproduced; see below.
+//  2. Below mucker level 2 — act as the program's owner, whatever
+//     else is true.
+//  3. HAVEN, or a HardUID frame — act as the owner of whatever
+//     triggered the program, falling back to the program's owner when
+//     nothing did. This is the branch most launch sites reach, since
+//     upstream passes HardUID for locks, for a property that runs a
+//     program, for MPI's {muf} and for the timequeue.
+//  4. Otherwise — act as whoever is running it.
+//
+// The sticky+haven+wizard case recurses into the *calling program's*
+// identity, walking fr->caller.st. Frame has no such stack —
+// f.calls records return addresses within one program, not which
+// program called which — so this returns the program's owner there,
+// which is also what upstream returns whenever that stack is shallow.
+// It needs STICKY and HAVEN and a wizard owner and a nested CALL at
+// once.
 func (f *Frame) progUID(h Host) ref.Ref {
+	prog := f.Prog.Ref
+	flags := h.Flags(prog)
+	owner := h.Owner(prog)
+
+	if flags&ref.Sticky != 0 || f.Perms == SetUID {
+		return owner
+	}
 	if f.MLevel() < 2 {
-		return h.Owner(f.Prog.Ref)
+		return owner
+	}
+	if flags&ref.Haven != 0 || f.Perms == HardUID {
+		if f.Trig == ref.Nothing {
+			return owner
+		}
+		return h.Owner(f.Trig)
 	}
 	return h.Owner(f.Caller)
 }

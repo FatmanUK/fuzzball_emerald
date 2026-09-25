@@ -393,6 +393,25 @@ low mucker level is worth checking against the C.
 **A program runs at its own mucker level**, bounded by its owner's — not at its
 owner's level.
 
+**`ProgUID` is `find_uid`, and all four branches are ported.** Which identity a
+program acts with depends on `muf.Frame.Perms` — upstream's `fr->perms`, chosen
+by whoever *starts* the program and never by the program itself — together with
+the program's own STICKY and HAVEN flags. `HardUID` is the common case, not the
+exception: upstream passes it for a lock, for a property that runs a program,
+for MPI's `{muf}` and for everything the timequeue fires. Only a command or an
+exit runs `RegUID`. A launch site that sets nothing is claiming `RegUID`, so
+say it out loud.
+
+The one case not reproduced is sticky+haven+wizard-owned+nested, which recurses
+into the *calling program's* identity. `Frame` has no caller-program stack —
+`f.calls` is return addresses within one program — and upstream returns the
+program's owner whenever that stack is shallow, which is what this does always.
+
+**`FORK` drops `Perms` and keeps `Trig`.** `prim_fork` callocs the child and
+copies fields one at a time; `trig` is among them and `perms` is not, so a
+HARDUID program's child runs REGUID. It reads like an oversight in the C, it is
+observable, and it is reproduced.
+
 **Some compiler directives write properties, and the compiler cannot.**
 `$author`, `$note`, `$version`, `$lib-version`, `$doccmd`, `$pubdef` and
 `$libdef` all set a property on the program object, but `internal/muf/compiler`

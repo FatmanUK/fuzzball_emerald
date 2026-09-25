@@ -134,6 +134,10 @@ func (h *lockHost) RunLock(descr int, player, prog, thing ref.Ref) bool {
 
 	host := &mufHost{s: h.s, w: h.w, caller: realPlayer}
 	f := muf.NewFrame(p, host)
+	// A program-type lock constant runs HARDUID, so it acts as
+	// the owner of whatever triggered the lock check rather than
+	// as whoever is being tested. boolexp.c:185.
+	f.Perms = muf.HardUID
 	f.SetReserved(realPlayer, h.Location(player), thing, "")
 	f.Descr = descr
 	f.Supplicant = thing

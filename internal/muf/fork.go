@@ -35,6 +35,13 @@ func (f *Frame) fork() *Frame {
 		ErrorFlags: f.ErrorFlags,
 		Caller:     f.Caller,
 		Trig:       f.Trig,
+		// Perms is deliberately *not* carried over.
+		// Upstream's prim_fork callocs the child and then
+		// copies fields one at a time, and perms is not among
+		// them — so a HARDUID program that FORKs gets a
+		// REGUID child. It reads like an oversight in the C
+		// and it is observable, so it is reproduced rather
+		// than tidied. trig, just above, *is* copied there.
 		Descr:      f.Descr,
 		Level:      f.Level,
 		Supplicant: f.Supplicant,

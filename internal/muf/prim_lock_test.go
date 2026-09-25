@@ -18,6 +18,7 @@ type lockTestHost struct {
 	types map[ref.Ref]ref.ObjType
 	valid map[ref.Ref]bool
 	owner map[ref.Ref]ref.Ref
+	flags map[ref.Ref]ref.Flags
 
 	testLockCalls []testLockCall
 	testLockOK    bool
@@ -188,6 +189,14 @@ func (h *lockTestHost) Valid(r ref.Ref) bool {
 func (h *lockTestHost) ObjType(r ref.Ref) ref.ObjType {
 	return h.types[r]
 }
+
+// Flags is needed because progUID reads STICKY and HAVEN off the
+// program. These tests care about neither, so an object with nothing
+// recorded has no flags.
+func (h *lockTestHost) Flags(r ref.Ref) ref.Flags {
+	return h.flags[r]
+}
+
 func (h *lockTestHost) Owner(r ref.Ref) ref.Ref {
 	return h.owner[r]
 }

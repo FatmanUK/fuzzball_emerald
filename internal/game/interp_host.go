@@ -24,6 +24,8 @@ func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref, arg string) (muf.
 	player := h.caller
 	host := &mufHost{s: h.s, w: h.w, caller: player}
 	f := muf.NewFrame(p, host)
+	// INTERP runs its target HARDUID. p_stack.c:1763.
+	f.Perms = muf.HardUID
 	f.SetReserved(player, h.Location(player), trig, arg)
 	f.Descr = descr
 	f.Level = level + 1

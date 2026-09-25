@@ -697,6 +697,11 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 
 	host := &mufHost{s: s, w: c.w, caller: c.who}
 	f := muf.NewFrame(p, host)
+	// A command or an exit runs its program REGUID, which is the
+	// zero value; said out loud because the other launch sites do
+	// not, and silence here would look like an oversight.
+	// move.c:686.
+	f.Perms = muf.RegUID
 
 	me := c.w.Get(c.who)
 	loc := ref.Nothing

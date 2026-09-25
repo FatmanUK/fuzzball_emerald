@@ -261,6 +261,8 @@ func (s *Server) runBound(w *world.World, d *session.Descriptor,
 
 	host := &mufHost{s: s, w: w, caller: d.Player}
 	f := muf.NewFrame(prog, host)
+	// An MCP message bound to a program runs REGUID. p_mcp.c:152.
+	f.Perms = muf.RegUID
 	loc := ref.Nothing
 	if me := w.Get(d.Player); me != nil {
 		loc = me.Location

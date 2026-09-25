@@ -130,6 +130,9 @@ func (h *mufHost) Queue(descr int, prog ref.Ref, seconds int64, arg string) int 
 
 	host := &mufHost{s: h.s, w: h.w, caller: h.caller}
 	f := muf.NewFrame(p, host)
+	// Everything the timequeue fires runs HARDUID.
+	// timequeue.c:983 and :2013.
+	f.Perms = muf.HardUID
 	loc := ref.Nothing
 	if me := h.w.Get(h.caller); me != nil {
 		loc = me.Location

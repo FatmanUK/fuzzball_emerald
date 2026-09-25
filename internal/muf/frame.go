@@ -644,6 +644,13 @@ type Frame struct {
 	// reserved variables and for permission checks.
 	Caller ref.Ref
 	Trig   ref.Ref
+
+	// Perms is upstream's fr->perms, chosen by whoever *starts*
+	// the program rather than by the program itself. It is what
+	// find_uid consults alongside the STICKY and HAVEN flags, so
+	// a launch site that leaves it at the zero value is saying
+	// the program runs as whoever triggered it.
+	Perms Perms
 	// Descr is the connection the program was started from.
 	Descr int
 
