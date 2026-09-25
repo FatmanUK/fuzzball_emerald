@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **23 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **20 commands missing** of about 112. What is left is engine, not verbs. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -71,12 +71,17 @@ and the compiler could probably be handed what it needs.
 
 ---
 
-## `muckhelp.html` — 23 commands missing
+## `muckhelp.html` — 20 commands missing
 
-Upstream dispatches about 112 commands; Emerald has 89 names covering
-89 of them, and 23 are absent. What is missing is **commands, not
-engine**: the properties, locks and primitives behind most of these
-already work, and what is not there is the verb that sets them.
+Upstream dispatches about 112 commands; Emerald has 92 names covering
+92 of them, and 20 are absent.
+
+That characterisation has now flipped. It used to be **commands, not
+engine** — the properties, locks and primitives behind most of the
+gap already worked and only the verb was missing. Those verbs have
+landed. What remains needs machinery this server does not have:
+`enter_room` and the containment rules, program registration, the
+compiler conditionals, and the propqueues.
 
 The count is now exact rather than estimated, because
 `internal/game/dispatch_table.go` is every name upstream dispatches
@@ -108,8 +113,7 @@ property writer, with its own type syntax.
 
 ### Building and ownership
 
-    @attach  @clone  @contents  @entrances  @owned  @register
-    @relink  @sweep
+    @attach  @clone  @register  @relink  @sweep
 
 ### Wizard
 
@@ -163,6 +167,42 @@ no handler, so the abbreviations around them stay upstream's, and
 typing one says which of the four reasons applies. The list lives in
 `declined` in `internal/game/dispatch.go`, and a test checks every
 name in it is a real command and is not secretly implemented.
+
+### The four checkflags searches
+
+`@find`, `@owned`, `@contents` and `@entrances` are one mechanism with
+four sources: the same flag expression, the same `checkflags` filter,
+the same `display_objinfo` rendering and the same two closing lines.
+
+The expression language was **already ported** before any of them —
+`internal/muf`'s `FlagCheck`, written for `ARRAY_FILTER_FLAGS` and
+`FINDNEXT`. Nothing about it is MUF's, so it is exported rather than
+written twice. What was genuinely missing is `display_objinfo`
+(`look.c:1476`) and its six modes, which `parseFlagCheck` had
+deliberately dropped.
+
+Two things about the syntax are easy to get wrong and are pinned by
+the golden case:
+
+- **The display mode comes after a *second* `=`.** The first separates
+  the name from the flags, and `init_checkflags` splits what is left
+  again — so `@find wid=owners` reads "owners" as six flag letters and
+  finds nothing, where `@find wid==owners` asks for the owners column.
+- **`locations` is tested before `links`**, so `=l` is locations and
+  `=li` is links.
+
+`=size` is the one mode that cannot be reproduced: it reports
+`size_object`'s byte count, and this server's objects are laid out
+nothing like the C's. It is recognised and renders as the plain mode,
+the same judgement as `examine`'s masked "Memory used" line, and the
+golden case masks the column rather than dropping the case.
+
+`@find` itself was further from upstream than "ignores the flags". It
+now wraps the pattern in `*…*` and matches with `smatch`, so a
+substring works and so do the wildcards a player writes; it charges
+`lookup_cost`, which nothing in this server had ever read; and its
+invented cap of 200 results is gone — a large world used to answer
+with part of the truth and report a count that looked right.
 
 ### Where the gripe log lives
 

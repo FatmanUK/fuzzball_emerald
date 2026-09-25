@@ -3,18 +3,24 @@ package muf
 import (
 	"strings"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// flagCheck is upstream's struct flgchkdat: a compiled flag-match
+// FlagCheck is upstream's struct flgchkdat: a compiled flag-match
 // expression, as ARRAY_FILTER_FLAGS and FINDNEXT take and @find and
 // @owned parse.
+//
+// It is exported, with ParseFlagCheck and Matches, because the four
+// search commands are the same expression language reached from
+// internal/game. They were written here first because two primitives
+// needed them; nothing about the language is MUF's.
 //
 // The language is a string of single characters, each a test, with
 // '!' negating the one that follows it. Negation is per-character
 // rather than per-expression, which is why every test here comes in a
 // positive and a negative half rather than one half and a flag.
-type flagCheck struct {
+type FlagCheck struct {
 	forType bool
 	isType  ref.ObjType
 
@@ -33,11 +39,34 @@ type flagCheck struct {
 	isOld  bool
 }
 
-// parseFlagCheck is upstream's init_checkflags, minus its output-type
-// half: the commands that parse one of these strings also read a
-// display mode off the end of it, after an '=' , which the two
-// primitives using this never pass. Anything after an '=' is
-// therefore dropped rather than interpreted.
+// OutputMode is init_checkflags's other half: the display mode the
+// four search commands read off the end of the flag string, after an
+// '='. The two primitives that parse one of these never pass it.
+type OutputMode int
+
+// The display modes, numbered as upstream's output_type is.
+const (
+	// OutPlain is just the object, which is also what an
+	// unrecognised mode word gives.
+	OutPlain OutputMode = 0
+	// OutOwners, OutLinks and OutLocations each add a second
+	// column.
+	OutOwners    OutputMode = 1
+	OutLinks     OutputMode = 2
+	OutLocations OutputMode = 3
+	// OutCount prints nothing per object, leaving only the total.
+	OutCount OutputMode = 4
+	// OutSize is upstream's size_object in bytes, which cannot be
+	// reproduced — this server's objects are laid out nothing
+	// like the C's, the same reason examine's "Memory used" line
+	// is masked in the golden case. Recognised and treated as
+	// OutPlain rather than answering with a number that would not
+	// mean the same thing.
+	OutSize OutputMode = 5
+)
+
+// ParseFlagCheck is upstream's init_checkflags: the flag expression
+// and, after an '=', the display mode.
 //
 // Upstream's size tests, '~' and '^', are parsed and then ignored.
 // They compare against size_object, this server's objects are laid
@@ -45,12 +74,43 @@ type flagCheck struct {
 // masked in the golden case for exactly that reason — so a size
 // clause filters nothing here rather than filtering by a number that
 // would not mean the same thing.
-func parseFlagCheck(flags string) flagCheck {
+//
+// The mode words are tested in upstream's order, which matters for
+// one letter: "locations" comes before "links", so "=l" is locations
+// and "=li" is links.
+func ParseFlagCheck(flags string) (FlagCheck, OutputMode) {
+	mode := OutPlain
+	if i := strings.IndexByte(flags, '='); i >= 0 {
+		word := strings.TrimLeft(flags[i+1:], " \t")
+		flags = flags[:i]
+		for _, m := range []struct {
+			name string
+			out  OutputMode
+		}{
+			{"owners", OutOwners},
+			{"locations", OutLocations},
+			{"links", OutLinks},
+			{"count", OutCount},
+			{"size", OutSize},
+		} {
+			if word != "" &&
+				ascii.HasPrefix(m.name, word) {
+				mode = m.out
+				break
+			}
+		}
+	}
+	return parseFlagCheck(flags), mode
+}
+
+// parseFlagCheck is the flag half alone, which is all the primitives
+// need.
+func parseFlagCheck(flags string) FlagCheck {
 	if i := strings.IndexByte(flags, '='); i >= 0 {
 		flags = flags[:i]
 	}
 
-	var c flagCheck
+	var c FlagCheck
 	// mode counts down: '!' sets it to 2 so it survives the
 	// decrement at the end of its own iteration and applies to
 	// the next character only.
@@ -126,7 +186,7 @@ func parseFlagCheck(flags string) flagCheck {
 	return c
 }
 
-func (c *flagCheck) setType(neg bool, t ref.ObjType, not *bool) {
+func (c *FlagCheck) setType(neg bool, t ref.ObjType, not *bool) {
 	if neg {
 		*not = true
 		return
@@ -157,9 +217,9 @@ var checkFlagLetters = map[byte]ref.Flags{
 	'Z': ref.Zombie,
 }
 
-// matches is upstream's checkflags: whether one object satisfies the
+// Matches is upstream's checkflags: whether one object satisfies the
 // expression.
-func (c flagCheck) matches(h Host, what ref.Ref) bool {
+func (c FlagCheck) Matches(h Host, what ref.Ref) bool {
 	t := h.ObjType(what)
 	if c.forType && t != c.isType {
 		return false

@@ -37,7 +37,7 @@ func init() {
 		check := parseFlagCheck(flagsV.Str)
 		var kept []Value
 		for _, v := range arrV.Array.Values() {
-			if h.Valid(v.Ref) && check.matches(h, v.Ref) {
+			if h.Valid(v.Ref) && check.Matches(h, v.Ref) {
 				kept = append(kept, v)
 			}
 		}
@@ -114,7 +114,7 @@ func init() {
 				continue
 			}
 			if h.ObjType(i) == ref.TypeGarbage ||
-				!check.matches(h, i) {
+				!check.Matches(h, i) {
 				continue
 			}
 			if pattern != "" &&

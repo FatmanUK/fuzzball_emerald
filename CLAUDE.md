@@ -340,6 +340,32 @@ banner, which is the one thing somebody typing `help` at a login screen has
 already read. **The motd is shown on a successful connect**, not only on
 demand.
 
+## The four checkflags searches
+
+`@find`, `@owned`, `@contents` and `@entrances` (`internal/game/find.go`) are
+one mechanism with four sources: the same flag expression, the same
+`checkflags` filter, the same `display_objinfo` rendering, the same two
+closing lines.
+
+**The expression language lives in `internal/muf`**, as `FlagCheck`,
+`ParseFlagCheck` and `Matches`. It was written there first because
+`ARRAY_FILTER_FLAGS` and `FINDNEXT` needed it, and nothing about it is MUF's —
+so it is exported rather than ported twice.
+
+**The display mode comes after a *second* `=`.** The first separates the name
+from the flags, and `init_checkflags` splits what is left again: `@find
+wid=owners` reads "owners" as six flag letters and finds nothing, where `@find
+wid==owners` asks for the owners column. And `locations` is tested before
+`links`, so `=l` is locations and `=li` is links.
+
+**`=size` cannot be reproduced** and renders as the plain mode. It reports
+`size_object`'s byte count; the golden case masks the column, for the reason
+`examine`'s "Memory used" line is masked.
+
+`@find` charges `lookup_cost`, which nothing in this server read before, and
+has **no result cap** — an invented limit of 200 used to make a large world
+answer with part of the truth and report a count that looked right.
+
 ## The gripe log
 
 `gripe` files a complaint, and upstream appends it to the file named by

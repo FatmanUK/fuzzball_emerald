@@ -580,32 +580,6 @@ func (s *Server) cmdPassword(c *ctx) {
 		"player", c.who.String(), "name", o.Name)
 }
 
-// cmdFind lists objects the player owns whose name matches.
-func (s *Server) cmdFind(c *ctx) {
-	if !s.requireBuilder(c) {
-		return
-	}
-	pattern := strings.TrimSpace(c.arg)
-	found := 0
-	c.w.Each(func(o *world.Object) bool {
-		if o.Owner != c.who &&
-			!c.w.Get(c.who).Flags.IsWizard() {
-			return true
-		}
-		if o.Type() == ref.TypeGarbage {
-			return true
-		}
-		if pattern != "" &&
-			!match.StringMatch(o.Name, pattern) {
-			return true
-		}
-		c.send(unparse(c.w, c.who, o.Ref))
-		found++
-		return found < 200
-	})
-	c.tell("%d objects found.", found)
-}
-
 // cmdTeleport moves an object somewhere else.
 func (s *Server) cmdTeleport(c *ctx) {
 	name, destName, ok := strings.Cut(c.arg, "=")
