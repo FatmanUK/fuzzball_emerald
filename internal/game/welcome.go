@@ -59,7 +59,9 @@ func (s *Server) parseWelcome(w *world.World, d *session.Descriptor,
 		Perms:   mpi.Ref(w.Tune.Ref("welcome_mpi_what")),
 		Blessed: true,
 		Descr:   d.ID,
-		Host:    &mpiHost{s: s, w: w},
+		// welcome_user passes MPI_ISPRIVATE | MPI_ISBLESSED.
+		Type: mpi.Private,
+		Host: &mpiHost{s: s, w: w},
 	}
 	_ = env.SetVar("how", welcomeProplist)
 	_ = env.SetVar("cmd", strconv.Itoa(d.ID))

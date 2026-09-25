@@ -346,9 +346,25 @@ func (h *mufHost) SetPassword(player ref.Ref, pass string) error {
 	return nil
 }
 
+// mesgKind turns PARSEPROP's private flag into a mesgtyp. Public is
+// the absence of private upstream, which is why there is nothing to
+// return for it.
+func mesgKind(private bool) mpi.MesgType {
+	if private {
+		return mpi.Private
+	}
+	return 0
+}
+
 // ParseProp evaluates a property's MPI, which is how MUF reaches the
 // other language.
-func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string, error) {
+//
+// The private flag is PARSEPROP's own argument and is upstream's
+// MPI_ISPRIVATE: it was carried this far and then dropped, because
+// nothing in mpi.Env could hold it until MesgType existed.
+func (h *mufHost) ParseProp(obj ref.Ref, path, arg string,
+	private bool) (string, error) {
+
 	o := h.w.Get(obj)
 	if o == nil {
 		return "", errMsg("no such object")
@@ -363,6 +379,7 @@ func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string
 		What:    mpi.Ref(obj),
 		Perms:   mpi.Ref(obj),
 		Blessed: v.Blessed,
+		Type:    mesgKind(private),
 		Host:    &mpiHost{s: h.s, w: h.w},
 	}
 	if arg != "" {
@@ -376,7 +393,10 @@ func (h *mufHost) ParseProp(obj ref.Ref, path, arg string, private bool) (string
 // ParsePropEx implements muf.Host for PARSEPROPEX: ParseProp with a
 // caller's own variables in scope, handed back with whatever the MPI
 // left in them.
-func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, private bool) (string, []muf.MPIVar, error) {
+func (h *mufHost) ParsePropEx(obj ref.Ref, path string,
+	vars []muf.MPIVar, private bool) (
+	string, []muf.MPIVar, error) {
+
 	o := h.w.Get(obj)
 	if o == nil {
 		return "", vars, errMsg("no such object")
@@ -394,6 +414,7 @@ func (h *mufHost) ParsePropEx(obj ref.Ref, path string, vars []muf.MPIVar, priva
 		What:    mpi.Ref(obj),
 		Perms:   mpi.Ref(obj),
 		Blessed: v.Blessed,
+		Type:    mesgKind(private),
 		Host:    &mpiHost{s: h.s, w: h.w},
 	}
 	for _, kv := range vars {

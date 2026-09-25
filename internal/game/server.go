@@ -12,6 +12,7 @@ import (
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
 	"github.com/FatmanUK/fuzzball_emerald/internal/mcp"
+	"github.com/FatmanUK/fuzzball_emerald/internal/mpi"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -319,7 +320,9 @@ func puppetRelay(s *Server, w *world.World, target ref.Ref) (ref.Ref, string, bo
 	prefix := o.Name + "> "
 	if v, ok := w.GetProp(target, propPuppetEcho); ok &&
 		v.Type == props.String {
-		if got := s.evalMPI(w, target, target, v.Str, v.Blessed); got != "" {
+		got := s.evalMPI(w, target, target, v.Str, v.Blessed,
+			mpi.Private)
+		if got != "" {
 			prefix = got + " "
 		}
 	}

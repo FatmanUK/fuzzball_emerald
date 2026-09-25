@@ -299,6 +299,10 @@ func init() {
 	})
 
 	register("OTELL", func(env *Env, _ *Func, args []string) (string, error) {
+		if env.Type.Has(Listener) &&
+			env.Host.TypeName(env.What) != "Room" {
+			return "", errf("OTELL", "Permission denied.")
+		}
 		room := env.Host.Location(env.Who)
 		if len(args) > 1 {
 			var err error

@@ -243,8 +243,11 @@ func TestFunctionTableIsPopulated(t *testing.T) {
 // interesting thing it can.
 func (h *stubHost) NotifyExcept(Ref, []Ref, string) {}
 func (h *stubHost) TypeName(obj Ref) string {
-	if obj == 1 {
+	switch obj {
+	case 1:
 		return "Player"
+	case 0:
+		return "Room"
 	}
 	return "Thing"
 }

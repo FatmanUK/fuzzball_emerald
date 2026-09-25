@@ -241,6 +241,14 @@ func init() {
 	})
 
 	register("TELL", func(env *Env, _ *Func, args []string) (string, error) {
+		// A listener may only speak through a room. Upstream
+		// tests the object carrying the message, not the
+		// target: a thing that hears something must not be
+		// able to send a private message to anyone it likes.
+		if env.Type.Has(Listener) &&
+			env.Host.TypeName(env.What) != "Room" {
+			return "", errf("TELL", "Permission denied.")
+		}
 		target := env.Who
 		if len(args) > 1 {
 			var err error

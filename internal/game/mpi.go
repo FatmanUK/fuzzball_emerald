@@ -110,7 +110,9 @@ func (h *mpiHost) Now() int64 { return h.w.Now().Unix() }
 //
 // Only text that actually contains a call is parsed, so an ordinary
 // description costs nothing and cannot be changed by a stray brace.
-func (s *Server) evalMPI(w *world.World, viewer, what ref.Ref, text string, blessed bool) string {
+func (s *Server) evalMPI(w *world.World, viewer, what ref.Ref,
+	text string, blessed bool, kind mpi.MesgType) string {
+
 	if !strings.ContainsRune(text, '{') {
 		return text
 	}
@@ -123,6 +125,7 @@ func (s *Server) evalMPI(w *world.World, viewer, what ref.Ref, text string, bles
 		What:    mpi.Ref(what),
 		Perms:   mpi.Ref(what),
 		Blessed: blessed,
+		Type:    kind,
 		Host:    &mpiHost{s: s, w: w},
 	}
 	// Eval reports a failure to the viewer and yields empty text
@@ -141,5 +144,8 @@ func (s *Server) mesgProp(w *world.World, viewer, obj ref.Ref, path string) stri
 	if !ok || v.Type != props.String {
 		return ""
 	}
-	return s.evalMPI(w, viewer, obj, v.Str, v.Blessed)
+	// A message property is a private message to whoever
+	// triggered it, which is the mesgtyp exec_or_notify passes.
+	return s.evalMPI(w, viewer, obj, v.Str, v.Blessed,
+		mpi.Private)
 }

@@ -101,7 +101,10 @@ func (h *lockHost) EvalLockProp(descr int, player, what ref.Ref, raw string, ble
 		Perms:   mpi.Ref(what),
 		Blessed: blessed,
 		Descr:   descr,
-		Host:    &mpiHost{s: h.s, w: h.w},
+		// a lock evaluating a property is upstream's
+		// MPI_ISLOCK.
+		Type: mpi.Lock,
+		Host: &mpiHost{s: h.s, w: h.w},
 	}
 	return mpi.Eval(env, raw)
 }

@@ -208,6 +208,16 @@ generated from `mfun_list` in `include/mfun.h`, which carries each function's
 arity and the flags that decide how its arguments are handled before the
 implementation runs.
 
+**`mpi.Env.Type` is upstream's `mesgtyp`**: what triggered an evaluation, as
+against `Blessed`, which is what it is allowed to do. Blessing is kept out of
+it deliberately — it is a permission, and `{revoke}` drops it while leaving
+the provenance alone. Only four places upstream read anything but the blessed
+bit, and the one with teeth is `{tell}`/`{otell}`: from a **listener** they
+refuse unless the object carrying the message is a room, so a thing lying in a
+room cannot message whoever spoke near it. `PARSEPROP` and `PARSEPROPEX`
+already carried a `private` argument that had nowhere to go until this
+existed.
+
 Two things about it are easy to get wrong. An MPI failure is **reported to the
 player and yields empty text** — it does not abort the MUF program or command
 that was reading the property, so `Eval` is what callers want and `Parse` is

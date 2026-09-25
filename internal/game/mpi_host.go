@@ -228,7 +228,11 @@ func (s *Server) fireMPIEvents(w *world.World, now time.Time) {
 			Perms:   mpi.Ref(e.perms),
 			Blessed: e.blessed,
 			Descr:   e.descr,
-			Host:    &mpiHost{s: s, w: w},
+			// a delayed message keeps the kind it was
+			// queued with; nothing queues a public one
+			// yet.
+			Type: mpi.Private,
+			Host: &mpiHost{s: s, w: w},
 		}
 		mpi.Eval(env, e.text)
 	}

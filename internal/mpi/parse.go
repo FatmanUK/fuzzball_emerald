@@ -35,6 +35,11 @@ type Env struct {
 	// Blessed grants wizard permissions, which a blessed property
 	// has.
 	Blessed bool
+	// Type is what triggered this evaluation, upstream's mesgtyp.
+	// It is not decoration: {tell} and {otell} refuse outright
+	// from a listener on anything but a room, and {delay} carries
+	// it forward to whatever it schedules.
+	Type MesgType
 	// Descr is the connection this is being evaluated for.
 	Descr int
 
@@ -63,6 +68,33 @@ type variable struct {
 	name  string
 	value string
 }
+
+// MesgType is upstream's mesgtyp word (include/mpi.h): what kind of
+// thing triggered an evaluation.
+//
+// Blessing is deliberately *not* in here even though upstream keeps
+// it in the same word, because it is a permission rather than a
+// provenance and it is already Env.Blessed — and because {revoke}
+// drops the blessing while leaving everything else alone.
+type MesgType uint8
+
+const (
+	// Private is a message meant for one player, which is what a
+	// description or a @succ is. Upstream's ISPRIVATE.
+	Private MesgType = 1 << iota
+	// Listener is a message triggered by a listen propqueue. This
+	// is the one that actually refuses things.
+	Listener
+	// Lock is an evaluation triggered by a lock.
+	Lock
+)
+
+// Has reports whether a flag is set.
+func (t MesgType) Has(f MesgType) bool { return t&f != 0 }
+
+// Public is the absence of Private, which is how upstream spells it:
+// MPI_ISPUBLIC is zero and is never tested for directly.
+func (t MesgType) Public() bool { return !t.Has(Private) }
 
 // Ref is a database reference. It is an alias so this package does
 // not depend on the world's own type for what is only an identifier.
