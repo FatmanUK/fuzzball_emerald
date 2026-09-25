@@ -191,14 +191,34 @@ fixed rather than recorded:
 `@unlock` was added at the same time, since it is two lines and its
 absence was being papered over by the help text.
 
-### A residual divergence, recorded rather than fixed
+### The permission refusals, half fixed
 
 Upstream's `match_controlled` refuses with "Permission denied. (You
-don't control what was matched)"; Emerald says "Permission denied."
-Some upstream commands reach the same point through
-`noisy_match_result` and their own check, with their own wording, so
-aligning this needs a command-by-command comparison rather than one
-edit. It has not been done.
+don't control what was matched)". Emerald said "Permission denied."
+everywhere, which was right nowhere.
+
+**Five commands are fixed**: `@name`, `@describe`, `@set`, `@unlock`
+and the whole `@lock` family really do route through
+`match_controlled` upstream, and now say what it says.
+`matchControlled` in `internal/game/build.go` is that function.
+
+**Four are not, and the reason is behavioural rather than textual.**
+None of them goes through `match_controlled` upstream; each matches
+for itself and applies its own rule:
+
+- `@unlink` also accepts `controls_link`, so upstream lets the
+  destination's owner unlink an exit where Emerald refuses them.
+- `@link` lets a builder who controls nothing *seize* an unlinked
+  exit, paying `link_cost` plus `exit_cost`; Emerald refuses before
+  that path can run.
+- `@teleport` defers its control test until the destination is known
+  and varies it by victim type; Emerald tests the victim up front.
+- `@recycle` is **stricter** than `controls`: upstream requires
+  actual ownership of a room or thing even of a wizard, so Emerald
+  currently lets a wizard recycle objects upstream refuses.
+
+Those four stay on `resolveControlled`, which keeps the old message
+rather than pretending to be upstream's. Each needs its own commit.
 
 ---
 

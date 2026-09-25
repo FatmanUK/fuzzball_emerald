@@ -82,7 +82,7 @@ func (s *Server) cmdUnlock(c *ctx) {
 		c.tell("Guests are not allowed to @unlock.")
 		return
 	}
-	target, ok := s.resolveControlled(c, strings.TrimSpace(c.arg))
+	target, ok := s.matchControlled(c, strings.TrimSpace(c.arg))
 	if !ok {
 		return
 	}
@@ -115,7 +115,7 @@ func (s *Server) cmdSetLock(c *ctx, spec lockCommandSpec) {
 
 	target := c.who
 	if objname != "" {
-		t, ok := s.resolveControlled(c, objname)
+		t, ok := s.matchControlled(c, objname)
 		if !ok {
 			return
 		}

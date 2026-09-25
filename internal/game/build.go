@@ -37,8 +37,8 @@ func (s *Server) requireWizard(c *ctx) bool {
 	return false
 }
 
-// resolveControlled finds an object the player may modify, which is
-// upstream's match_controlled.
+// matchControlled finds an object the player may modify: upstream's
+// match_controlled (match.c:1034), message for message.
 //
 // A failed match is reported by noisyMatch, which is
 // noisy_match_result: "I don't understand 'X'." Every upstream
@@ -47,10 +47,56 @@ func (s *Server) requireWizard(c *ctx) bool {
 // match on it. An earlier version said "I don't see that here.",
 // which belongs to the commands that match quietly and complain in
 // their own words.
-func (s *Server) resolveControlled(c *ctx, name string) (ref.Ref, bool) {
+//
+// Only the commands upstream really routes through match_controlled
+// may use this: @name, @describe, @set, @unlock and the @lock family.
+// The others are resolveControlled, below.
+func (s *Server) matchControlled(c *ctx,
+	name string) (ref.Ref, bool) {
+
 	// Player() is included so a wizard can name someone who is
-	// elsewhere in the game, which @teleport and @set both need.
-	r := match.New(c.w, c.who, name).Everything().Player().Result()
+	// elsewhere in the game, which @set needs.
+	r := match.New(c.w, c.who, name).
+		Everything().Player().Result()
+	if !noisyMatch(c, name, r) {
+		return ref.Nothing, false
+	}
+	if !s.controls(c.w, c.who, r) {
+		c.tell("Permission denied. " +
+			"(You don't control what was matched)")
+		return ref.Nothing, false
+	}
+	return r, true
+}
+
+// resolveControlled is what @link, @unlink, @teleport and @recycle
+// use, and it is **not** upstream's match_controlled. None of those
+// four go through it: each matches for itself and then applies a
+// check of its own, with its own wording and — more importantly —
+// its own rules.
+//
+// The differences are behavioural, not cosmetic, and none is fixed
+// here:
+//
+//   - @unlink also accepts controls_link, so upstream lets the
+//     destination's owner unlink an exit and this refuses them.
+//   - @link lets a builder who controls nothing *seize* an unlinked
+//     exit, paying for it; this refuses before that can happen.
+//   - @teleport defers its control test until the destination is
+//     known and varies it by victim type; this tests the victim up
+//     front.
+//   - @recycle is stricter than controls: upstream requires actual
+//     ownership of a room or thing even of a wizard, so this server
+//     currently lets a wizard recycle objects upstream refuses.
+//
+// Each needs its own commit. Until then the four keep the message
+// they have always had, which is at least not pretending to be
+// upstream's.
+func (s *Server) resolveControlled(c *ctx,
+	name string) (ref.Ref, bool) {
+
+	r := match.New(c.w, c.who, name).
+		Everything().Player().Result()
 	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
 	}
@@ -293,7 +339,7 @@ func (s *Server) cmdName(c *ctx) {
 		c.tell("Usage: @name <object>=<new name>")
 		return
 	}
-	target, ok := s.resolveControlled(c, strings.TrimSpace(name))
+	target, ok := s.matchControlled(c, strings.TrimSpace(name))
 	if !ok {
 		return
 	}
@@ -325,7 +371,7 @@ func (s *Server) cmdDescribe(c *ctx) {
 		c.tell("Usage: @describe <object>=<description>")
 		return
 	}
-	target, ok := s.resolveControlled(c, strings.TrimSpace(name))
+	target, ok := s.matchControlled(c, strings.TrimSpace(name))
 	if !ok {
 		return
 	}
@@ -401,7 +447,7 @@ func (s *Server) cmdSet(c *ctx) {
 		c.tell("Usage: @set <object>=[!]<flag>  or  @set <object>=<prop>:<value>")
 		return
 	}
-	target, ok := s.resolveControlled(c, strings.TrimSpace(name))
+	target, ok := s.matchControlled(c, strings.TrimSpace(name))
 	if !ok {
 		return
 	}

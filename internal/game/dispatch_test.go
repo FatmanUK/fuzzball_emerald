@@ -173,7 +173,8 @@ func TestGuardsComeFromTheTable(t *testing.T) {
 	// Strip the wizard bit and WIZARDONLY bites, with upstream's
 	// wording rather than the "Permission denied." the inline
 	// check used to give.
-	err := h.engine.Do(context.Background(), func(w *world.World) {
+	ctx := context.Background()
+	err := h.engine.Do(ctx, func(w *world.World) {
 		w.Get(h.wizRef()).Flags &^= ref.Wizard
 	})
 	if err != nil {
@@ -221,6 +222,73 @@ func TestDeclinedCommandsSayWhy(t *testing.T) {
 		if _, ok := handlers[name]; ok {
 			t.Errorf("%q is declined and implemented",
 				name)
+		}
+	}
+}
+
+// TestMatchControlledWording pins upstream's refusal, which the
+// golden harness cannot reach: its player is #1, who controls
+// everything in the fixture.
+//
+// The four commands still on resolveControlled keep the older, bare
+// message on purpose — see its doc comment for why each needs its
+// own commit rather than a shared string.
+func TestMatchControlledWording(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	var theirs ref.Ref
+	ctx := context.Background()
+	err := h.engine.Do(ctx, func(w *world.World) {
+		other := w.Create("Stranger", ref.TypePlayer,
+			ref.Nothing)
+		other.Owner = other.Ref
+		here := w.Get(h.wizRef()).Location
+		o := w.Create("locket", ref.TypeThing, other.Ref)
+		o.Home = here
+		if err := w.MoveTo(o.Ref, here); err != nil {
+			t.Error(err)
+		}
+		theirs = o.Ref
+
+		// Stop being a wizard, so control is really tested.
+		w.Get(h.wizRef()).Flags &^= ref.Wizard
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.out()
+	_ = theirs
+
+	const upstream = "Permission denied. " +
+		"(You don't control what was matched)"
+
+	for _, cmd := range []string{
+		"@name locket=brooch",
+		"@describe locket=shiny",
+		"@set locket=D",
+		"@lock locket=me",
+		"@unlock locket",
+	} {
+		h.send(cmd)
+		if got := h.out(); !strings.Contains(got, upstream) {
+			t.Errorf("%q said:\n%s", cmd, got)
+		}
+	}
+
+	// And the four that are knowingly still divergent.
+	for _, cmd := range []string{
+		"@unlink locket",
+		"@recycle locket",
+	} {
+		h.send(cmd)
+		got := h.out()
+		if !strings.Contains(got, "Permission denied.") {
+			t.Errorf("%q said:\n%s", cmd, got)
+		}
+		if strings.Contains(got, "what was matched") {
+			t.Errorf("%q claims match_controlled:\n%s",
+				cmd, got)
 		}
 	}
 }
