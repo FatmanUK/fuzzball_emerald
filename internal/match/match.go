@@ -75,6 +75,12 @@ type Matcher struct {
 	// arg is what followed the matched exit alias, for an exit
 	// that runs a program and so matches a prefix of the line.
 	arg string
+	// verb is the part of the typed line that matched the alias,
+	// which is upstream's match_cmdname. It is the text as
+	// *typed* rather than the exit's own spelling, because
+	// match_exits copies out of md->match_name — so an exit
+	// named "West" reached by typing "west foo" gives "west".
+	verb string
 }
 
 // Arg returns the text that followed a matched exit's name.
@@ -84,6 +90,15 @@ type Matcher struct {
 // "@shout hello" reaches the "@shout" exit with "hello" as its
 // argument.
 func (m *Matcher) Arg() string { return m.arg }
+
+// Verb returns the part of the typed line that matched an exit's
+// name, which is what a program run through that exit sees in its
+// COMMAND variable.
+//
+// It is not always the first word: an exit that does not run a
+// program has to match the whole line, and then the whole line is the
+// verb.
+func (m *Matcher) Verb() string { return m.verb }
 
 // New starts a search for name on behalf of who.
 func New(w *world.World, who ref.Ref, name string) *Matcher {
@@ -336,17 +351,20 @@ func (m *Matcher) matchExitsOn(on ref.Ref) {
 		if e == nil {
 			continue
 		}
-		alias, arg, ok := matchAlias(e.Name, m.name, m.runsProgram(e))
+		alias, verb, arg, ok := matchAlias(e.Name, m.name,
+			m.runsProgram(e))
 		if !ok {
 			continue
 		}
 		lev := priority(e.Flags)
 		switch {
 		case lev > m.level:
-			m.level, m.longest, m.arg = lev, len(alias), arg
+			m.level, m.longest = lev, len(alias)
+			m.verb, m.arg = verb, arg
 			m.exact, m.last, m.count = r, r, 1
 		case lev == m.level && len(alias) > m.longest:
-			m.longest, m.arg = len(alias), arg
+			m.longest = len(alias)
+			m.verb, m.arg = verb, arg
 			m.exact, m.last, m.count = r, r, 1
 		case lev == m.level && len(alias) == m.longest && r != m.last:
 			m.count++
@@ -377,12 +395,19 @@ func (m *Matcher) runsProgram(e *world.Object) bool {
 }
 
 // matchAlias reports whether name matches any of an exit's
-// ';'-separated aliases. It returns the alias that matched and
-// whatever followed it.
+// ';'-separated aliases. It returns the alias that matched, the part
+// of the typed line that matched it, and whatever followed.
 //
 // An exit that takes an argument matches a prefix ending at a space;
 // any other exit must match the whole of what was typed.
-func matchAlias(exitName, name string, takesArg bool) (alias, arg string, ok bool) {
+//
+// The alias and the verb differ in case: the alias is the exit's own
+// spelling, which is what the priority rules measure, and the verb is
+// what the player typed, which is what upstream's match_cmdname
+// carries.
+func matchAlias(exitName, name string, takesArg bool) (
+	alias, verb, arg string, ok bool) {
+
 	first := name
 	rest := ""
 	if takesArg {
@@ -399,13 +424,13 @@ func matchAlias(exitName, name string, takesArg bool) (alias, arg string, ok boo
 		if ascii.EqualFold(a, name) {
 			// An exact match on the whole line wins, and
 			// leaves no argument.
-			return a, "", true
+			return a, name, "", true
 		}
 		if takesArg && ascii.EqualFold(a, first) {
-			return a, rest, true
+			return a, first, rest, true
 		}
 	}
-	return "", "", false
+	return "", "", "", false
 }
 
 // priority is Fuzzball's PLevel: an exit's mucker bits raise how

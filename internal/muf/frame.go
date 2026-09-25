@@ -288,8 +288,13 @@ type Host interface {
 	// returns what it left on its stack — INTERP. ok is false
 	// when the program aborted, blocked or finished with an empty
 	// stack, all three of which the primitive turns into an empty
-	// string rather than a failure.
-	Interp(descr, level int, prog, trig ref.Ref, arg string) (Value, bool)
+	// string rather than a failure. cmd is what the called
+	// program sees in COMMAND. It is a separate argument because
+	// upstream's two callers disagree about it: prim_interp
+	// leaves match_cmdname alone, so the called program inherits
+	// the caller's, while MPI's {muf} sets it to "<how>(MPI)".
+	Interp(descr, level int, prog, trig ref.Ref,
+		cmd, arg string) (Value, bool)
 
 	// CopyObject is upstream's clone_thing — COPYOBJ.
 	// copyHidden carries the source's '@'-prefixed properties

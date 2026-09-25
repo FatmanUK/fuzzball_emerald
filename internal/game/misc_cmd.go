@@ -104,13 +104,16 @@ func (s *Server) cmdUncompile(c *ctx) {
 // every descriptor that player has — so somebody connected twice
 // receives the shout four times. This writes to each descriptor once.
 func (s *Server) cmdWall(c *ctx) {
-	msg := sprintf("%s shouts, \"%s\"", nameOf(c.w, c.who), c.arg)
+	// full_command, not the trimmed argument: do_wall prints what
+	// was typed.
+	msg := sprintf("%s shouts, \"%s\"",
+		nameOf(c.w, c.who), c.rest)
 	for _, d := range s.hub.Connected() {
 		d.Send(msg)
 	}
 	s.securityLog().Warn("wall",
 		"player", c.who.String(), "name", nameOf(c.w, c.who),
-		"message", c.arg)
+		"message", c.rest)
 }
 
 // cmdGripe is do_gripe (speech.c:147): file a complaint.
@@ -132,7 +135,7 @@ func (s *Server) cmdWall(c *ctx) {
 // bound and a wizard on a world that has been up for years should not
 // have it all thrown at them.
 func (s *Server) cmdGripe(c *ctx) {
-	msg := c.arg
+	msg := c.rest
 	if msg == "" {
 		if !isWizard(c.w, ownerOf(c.w, c.who)) {
 			c.tell("If you wish to gripe, use " +

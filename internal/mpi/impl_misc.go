@@ -396,7 +396,9 @@ func init() {
 		if env.depth > mufCallLimit {
 			return "", errf("MUF", "Too many call levels.")
 		}
-		out, err := env.Host.RunMUF(env.Descr, env.Who, prog, args[1])
+		how, _ := env.Var("how")
+		out, err := env.Host.RunMUF(env.Descr, env.Who, prog,
+			env.Perms, how, args[1])
 		if err != nil {
 			return "", errf("MUF", "%s", err.Error())
 		}

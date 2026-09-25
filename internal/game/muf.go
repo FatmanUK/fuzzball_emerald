@@ -708,7 +708,13 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 	if me != nil {
 		loc = me.Location
 	}
-	f.SetReserved(c.who, loc, trigger, arg)
+	// COMMAND is the verb and the pushed argument is the rest of
+	// the line — upstream's match_cmdname and match_args, two
+	// different strings (game.c:695) that SetReserved's own
+	// convention makes one. This used to pass arg for both, so a
+	// program asking "command @" was told its own argument.
+	f.SetReserved(c.who, loc, trigger, c.verb)
+	f.Stack[len(f.Stack)-1] = muf.Str(arg)
 	f.Descr = c.d.ID
 
 	c.w.Used(prog)

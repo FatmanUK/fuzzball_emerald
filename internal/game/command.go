@@ -24,6 +24,16 @@ type ctx struct {
 	// verb is the command as typed, arg is the rest of the line.
 	verb string
 	arg  string
+	// rest is upstream's full_command: the line after the verb
+	// with exactly *one* character skipped, so leading whitespace
+	// survives where arg has lost it.
+	//
+	// The two are different strings upstream — full_command and
+	// arg1/arg2 — and the handful of commands that take the
+	// line verbatim read this one: say, pose, @wall and gripe.
+	// Losing the spaces is visible in all four, because what they
+	// print is what was typed.
+	rest string
 }
 
 // tell sends a formatted line to the player the command is running
@@ -148,6 +158,7 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 
 	c := &ctx{w: w, d: d, who: who, out: out}
 	c.verb, c.arg = trimCommand(line)
+	c.rest = fullCommand(line)
 
 	if w.Get(c.who) == nil {
 		c.tell("Your character no longer exists.")
@@ -164,6 +175,7 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 		overridden = true
 		line = strings.TrimSpace(line[1:])
 		c.verb, c.arg = trimCommand(line)
+		c.rest = fullCommand(line)
 		if line == "" {
 			return
 		}
@@ -171,13 +183,17 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 
 	// Single-character shortcuts take the rest of the line
 	// verbatim, so punctuation and spacing survive.
+	//
+	// Upstream rewrites the line as "say <rest>" and then takes
+	// full_command off it, which comes to exactly the text after
+	// the token — leading spaces and all.
 	switch {
 	case strings.HasPrefix(line, string(sayToken)):
-		c.arg = strings.TrimSpace(line[1:])
+		c.arg, c.rest = strings.TrimSpace(line[1:]), line[1:]
 		s.cmdSay(c)
 		return
 	case strings.HasPrefix(line, string(poseToken)):
-		c.arg = strings.TrimSpace(line[1:])
+		c.arg, c.rest = strings.TrimSpace(line[1:]), line[1:]
 		s.cmdPose(c)
 		return
 	}
@@ -191,8 +207,12 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 			r != ref.Ambiguous {
 			s.logCommand(w, d, line, "")
 			// An exit that runs a program takes the rest
-			// of the line as its argument.
-			c.arg = m.Arg()
+			// of the line as its argument, and the part
+			// that matched its name as the verb —
+			// upstream's match_args and match_cmdname,
+			// reset by match_exits itself.
+			c.verb, c.arg = m.Verb(), m.Arg()
+			c.rest = c.arg
 			s.useExit(c, r)
 			return
 		}

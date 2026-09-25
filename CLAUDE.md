@@ -211,6 +211,14 @@ generated from `mfun_list` in `include/mfun.h`, which carries each function's
 arity and the flags that decide how its arguments are handled before the
 implementation runs.
 
+**Every MPI evaluation declares three variables**, `how`, `cmd` and `arg`
+(`do_parse_mesg_2`, `msgparse.c:1919`). All three must exist or referring to
+one is an MPI *error* rather than an empty string. `{&how}` is the caller
+context and `{muf}` reads it back to build the COMMAND variable it hands a
+program; `{&cmd}` and `{&arg}` read empty inside a message property, which was
+measured against the oracle rather than derived and is pinned by the golden
+case.
+
 **`mpi.Env.Type` is upstream's `mesgtyp`**: what triggered an evaluation, as
 against `Blessed`, which is what it is allowed to do. Blessing is kept out of
 it deliberately — it is a permission, and `{revoke}` drops it while leaving
@@ -340,6 +348,55 @@ banner, which is the one thing somebody typing `help` at a login screen has
 already read. **The motd is shown on a successful connect**, not only on
 demand.
 
+## Movement
+
+`internal/game/enter.go` is `move.c`'s `enter_room` and `moveto`, plus the two
+loop checks they depend on.
+
+**`moveObject` redirects where `World.MoveTo` refuses.** The store returns an
+error when a move would put something inside itself; upstream walks a per-type
+ladder instead — a player to their home, a thing to its home then its owner's
+home then `player_start`, a room to `#0`, a program to its owner. Nothing in
+upstream's movement path can fail, which is why none of its callers check, and
+`enter_room` relies on that.
+
+**`parentLoopCheck` is two walks, not one.** `location_loop_check` follows
+locations; `parent_loop_check` runs that *and* a `getparent` walk, which for a
+VEHICLE thing follows its home rather than its location. `getparent` itself is
+a tortoise-and-hare that collapses a detected cycle to `#0`, reproduced rather
+than simplified because which answer it gives decides whether a move is
+refused.
+
+**A move is announced under five conditions, not none.** `quiet_moves` unset,
+neither the room nor the mover DARK, the mover not a plain THING — a ZOMBIE or
+a VEHICLE does announce itself, which is what keeps a puppet-heavy world
+readable — and the exit not DARK. Emerald announced every move
+unconditionally, and none of `quiet_moves`, `autolook_cmd`, `penny_rate` or
+`secure_thing_movement` was read anywhere.
+
+**The order inside `enter_room` is load-bearing.** The destination is resolved
+and loop-checked *before* the self-loop test, so a redirected move that lands
+where the player already is prints nothing. `do_move` prints `@drop` and
+`@odrop` *before* calling `enter_room`, so "you have arrived somewhere" is read
+before "has arrived" and before the look. And the autolook happens before the
+penny check, which upstream comments on: the arrive propqueue is deliberately
+last so a message from it is not lost in the spam.
+
+**The autolook runs a command, not a function.** `autolook_cmd` is looked up as
+an *exit* first, so a world can replace what a player sees on arriving — and
+can therefore write a loop, which is what `donelook` and "Look aborted because
+of look action loop." are for.
+
+**`@link` is three operations wearing one name**, and says so differently for
+each: an exit is "Linked to X." (or "Linked to HOME." — unparsing `HOME` gives
+`*HOME*`, which is the lock spelling, not this one), a thing or player is
+"Home set.", a room is "Dropto set.".
+
+**An unlinked exit is not special-cased.** The destination count is
+`could_doit`'s own first check, so an unlinked exit gets the same default every
+other failure gets — "You can't go that way." An earlier version answered
+"That exit doesn't go anywhere.", which was invented here.
+
 ## The four checkflags searches
 
 `@find`, `@owned`, `@contents` and `@entrances` (`internal/game/find.go`) are
@@ -437,6 +494,17 @@ program run by its own owner. `GUI_CTRL_COMMAND`, `GUI_AVAILABLE` and
 which `interp()` pushes before the program runs. `depth` counts it. And unset
 variables read as integer `0`, not `#-1`.
 
+**COMMAND and the pushed argument are two different strings**, upstream's
+`match_cmdname` and `match_args` — the verb and the rest of the line
+(`game.c:695`, `interp.c:688` and `:738`). `SetReserved` takes one string and
+uses it for both, so every launch site that needs them to differ overwrites
+the pushed value afterwards. Each site chooses COMMAND differently and none
+of them agrees with the others: a command or exit gets the typed verb (as
+*typed*, not the exit's own spelling — `match_exits` copies out of
+`md->match_name`), a message property gets the caller context `(@Desc)`,
+`{muf}` gets `<&how>(MPI)`, INTERP **inherits the caller's** because
+`prim_interp` never touches `match_cmdname`, and QUEUE gets "Queued Event.".
+
 **Privileged primitives are gated by mucker level.** `internal/muf/mlev_gen.go`
 is generated from the `mlev <` checks in the C; without it a level-1 program
 could read passwords and change ownership. The table records only
@@ -517,6 +585,15 @@ own words. Until it is ported the alias differs in where the exit lands.
 **Case-insensitive comparison is `strcasecmp`, not Unicode.** Use
 `internal/ascii`, never `strings.EqualFold` or `strings.ToLower`. Upstream folds
 only A–Z, so `Ä` and `ä` are distinct property and player names.
+
+**A command's argument is two strings, not one.** `ctx.arg` is upstream's
+`arg1`, trimmed at both ends; `ctx.rest` is `full_command`, the line after the
+verb with exactly *one* character skipped. The commands that print back what
+was typed read `rest` — `say`, `pose`, `@wall`, `gripe` — so a leading space
+survives. Neither `do_say` nor `do_pose` has an emptiness guard, so a bare
+`say` really does produce `You say, ""`; and `do_pose` omits its space before
+any of **four** separator characters (`'`, space, comma, hyphen), not just an
+apostrophe. The golden case compares all of it.
 
 **An unrecognised command says what `huh_mesg` says**, not a fixed string. A
 world changes it with `@tune`, and the default is upstream's "Huh?  (Type

@@ -15,7 +15,9 @@ import (
 // nothing; and a program that aborts reports its own error and yields
 // nothing, rather than taking the calling program down with it, which
 // is upstream's own interp_loop returning NULL.
-func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref, arg string) (muf.Value, bool) {
+func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref,
+	cmd, arg string) (muf.Value, bool) {
+
 	p, err := h.s.compileProgram(h.w, prog)
 	if err != nil {
 		return muf.Value{}, false
@@ -26,7 +28,11 @@ func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref, arg string) (muf.
 	f := muf.NewFrame(p, host)
 	// INTERP runs its target HARDUID. p_stack.c:1763.
 	f.Perms = muf.HardUID
-	f.SetReserved(player, h.Location(player), trig, arg)
+	// COMMAND and the pushed argument are two different strings,
+	// upstream's match_cmdname and match_args; SetReserved's own
+	// convention makes them one.
+	f.SetReserved(player, h.Location(player), trig, cmd)
+	f.Stack[len(f.Stack)-1] = muf.Str(arg)
 	f.Descr = descr
 	f.Level = level + 1
 	// Upstream runs this frame PREEMPT: it gets the world to

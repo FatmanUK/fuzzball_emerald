@@ -278,7 +278,8 @@ func (h *stubHost) MuckName() string {
 func (h *stubHost) PronounSub(_ Ref, s string) string { return s }
 func (h *stubHost) Force(int, Ref, string)            {}
 func (h *stubHost) Kill(int) bool                     { return false }
-func (h *stubHost) RunMUF(int, Ref, Ref, string) (string, error) {
+func (h *stubHost) RunMUF(int, Ref, Ref, Ref, string,
+	string) (string, error) {
 	return "", nil
 }
 func (h *stubHost) Delay(int, Ref, Ref, Ref, int, string, bool) {}

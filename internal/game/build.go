@@ -245,7 +245,7 @@ func (s *Server) cmdOpen(c *ctx) {
 		if dest, ok := s.resolveLinkTarget(c, strings.TrimSpace(destName)); ok {
 			o.Dest = []ref.Ref{dest}
 			c.w.Modified(o.Ref)
-			c.tell("Linked to %s.", unparse(c.w, c.who, dest))
+			c.tell("%s", linkedTo(c, dest))
 		}
 	}
 }
@@ -296,20 +296,46 @@ func (s *Server) cmdLink(c *ctx) {
 		return
 	}
 
+	// What @link says it did depends on the type, because it is
+	// three different operations wearing one name: an exit gets a
+	// destination, a thing or a player gets a home, and a room
+	// gets a drop-to. Only the first is "linked" in upstream's
+	// own words.
 	o := c.w.Get(target)
 	switch o.Type() {
 	case ref.TypeExit:
 		o.Dest = []ref.Ref{dest}
+		c.w.Modified(target)
+		c.tell("%s", linkedTo(c, dest))
+		return
 	case ref.TypeThing, ref.TypePlayer:
 		o.Home = dest
+		c.w.Modified(target)
+		c.tell("Home set.")
+		return
 	case ref.TypeRoom:
 		o.Dropto = dest
-	default:
-		c.tell("You can't link that.")
+		c.w.Modified(target)
+		c.tell("Dropto set.")
+		return
+	case ref.TypeProgram:
+		c.tell("You can't link programs to things!")
 		return
 	}
-	c.w.Modified(target)
-	c.tell("Linked to %s.", unparse(c.w, c.who, dest))
+	c.tell("You can't link that.")
+}
+
+// linkedTo is what @link says it did to an *exit*. HOME is named
+// rather than unparsed, because unparsing it gives "*HOME*" — the
+// spelling a lock or a dump uses, not the one db.c:2143 prints.
+func linkedTo(c *ctx, dest ref.Ref) string {
+	if dest == ref.Home {
+		return "Linked to HOME."
+	}
+	if dest == ref.Nil {
+		return "Linked to NIL."
+	}
+	return sprintf("Linked to %s.", unparse(c.w, c.who, dest))
 }
 
 // cmdUnlink removes an exit's destination or a room's drop-to.

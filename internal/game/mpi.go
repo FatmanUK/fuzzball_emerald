@@ -111,7 +111,7 @@ func (h *mpiHost) Now() int64 { return h.w.Now().Unix() }
 // Only text that actually contains a call is parsed, so an ordinary
 // description costs nothing and cannot be changed by a stray brace.
 func (s *Server) evalMPI(w *world.World, descr int,
-	viewer, what ref.Ref, text string, blessed bool,
+	viewer, what ref.Ref, text, how string, blessed bool,
 	kind mpi.MesgType) string {
 
 	if !strings.ContainsRune(text, '{') {
@@ -130,6 +130,28 @@ func (s *Server) evalMPI(w *world.World, descr int,
 		Descr:   descr,
 		Host:    &mpiHost{s: s, w: w},
 	}
+	// do_parse_mesg_2 (msgparse.c:1919) allocates three variables
+	// for every evaluation, and all three have to exist or
+	// referring to one is an MPI *error* rather than an empty
+	// string.
+	//
+	// {&how} is the caller context — "(@Desc)", "(@Succ)" —
+	// the same whatcalled string exec_or_notify passes. MPI's
+	// {muf} reads it back to build the COMMAND variable it hands
+	// a program, so leaving it out was visible from inside MUF.
+	//
+	// {&cmd} and {&arg} are match_cmdname and match_args, and
+	// both read **empty** here. That was measured against the
+	// oracle rather than derived: a description or a @succ
+	// reached by looking reports them empty on every command
+	// tried, and the golden case pins it. If a world ever finds a
+	// path where upstream's are not empty, this is the line to
+	// revisit — Emerald has no ambient equivalent of those two
+	// globals to fill them from.
+	_ = env.SetVar("how", how)
+	_ = env.SetVar("cmd", "")
+	_ = env.SetVar("arg", "")
+
 	// Eval reports a failure to the viewer and yields empty text
 	// rather than propagating, so a broken description cannot
 	// break the look.

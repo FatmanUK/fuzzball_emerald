@@ -7,39 +7,45 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
 
-// cmdSay speaks to the room.
+// cmdSay speaks to the room. cmdSay is do_say (speech.c): what the
+// player typed, in quotes.
+//
+// It prints full_command rather than the trimmed argument, so leading
+// whitespace survives — and it has no emptiness guard at all, so a
+// bare "say" really does produce You say, "". Both of those are
+// upstream's and both are compared by the golden case.
 func (s *Server) cmdSay(c *ctx) {
-	if c.arg == "" {
-		c.tell("Say what?")
-		return
-	}
 	o := c.w.Get(c.who)
-	c.tell("You say, \"%s\"", c.arg)
+	c.tell("You say, \"%s\"", c.rest)
 	if o.Location != ref.Nothing {
 		s.notifyRoom(c.w, o.Location, []ref.Ref{c.who},
-			"%s says, \"%s\"", o.Name, c.arg)
+			"%s says, \"%s\"", o.Name, c.rest)
 	}
 }
 
-// cmdPose emotes to the room.
+// cmdPose is do_pose: the player's name, then what they typed.
+//
+// The space before it is omitted when the text starts with a pose
+// separator — an apostrophe, a space, a comma or a hyphen — so
+// ":'s hat" reads "Igor's hat" and ":, yes" reads "Igor, yes". That
+// is the same is_valid_pose_separator prefix_message uses for the "o"
+// messages.
+//
+// The poser is *not* excluded from the broadcast: upstream passes
+// NOTHING as notify_except's exception and lets the room deliver it,
+// rather than telling the poser separately.
 func (s *Server) cmdPose(c *ctx) {
-	if c.arg == "" {
-		c.tell("Do what?")
-		return
-	}
 	o := c.w.Get(c.who)
-	// A pose beginning with an apostrophe is possessive: ":'s
-	// hat" reads as "Igor's hat", with no space before the
-	// apostrophe.
 	sep := " "
-	if strings.HasPrefix(c.arg, "'") {
+	if isPoseSeparator(c.rest) {
 		sep = ""
 	}
-	line := o.Name + sep + c.arg
-	c.send(line)
-	if o.Location != ref.Nothing {
-		s.notifyRoom(c.w, o.Location, []ref.Ref{c.who}, "%s", line)
+	line := o.Name + sep + c.rest
+	if o.Location == ref.Nothing {
+		c.send(line)
+		return
 	}
+	s.notifyRoom(c.w, o.Location, nil, "%s", line)
 }
 
 // cmdWhisper speaks privately to someone in the same room.

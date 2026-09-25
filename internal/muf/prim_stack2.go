@@ -47,7 +47,12 @@ func init() {
 		if f.Level > 8 {
 			return nil, errf("Interp call loops not allowed.")
 		}
-		v, ok := h.Interp(f.Descr, f.Level, progV.Ref, trigV.Ref, arg.Str)
+		// INTERP does not touch match_cmdname, so the called
+		// program inherits the caller's COMMAND rather than
+		// getting one of its own. p_stack.c:1760 sets only
+		// match_args.
+		v, ok := h.Interp(f.Descr, f.Level, progV.Ref,
+			trigV.Ref, f.Vars[VarCommand].Str, arg.Str)
 		if !ok {
 			// A program that aborted, blocked or finished
 			// with an empty stack yields the empty string

@@ -190,7 +190,12 @@ type Host interface {
 	// functions rather than here.
 	Force(descr int, who Ref, command string)
 	Kill(pid int) bool
-	RunMUF(descr int, player, prog Ref, arg string) (string, error)
+	// RunMUF's perms is what the run is attributed to and becomes
+	// the program's TRIGGER, and how is the calling context —
+	// {&how} — which upstream puts in COMMAND with "(MPI)"
+	// after it.
+	RunMUF(descr int, player, prog, perms Ref,
+		how, arg string) (string, error)
 	// Delay schedules a message to be evaluated later, for
 	// {delay}.
 	Delay(descr int, player, what, perms Ref, seconds int, text string, blessed bool)

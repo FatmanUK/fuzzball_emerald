@@ -11,6 +11,10 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
+// noop is a round trip through the world goroutine, which is what
+// makes it safe to read what a command or a connection produced.
+func noop(*world.World) {}
+
 // TestRestrictReportsAndSets covers do_restrict's three answers,
 // including the one that looks like an oversight: "on" and "off" are
 // compared case-sensitively, so "@restrict ON" reports.
@@ -69,11 +73,20 @@ func TestRestrictShutsOutMortals(t *testing.T) {
 	h.out()
 
 	// The banner says so before anyone types anything.
+	//
+	// Connect returns as soon as the descriptor exists — the
+	// transport needs it before the banner is written — so the
+	// banner is still being sent on the world goroutine. A round
+	// trip through the engine is what makes it safe to drain;
+	// without it this test passed about four times in five.
 	d, err := h.s.Connect(session.TransportLine, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { d.Close() })
+	if err := h.engine.Do(ctx, noop); err != nil {
+		t.Fatal(err)
+	}
 	if got := drainDescriptor(d); !strings.Contains(got,
 		"maintenance mode") {
 		t.Errorf("the banner did not mention maintenance:\n%s", got)
@@ -81,7 +94,7 @@ func TestRestrictShutsOutMortals(t *testing.T) {
 
 	// And a correct password is still refused.
 	h.s.Input(d, "connect Mortal hunter2")
-	if err := h.engine.Do(ctx, func(*world.World) {}); err != nil {
+	if err := h.engine.Do(ctx, noop); err != nil {
 		t.Fatal(err)
 	}
 	got := drainDescriptor(d)
@@ -99,9 +112,12 @@ func TestRestrictShutsOutMortals(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { d2.Close() })
+	if err := h.engine.Do(ctx, noop); err != nil {
+		t.Fatal(err)
+	}
 	drainDescriptor(d2)
 	h.s.Input(d2, "connect Wizard secret")
-	if err := h.engine.Do(ctx, func(*world.World) {}); err != nil {
+	if err := h.engine.Do(ctx, noop); err != nil {
 		t.Fatal(err)
 	}
 	if d2.Player == ref.Nothing {

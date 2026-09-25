@@ -14,23 +14,17 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 	}
 	c.w.Used(exit)
 
-	if len(e.Dest) == 0 {
-		if hasMesg(c.w, exit, propFail) {
-			s.execOrNotifyProp(c.w, c.d.ID, c.who, exit,
-				propFail, "(@Fail)")
-		} else {
-			c.tell("That exit doesn't go anywhere.")
-		}
-		return
-	}
-
-	// could_doit gates every other kind of exit traversal: its
-	// own @lock, and — when the exit does not sit directly in a
-	// room — the destination-reachability rules (JUMP_OK, GUEST
-	// rooms, BUILDER sources, secure_teleport). The
-	// already-handled "no destination at all" case above is
-	// could_doit's own first check, kept separate so its
-	// existing, differently-worded message is untouched.
+	// could_doit gates every kind of exit traversal, the
+	// no-destination case included: its own @lock, and — when
+	// the exit does not sit directly in a room — the
+	// destination-reachability rules (JUMP_OK, GUEST rooms,
+	// BUILDER sources, secure_teleport).
+	//
+	// An unlinked exit used to be handled separately and answered
+	// "That exit doesn't go anywhere.", which was invented here.
+	// Upstream does not special-case it at all: the destination
+	// count is could_doit's own first check, so an unlinked exit
+	// gets the one default that every other failure gets.
 	if !couldDoit(s, c.w, c.d.ID, 1, c.who, exit) {
 		s.exitFailMessages(c, exit)
 		return
@@ -89,28 +83,26 @@ func (s *Server) exitFailMessages(c *ctx, exit ref.Ref) {
 	}
 }
 
-// moveTo relocates a player and narrates the arrival and departure.
+// moveTo relocates a player, showing the exit's drop messages before
+// enter_room narrates the move itself.
+//
+// Upstream's own order: do_move prints @drop and @odrop and *then*
+// calls enter_room, so a message about arriving is read before "has
+// arrived" and before the look. Emerald had it the other way round.
 func (s *Server) moveTo(w *world.World, descr int,
 	who, dest, via ref.Ref) {
+
 	o := w.Get(who)
-	from := o.Location
-
-	if from != ref.Nothing {
-		s.notifyRoom(w, from, []ref.Ref{who}, "%s has left.", o.Name)
-	}
-	if err := w.MoveTo(who, dest); err != nil {
-		s.notify(w, who, "You can't go that way.")
-		return
-	}
-	s.notifyRoom(w, dest, []ref.Ref{who}, "%s has arrived.", o.Name)
-
 	if via != ref.Nothing {
 		s.execOrNotifyProp(w, descr, who, via, propDrop,
 			"(@Drop)")
-		s.parseOProp(w, descr, who, dest, via, propODrop,
-			o.Name, "(@Odrop)")
+		// A DARK player announces nothing to the room.
+		if o.Flags&ref.Dark == 0 {
+			s.parseOProp(w, descr, who, dest, via,
+				propODrop, o.Name, "(@Odrop)")
+		}
 	}
-	s.lookHere(w, descr, who)
+	s.enterRoom(w, descr, who, dest, via)
 }
 
 // cmdGo moves through a named exit.

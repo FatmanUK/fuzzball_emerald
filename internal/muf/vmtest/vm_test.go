@@ -172,7 +172,8 @@ func (h *fakeHost) ParsePropEx(ref.Ref, string, []muf.MPIVar, bool) (string, []m
 	return "", nil, nil
 }
 
-func (h *fakeHost) Interp(int, int, ref.Ref, ref.Ref, string) (muf.Value, bool) {
+func (h *fakeHost) Interp(int, int, ref.Ref, ref.Ref,
+	string, string) (muf.Value, bool) {
 	return muf.Value{}, false
 }
 

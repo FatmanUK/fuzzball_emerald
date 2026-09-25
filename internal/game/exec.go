@@ -74,7 +74,7 @@ func (s *Server) execOrNotify(w *world.World, descr int,
 
 	if !strings.HasPrefix(message, "@") {
 		s.send(w, player, s.evalMPI(w, descr, player, thing,
-			message, blessed, mpi.Private))
+			message, whatcalled, blessed, mpi.Private))
 		return
 	}
 
@@ -108,7 +108,8 @@ func (s *Server) execOrNotify(w *world.World, descr int,
 	// them. The program does every notification itself: this adds
 	// no text of its own, not even when it produces none.
 	s.runMesgProgram(w, descr, player, thing, prog, whatcalled,
-		s.evalMPI(w, descr, player, thing, args, blessed, mpi.Private))
+		s.evalMPI(w, descr, player, thing, args, whatcalled,
+			blessed, mpi.Private))
 }
 
 // runMesgProgram runs the program a message property named.
@@ -232,7 +233,8 @@ func (s *Server) parseOProp(w *world.World, descr int,
 	}
 	// MPI_ISPUBLIC is zero upstream: public is simply the absence
 	// of Private, which is what MesgType.Public reads back.
-	text := s.evalMPI(w, descr, player, thing, v.Str, v.Blessed, 0)
+	text := s.evalMPI(w, descr, player, thing, v.Str, whatcalled,
+		v.Blessed, 0)
 	text = muf.PronounSub(&mufHost{s: s, w: w, caller: player},
 		player, text)
 	if text == "" {
@@ -269,22 +271,24 @@ func prefixMessage(text, prefix string) string {
 	return b.String()
 }
 
-// hasPrefixPose reports whether a line already carries the prefix,
-// which upstream tests by requiring a pose separator or the end of
-// the line straight after it.
+// hasPrefixPose reports whether a line already carries the prefix.
+//
+// Upstream wants a pose separator after it *or* the end of the line:
+// the two are tested separately, because is_valid_pose_separator
+// itself says no to a NUL. do_pose relies on that — an empty pose
+// gets its space.
 func hasPrefixPose(line, prefix string) bool {
 	if !strings.HasPrefix(line, prefix) {
 		return false
 	}
-	return isPoseSeparator(line[len(prefix):])
+	rest := line[len(prefix):]
+	return rest == "" || isPoseSeparator(rest)
 }
 
-// isPoseSeparator is is_valid_pose_separator on the first byte of s,
-// treating the end of the string as one — upstream's test admits a
-// trailing NUL beside the separators themselves.
+// isPoseSeparator is is_valid_pose_separator on the first byte of s.
 func isPoseSeparator(s string) bool {
 	if s == "" {
-		return true
+		return false
 	}
 	switch s[0] {
 	case ' ', '\'', ',', '-':

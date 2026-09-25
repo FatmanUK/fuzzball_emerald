@@ -167,9 +167,17 @@ func (h *mpiHost) Kill(pid int) bool {
 // left on its stack, rendered as text. It is INTERP's own
 // nested-frame path, since the two do the same thing from different
 // languages.
-func (h *mpiHost) RunMUF(descr int, player, prog mpi.Ref, arg string) (string, error) {
+func (h *mpiHost) RunMUF(descr int, player, prog, perms mpi.Ref,
+	how, arg string) (string, error) {
+
 	mh := &mufHost{s: h.s, w: h.w, caller: ref.Ref(player)}
-	v, ok := mh.Interp(descr, 1, ref.Ref(prog), ref.Ref(player), arg)
+	// The trigger is the evaluation's *permissions* object rather
+	// than the player: mfuns2.c:2680 passes perms as interp's
+	// source. And COMMAND is the calling context with "(MPI)"
+	// after it, which is how a program can tell it was reached
+	// from a property rather than typed.
+	v, ok := mh.Interp(descr, 1, ref.Ref(prog), ref.Ref(perms),
+		how+"(MPI)", arg)
 	if !ok {
 		return "", nil
 	}

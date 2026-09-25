@@ -37,6 +37,10 @@ type Server struct {
 
 	// started is when the server came up, for uptime.
 	started time.Time
+	// lookDepth is enter_room's donelook counter: an autolook
+	// command that moves the player again would otherwise not
+	// stop.
+	lookDepth int
 	// wizOnly is upstream's wizonly_mode: while it is set, only a
 	// true wizard may log in. It is deliberately not persisted
 	// — a maintenance window that survived a restart would be
@@ -335,7 +339,7 @@ func puppetRelay(s *Server, w *world.World, target ref.Ref) (ref.Ref, string, bo
 		// — because the text is being relayed rather than
 		// triggered by anyone in particular.
 		got := s.evalMPI(w, -1, target, target, v.Str,
-			v.Blessed, mpi.Private)
+			"(@Pecho)", v.Blessed, mpi.Private)
 		if got != "" {
 			prefix = got + " "
 		}
@@ -475,4 +479,18 @@ func idleFor(d time.Duration) string {
 	default:
 		return itoa(int(d.Hours()/24)) + "d"
 	}
+}
+
+// fullCommand is upstream's full_command (game.c:677): the line after
+// the command word, with exactly *one* character skipped.
+//
+// It is not trimCommand's argument. That one is arg1, which upstream
+// trims at both ends; this keeps whatever follows the single space,
+// which is what say and pose print back.
+func fullCommand(line string) string {
+	i := strings.IndexAny(line, " \t")
+	if i < 0 {
+		return ""
+	}
+	return line[i+1:]
 }
