@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **30 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **25 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -71,10 +71,10 @@ and the compiler could probably be handed what it needs.
 
 ---
 
-## `muckhelp.html` — 30 commands missing
+## `muckhelp.html` — 25 commands missing
 
-Upstream dispatches about 112 commands; Emerald has 82 names covering
-82 of them, and 30 are absent. What is missing is **commands, not
+Upstream dispatches about 112 commands; Emerald has 87 names covering
+87 of them, and 25 are absent. What is missing is **commands, not
 engine**: the properties, locks and primitives behind most of these
 already work, and what is not there is the verb that sets them.
 
@@ -109,15 +109,14 @@ property writer, with its own type syntax.
 ### Building and ownership
 
     @attach  @clone  @contents  @entrances  @owned  @register
-    @relink  @sweep  @trace
+    @relink  @sweep
 
 ### Wizard
 
-    @bless  @unbless  @debug  @examine  @memory  @uncompile
-    @usage
+    @bless  @unbless  @debug  @examine  @memory  @usage
 
-`@armageddon`, `@restart`, `@restrict`, `@teledump`, `@tops` and
-`@wall` are also absent. `@reconfiguressl` is **deliberately** absent:
+`@armageddon`, `@restart`, `@restrict` and `@teledump` are also
+absent. `@reconfiguressl` is **deliberately** absent:
 TLS is configured from the environment, because a TLS-only server
 cannot read its listener configuration out of a database it has not
 opened.
@@ -131,8 +130,7 @@ that drive it over MCP are missing.
 
 ### Basics
 
-    put  give  score  gripe  disembark  leave  hand  uptime
-    throw  goto  read
+    put  give  gripe  disembark  leave  hand  throw  goto  read
 
 `throw`, `goto` and `read` are upstream's alternate spellings of
 `drop`, `go` and `look`. They are not one-line aliases, though: they

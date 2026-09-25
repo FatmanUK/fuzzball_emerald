@@ -52,16 +52,7 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		var parts []string
-		for _, u := range longUnits {
-			if d < u.secs {
-				continue
-			}
-			n := d / u.secs
-			d %= u.secs
-			parts = append(parts, itoa(n)+" "+u.name+plural(n))
-		}
-		return strings.Join(parts, ", "), nil
+		return timefmt.Long(d), nil
 	})
 
 	register("CONVTIME", func(_ *Env, _ *Func, args []string) (string, error) {
@@ -430,22 +421,6 @@ func init() {
 
 // mufCallLimit is upstream's mpi_muf_call_levels bound.
 const mufCallLimit = 18
-
-// longUnits is timestr_long's own scale. A year is 365.24 days and a
-// month a twelfth of that, neither of which is a calendar month —
-// this is arithmetic on a duration, not on a date.
-var longUnits = [7]struct {
-	name string
-	secs int
-}{
-	{"year", 31556736},
-	{"month", 2621376},
-	{"week", 604800},
-	{"day", 86400},
-	{"hour", 3600},
-	{"minute", 60},
-	{"second", 1},
-}
 
 // splitDuration breaks a count of seconds into days, hours, minutes
 // and seconds.
