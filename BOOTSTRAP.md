@@ -33,9 +33,11 @@ that have aged worst in the C:
   `@credits`, with the texts in Postgres and a configurable welcome banner.
 - **The configurator is in**: `cmd/fbeconfig`, an optional web interface over
   the same database, read-only while the server runs.
-- **What is not done is commands.** `commandTable` carries all 109 names
-  Fuzzball dispatches; 62 have handlers, 4 are declined outright, and the
-  rest resolve and say they are not implemented yet. See
+- **The command gap that needed no new engine is closed.** `commandTable`
+  carries every name Fuzzball dispatches; 92 have handlers, 4 are declined
+  outright, and the remaining 20 resolve and say they are not implemented
+  yet. What is left needs machinery — `enter_room`, registration, the
+  compiler conditionals, the propqueues — rather than verbs. See
   `docs/upstream-coverage.md`, which is the audit and the authority.
 
 Two behaviours are deliberately not ported: `DEBUGGER_BREAK`'s interactive
@@ -44,51 +46,64 @@ taking over a connection's input, which nothing else in this server does.
 
 ## 2. Next Three Steps
 
-The M0–M8 plan and the help-system/configurator/audit plan are both fully
-executed. The open plan is `~/.claude/plans/rippling-roaming-backus.md`,
-rewritten as **"closing the command gap"** — about 40 of Fuzzball's ~112
-commands are missing, plus five loose ends.
+The M0–M8 plan, the help-system/configurator/audit plan, and **tranche 1 of
+`~/.claude/plans/rippling-roaming-backus.md` (S1–S12) are all fully
+executed**. That plan's recommended stopping point has been reached: the
+dispatcher is upstream's, the shared machinery exists, and every command that
+needed no new engine has landed.
 
-It runs in tranches. **Tranche 1 (S1–S12) is in progress**: fix the
-dispatcher, build the shared machinery, then close the command gap that needs
-no new engine.
+What tranche 1 actually delivered, in the order it was committed:
 
-Done so far:
-
-- **S7 — licence.** GPL-3.0, matching upstream. Also corrected three wrong
-  claims in the docs, including `CLAUDE.md` asserting `internal/boolexp` was
-  "planned and not built" when it has been in use for months.
-- **S1 — the dispatcher is ported.** See §2a; this was the largest single
-  correction in the project's history and it had to come first.
-- **S2 — declined commands** say which of four reasons applies rather than
-  "not implemented yet", which was a promise for `@memory`, `@usage`,
-  `@reconfiguressl` and `@tops`.
+- **S7 — licence.** GPL-3.0, matching upstream, plus three wrong claims
+  corrected in the docs.
+- **S1 — the dispatcher is ported.** See §2a; the largest single correction
+  in the project's history, and it had to come first.
+- **S2 — declined commands** say which of four reasons applies.
 - **S3 — `match_controlled`** gives its real refusal for the five commands
-  upstream routes through it. Four others keep the old message deliberately,
-  because their divergence is behavioural: `@recycle`, for one, is currently
-  *more permissive* than upstream.
+  upstream routes through it.
+- **S4 — MPI message types.** `mpi.Env.Type` is upstream's `mesgtyp`, with
+  the `{tell}`/`{otell}` listener gate that actually has teeth.
+- **S5 — `find_uid`, all four branches**, with `muf.Frame.Perms` set at
+  every launch site. This found the SUPPLICANT bug: `RunLock` answered with
+  the *locked object* where upstream answers with whoever is being tested.
+- **S6 — `exec_or_notify`.** A message property beginning `@` names a MUF
+  program. Emerald printed it as text, which was a live bug in `look`,
+  movement and the fail/succeed messages.
+- **`look` restructured.** The golden case written for S6 failed on its
+  first line: only a room shows a name line upstream, the contents heading
+  differs by type, a HAVEN thing hides its contents, a room with no
+  description says nothing, and `look_room` runs `can_doit`. Nothing in the
+  harness had ever looked at anything but a room.
+- **S8 — ten message setters**, table-driven from `set_standard_property`,
+  absorbing `cmdDescribe`.
+- **S9 — `score`, `uptime`, `@trace`, `@uncompile`, `@wall`.**
+- **S10–S11 — `@restrict` and `gripe`**, the latter deciding that complaints
+  are rows in Postgres with a configurator page, and the game holding a
+  bounded tail in memory.
+- **S12 — `@owned`, `@contents`, `@entrances`**, and `@find` done properly:
+  the pattern wrapped in `*…*`, `lookup_cost` charged, and an invented
+  200-result cap removed.
 
-Still to do in tranche 1:
+**The next three steps are in
+`~/.claude/plans/movement-containment-registration.md`**, which is tranche 2
+re-scoped against what tranche 1 actually found:
 
-4. **S4 — MPI message-type flags.** `mpi.Env` models only `Blessed`;
-   upstream carries `ISPRIVATE`/`ISPUBLIC`/`ISLISTENER`/`ISLOCK` too, and
-   `exec_or_notify`, the propqueues and the `{tell}`/`{otell}` gates all read
-   them.
-5. **S5 — `muf.Frame.Perms`** (upstream's `fr->perms`) set at every launch
-   site, then the two missing `progUID` branches. The one step with a
-   security-shaped failure mode.
-6. **S6 — `exec_or_notify`.** A message property beginning `@` names a MUF
-   program to run. Emerald prints it as literal text, which is a **live bug**
-   in `look` today, not something the setters create. Needs S4 and S5.
-7. **S8 — the message property setters**, table-driven from
-   `set_standard_property`, absorbing `cmdDescribe`. Must follow S6.
-8. **S9–S12** — the trivial verbs, `@restrict`, `gripe`, and the checkflags
-   searches (`@owned`, `@contents`, `@entrances`, and fixing `@find`).
+1. **The two divergences tranche 1 found and deferred**: `trimCommand` trims
+   the whole argument where upstream keeps `full_command` untouched, and
+   `runProgram` puts the argument in the COMMAND variable where upstream puts
+   the verb. Both sit in code group B is about to rewrite.
+2. **`enter_room`** (`move.c:123`), in five pieces — the loop check and the
+   HOME ladder, the five-part notification gate, the STICKY drop-to flush,
+   autolook, the penny find. **None of `quiet_moves`, `autolook_cmd`,
+   `penny_rate` or `secure_thing_movement` is read anywhere in
+   `internal/game`**: all four load and all four do nothing.
+3. **`do_get` and `do_drop`**, then `leave`/`disembark` and the
+   `put`/`throw`/`hand` entries. `get` and `drop` are Emerald's own
+   inventions — twenty lines each against upstream's ninety — and they are
+   the largest invented behaviour left in the server.
 
-Then tranche 2 (movement, containment, registration, the compiler
-conditionals), tranche 3 (the propqueues — the only work that changes how an
-existing world behaves), and tranche 4 (ANSI gating, the remaining
-divergences).
+Then tranche 3 (the propqueues — the only work that changes how an existing
+world behaves) and tranche 4 (ANSI gating).
 
 Smaller things still open, each self-contained:
 
@@ -98,11 +113,25 @@ Smaller things still open, each self-contained:
 - **Four commands' permission refusals** — `@link`, `@unlink`, `@teleport`,
   `@recycle` — are structurally divergent, not just differently worded. See
   `resolveControlled`'s doc comment, which names all four.
+- **`@teleport`'s confirmation** says "Teleported." where upstream reports
+  what moved where. Found by the `look` golden case; it belongs with
+  `do_teleport`, whose control rules diverge structurally anyway.
+- **`trimCommand` trims the whole argument.** Upstream keeps `full_command`
+  untouched and trims only `arg1`/`arg2`, so `say`, `pose`, `page` and
+  `gripe` all lose leading whitespace here. Found by the gripe golden case.
+- **`runProgram` puts the argument in the COMMAND variable**, where upstream
+  puts the verb: `match_cmdname` and `match_args` are two different strings
+  and `SetReserved` makes them one.
 - **ANSI output** is not gated. Upstream strips it unless the player has
   `CHOWN_OK`, whose user-facing name is COLOR.
-- **`ProgUID`/`find_uid` is approximated** — two of four branches.
 - **`home` is matched as a command**, where upstream reaches it inside
   `can_move` gated by `enable_home`, so it is a *direction*.
+- **The four `_sys/` properties** upstream writes on #0 at boot —
+  `startuptime`, `maxpennies`, `dumpinterval`, `max_connects` — are not
+  written, so MUF reading them gets nothing. `uptime` works because the
+  server keeps its own start time.
+- **Look traps** (the `_details` propdir) and the **LOOK propqueue** are the
+  two parts of `do_look_at` still missing.
 
 ### How it got here
 
@@ -175,6 +204,28 @@ uses `strcmp` (so `@SHUTDOWN` is not `@shutdown`), `strcasecmp`,
 `move` has no `Matched()` at all and accepts trailing text — `movex` runs it.
 A command's minimum abbreviation is *how deep the switch commits before
 reaching it*, which is what `min` in the table records.
+
+**A message property beginning `@` is a *call*, not text.** `exec_or_notify`
+(`property.c:2454`) runs the program it names — `@123 args` or `@$reg args` —
+and the rest of the line is MPI-evaluated into the program's *stack argument*
+while COMMAND gets the caller context. When the `@` names nothing runnable,
+the remainder prints **unparsed**; upstream's own comment calls that a crazy
+edge case and leaves it. The `o`-messages cannot do any of this.
+
+**`printf("%s", NULL)` is a compatibility surface.** Reporting a message
+property that is not set prints "`(null)`" upstream — `GETMESG` hands a NULL
+straight to a `%s` and glibc renders it that way. That is undefined behaviour
+with a stable-looking output, not a wording anyone chose, so Emerald prints
+nothing and the golden case masks the line. Not everything the oracle emits is
+worth reproducing; the test is whether it was *decided*.
+
+**`look` is a different shape per type.** Only `look_room` prints a name line;
+everything else goes through `look_simple`. The contents heading is
+`Contents:`, `Carrying:` or `Contains:` by type, a HAVEN thing shows none, and
+a room with no description prints nothing where anything else gets the
+nothing-special message. The harness had never looked at a non-room, so this
+sat undetected through every golden run until a case for something else
+tripped over it — **write the golden case for the neighbouring behaviour too**.
 
 **`procQueue` holds the currently-running foreground process**, unlike
 upstream's `tqhead`. Every count and every wildcard match over it has to
@@ -430,6 +481,15 @@ message explains its own findings.
 
 | Commit | Summary |
 |---|---|
+| `e0a06f2` | `@owned`, `@contents`, `@entrances`, and `@find` done properly — `*…*` wrapping, `lookup_cost` charged, an invented 200-result cap gone. `internal/muf`'s `FlagCheck` exported rather than ported twice. |
+| `ee20174` | `@restrict`, and `gripe` — complaints are rows in Postgres with a configurator page, and a snapshot **appends** them rather than replacing, the only place it does that. |
+| `3c26240` | `score`, `uptime`, `@trace`, `@uncompile`, `@wall`. `timestr_long` moved from `internal/mpi` to `internal/timefmt` rather than written twice. |
+| `a3d7a70` | Ten message setters, table-driven from `set_standard_property`; `@describe` absorbed and its label corrected to upstream's. |
+| `83ce923` | **`look` restructured.** Only a room shows a name line; the contents heading differs by type; HAVEN hides contents; a room with no description says nothing; `look_room` runs `can_doit`. Nothing in the harness had looked at anything but a room. |
+| `1c80888` | `exec_or_notify`: a message property beginning `@` names a MUF program. Emerald printed it, which was a live bug in `look`, movement and the fail/succeed messages. |
+| `924774c` | Fixed: `SUPPLICANT` answered with the locked object where upstream answers with whoever is being tested. Found while doing `find_uid`. |
+| `6edc616` | `find_uid`'s other two branches, with `muf.Frame.Perms` set at every launch site. |
+| `695c3b7` | `mpi.Env.Type` is upstream's `mesgtyp`, with the `{tell}`/`{otell}` listener gate. |
 | `923c565` | `match_controlled`'s real refusal for the five commands that use it; four others stay divergent, and the doc comment says why each does. |
 | `e1ecf01` | Declined commands say which reason applies instead of "not yet". |
 | `329a016` | **Ported Fuzzball's command dispatcher.** The old unique-prefix resolver was a different algorithm and diverged both ways: `@to` worked here and not upstream, bare `e` worked upstream and not here. |
@@ -455,14 +515,14 @@ they are read-only reference.
 
 ## 6. Testing Status
 
-All green as of `4c5b8ed`:
+All green as of `e0a06f2`:
 
 - `go vet ./...` — clean
 - `make fmt-check` — clean (gofmt plus the 70-column reflow)
 - `make width-check` — no new line over 70 columns
 - `make test` (`go test -race ./...` against a scratch Postgres schema) —
-  clean, no data races, across ~610 test functions
-- `make golden` — all 12 differential suites against a live Fuzzball 7
+  clean, no data races, across ~650 test functions
+- `make golden` — all 18 differential suites against a live Fuzzball 7
   container:
 
   | Suite | Covers |
@@ -479,6 +539,12 @@ All green as of `4c5b8ed`:
   | `TestDebugTraceMatchesFuzzball` | the MUF debugger, by source line |
   | `TestMCPNegotiationMatchesFuzzball` | MCP 2.1 negotiation |
   | `TestSanityMatchesFuzzball` | `@sanity`/`@sanfix` |
+  | `TestExecOrNotifyMatchesFuzzball` | a message property that names a MUF program, all six branches of `exec_or_notify` |
+  | `TestLookMatchesFuzzball` | `look` per type: which get a name line, the three contents headings, HAVEN |
+  | `TestMessageSettersMatchFuzzball` | the eleven `set_standard_property` commands, their labels and both trims |
+  | `TestMiscCommandsMatchFuzzball` | `score`, `uptime`, `@trace`, `@uncompile`, `@wall` |
+  | `TestRestrictAndGripeMatchFuzzball` | `@restrict`'s three answers, `gripe` filed and read back |
+  | `TestSearchCommandsMatchFuzzball` | the four checkflags searches, every type and flag filter, all six display modes |
 
 - Primitive coverage: **412 of 417, 0 missing**
   (`go test -run TestPrimitiveCoverage -v ./internal/muf/`)
