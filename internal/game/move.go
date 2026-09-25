@@ -15,8 +15,9 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 	c.w.Used(exit)
 
 	if len(e.Dest) == 0 {
-		if msg := s.mesgProp(c.w, c.who, exit, propFail); msg != "" {
-			c.send(msg)
+		if hasMesg(c.w, exit, propFail) {
+			s.execOrNotifyProp(c.w, c.d.ID, c.who, exit,
+				propFail, "(@Fail)")
 		} else {
 			c.tell("That exit doesn't go anywhere.")
 		}
@@ -55,20 +56,18 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 	}
 
 	s.exitMessages(c, exit)
-	s.moveTo(c.w, c.who, dest, exit)
+	s.moveTo(c.w, c.d.ID, c.who, dest, exit)
 }
 
 // exitMessages shows an exit's success messages to the player and the
 // room.
 func (s *Server) exitMessages(c *ctx, exit ref.Ref) {
-	if msg := s.mesgProp(c.w, c.who, exit, propSucc); msg != "" {
-		c.send(msg)
-	}
-	if msg := s.mesgProp(c.w, c.who, exit, propOSucc); msg != "" {
-		o := c.w.Get(c.who)
-		if o.Location != ref.Nothing {
-			s.notifyRoom(c.w, o.Location, []ref.Ref{c.who}, "%s %s", o.Name, msg)
-		}
+	s.execOrNotifyProp(c.w, c.d.ID, c.who, exit, propSucc,
+		"(@Succ)")
+	o := c.w.Get(c.who)
+	if o.Location != ref.Nothing {
+		s.parseOProp(c.w, c.d.ID, c.who, o.Location, exit,
+			propOSucc, o.Name, "(@Osucc)")
 	}
 }
 
@@ -77,21 +76,22 @@ func (s *Server) exitMessages(c *ctx, exit ref.Ref) {
 // message, or "You can't go that way." if it has none, plus @ofail to
 // the room.
 func (s *Server) exitFailMessages(c *ctx, exit ref.Ref) {
-	if msg := s.mesgProp(c.w, c.who, exit, propFail); msg != "" {
-		c.send(msg)
+	if hasMesg(c.w, exit, propFail) {
+		s.execOrNotifyProp(c.w, c.d.ID, c.who, exit, propFail,
+			"(@Fail)")
 	} else {
 		c.tell("You can't go that way.")
 	}
-	if msg := s.mesgProp(c.w, c.who, exit, propOFail); msg != "" {
-		o := c.w.Get(c.who)
-		if o.Location != ref.Nothing {
-			s.notifyRoom(c.w, o.Location, []ref.Ref{c.who}, "%s %s", o.Name, msg)
-		}
+	o := c.w.Get(c.who)
+	if o.Location != ref.Nothing {
+		s.parseOProp(c.w, c.d.ID, c.who, o.Location, exit,
+			propOFail, o.Name, "(@Ofail)")
 	}
 }
 
 // moveTo relocates a player and narrates the arrival and departure.
-func (s *Server) moveTo(w *world.World, who, dest, via ref.Ref) {
+func (s *Server) moveTo(w *world.World, descr int,
+	who, dest, via ref.Ref) {
 	o := w.Get(who)
 	from := o.Location
 
@@ -105,14 +105,12 @@ func (s *Server) moveTo(w *world.World, who, dest, via ref.Ref) {
 	s.notifyRoom(w, dest, []ref.Ref{who}, "%s has arrived.", o.Name)
 
 	if via != ref.Nothing {
-		if msg := s.mesgProp(w, who, via, propDrop); msg != "" {
-			s.send(w, who, msg)
-		}
-		if msg := s.mesgProp(w, who, via, propODrop); msg != "" {
-			s.notifyRoom(w, dest, []ref.Ref{who}, "%s %s", o.Name, msg)
-		}
+		s.execOrNotifyProp(w, descr, who, via, propDrop,
+			"(@Drop)")
+		s.parseOProp(w, descr, who, dest, via, propODrop,
+			o.Name, "(@Odrop)")
 	}
-	s.lookHere(w, who)
+	s.lookHere(w, descr, who)
 }
 
 // cmdGo moves through a named exit.
@@ -148,7 +146,7 @@ func (s *Server) cmdHome(c *ctx) {
 		return
 	}
 	c.tell("There's no place like home...")
-	s.moveTo(c.w, c.who, home, ref.Nothing)
+	s.moveTo(c.w, c.d.ID, c.who, home, ref.Nothing)
 }
 
 // cmdGet picks something up.

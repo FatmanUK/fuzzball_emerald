@@ -320,8 +320,12 @@ func puppetRelay(s *Server, w *world.World, target ref.Ref) (ref.Ref, string, bo
 	prefix := o.Name + "> "
 	if v, ok := w.GetProp(target, propPuppetEcho); ok &&
 		v.Type == props.String {
-		got := s.evalMPI(w, target, target, v.Str, v.Blessed,
-			mpi.Private)
+		// Upstream evaluates this one with no descriptor at
+		// all — do_parse_prop(-1, ...) at interface.c:4722
+		// — because the text is being relayed rather than
+		// triggered by anyone in particular.
+		got := s.evalMPI(w, -1, target, target, v.Str,
+			v.Blessed, mpi.Private)
 		if got != "" {
 			prefix = got + " "
 		}

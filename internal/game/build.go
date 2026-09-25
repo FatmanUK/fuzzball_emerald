@@ -659,7 +659,7 @@ func (s *Server) cmdTeleport(c *ctx) {
 	}
 
 	if target == c.who {
-		s.moveTo(c.w, c.who, dest, ref.Nothing)
+		s.moveTo(c.w, c.d.ID, c.who, dest, ref.Nothing)
 		return
 	}
 	if err := c.w.MoveTo(target, dest); err != nil {

@@ -48,7 +48,7 @@ func getMesg(w *world.World, r ref.Ref, path string) string {
 // cmdLook shows the room, or an object in it.
 func (s *Server) cmdLook(c *ctx) {
 	if c.arg == "" {
-		s.lookHere(c.w, c.who)
+		s.lookHere(c.w, c.d.ID, c.who)
 		return
 	}
 	target := match.New(c.w, c.who, c.arg).Everything().Result()
@@ -58,12 +58,12 @@ func (s *Server) cmdLook(c *ctx) {
 	case ref.Ambiguous:
 		c.tell("I don't know which one you mean.")
 	default:
-		s.lookAt(c.w, c.who, target)
+		s.lookAt(c.w, c.d.ID, c.who, target)
 	}
 }
 
 // lookHere shows the room a player is standing in.
-func (s *Server) lookHere(w *world.World, who ref.Ref) {
+func (s *Server) lookHere(w *world.World, descr int, who ref.Ref) {
 	o := w.Get(who)
 	if o == nil {
 		return
@@ -72,11 +72,12 @@ func (s *Server) lookHere(w *world.World, who ref.Ref) {
 		s.notify(w, who, "You are nowhere.")
 		return
 	}
-	s.lookAt(w, who, o.Location)
+	s.lookAt(w, descr, who, o.Location)
 }
 
 // lookAt describes one object to a player.
-func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
+func (s *Server) lookAt(w *world.World, descr int,
+	who, target ref.Ref) {
 	o := w.Get(target)
 	if o == nil {
 		s.notify(w, who, "I don't see that here.")
@@ -85,11 +86,15 @@ func (s *Server) lookAt(w *world.World, who, target ref.Ref) {
 
 	s.send(w, who, unparse(w, who, target))
 
-	desc := s.mesgProp(w, who, target, propDesc)
-	if desc == "" {
-		desc = w.Tune.String("description_default")
+	// look_simple: a description whose value starts with '@'
+	// names a program to run rather than text to print, which is
+	// what execOrNotify is for.
+	if hasMesg(w, target, propDesc) {
+		s.execOrNotifyProp(w, descr, who, target, propDesc,
+			"(@Desc)")
+	} else {
+		s.send(w, who, w.Tune.String("description_default"))
 	}
-	s.send(w, who, desc)
 
 	w.Used(target)
 

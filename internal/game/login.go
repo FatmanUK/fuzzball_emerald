@@ -285,7 +285,7 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 
 	s.showMOTD(w, d)
 	s.announceConnect(w, d, alreadyOn)
-	s.lookHere(w, player)
+	s.lookHere(w, d.ID, player)
 	s.warnInteractive(d)
 }
 
