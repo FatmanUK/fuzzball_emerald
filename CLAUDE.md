@@ -471,6 +471,32 @@ description and the contents and stops; a world that wants an "obvious exits"
 line supplies it from its own programs, as the starter world does. An earlier
 version of this printed one, which made every look diverge.
 
+**A message property beginning `@` names a MUF program.** `_/de`, `_/sc`,
+`_/fl` and `_/dr` are run rather than printed when their value starts with
+`@` — `@123 args` or `@$registered args` — which is `exec_or_notify`
+(`property.c:2454`), ported in `internal/game/exec.go`. The rest of the line
+is MPI-evaluated and becomes the program's *stack argument*, while COMMAND
+gets the caller context, `(@Desc)` or `(@Succ)`; they are upstream's
+`match_args` and `match_cmdname`, two different strings that `SetReserved`
+makes one, so a launch site has to overwrite the pushed value. When the `@`
+names nothing runnable the rest of the line prints **unparsed**, and the
+nothing-special message stands in when there is no rest. The `o` messages
+cannot do any of this: they go through `parse_oprop`, which is public MPI,
+pronoun substitution and `prefix_message` — which suppresses a prefix the
+line already carries, and omits the space before a pose separator.
+
+**`look` is a different shape per type, and only a room shows a name line.**
+`do_look_at` (`look.c:265`) switches: a room goes through `look_room` — name,
+description, `can_doit`'s success messages, then `Contents:` — and everything
+else through `look_simple`, which prints the description alone. The headings
+differ too (`Carrying:` for a player, `Contains:` for a thing, suppressed
+entirely for a HAVEN thing), as do the three permission refusals, each naming
+the test it failed. A room with **no** description prints nothing, where
+anything else gets the nothing-special message. `look.c`'s own `can_see` is
+also not `controls`: a program shows only to whoever controls it or if it is
+a VEHICLE, exits and rooms are never listed, and a STICKY player sees nothing
+extra in the dark. Look traps — the `_details` propdir — are not ported.
+
 **Command resolution is upstream's dispatcher, ported.**
 `internal/game/dispatch_table.go` is every command Fuzzball 7 dispatches, in
 the order its nested switch visits them; `dispatch.go` resolves by taking the

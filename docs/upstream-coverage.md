@@ -191,6 +191,31 @@ fixed rather than recorded:
 `@unlock` was added at the same time, since it is two lines and its
 absence was being papered over by the help text.
 
+Two more turned up while porting the message machinery, and both were
+live rather than latent:
+
+- **A description beginning `@` printed instead of running.** That
+  spelling names a MUF program upstream — `exec_or_notify`,
+  `property.c:2454` — and Emerald evaluated MPI over it and sent the
+  text, so a world using the idiom showed `@$lib-desc` to whoever
+  looked. It reached `look`, exit traversal and the fail/succeed
+  messages, every caller of what used to be `mesgProp`.
+- **Every `look` at a thing or a player printed a name line.**
+  Upstream gives one only from `look_room`; `look_simple` prints the
+  description alone. The contents heading was wrong for the same
+  reason — `Contents:` everywhere, where upstream heads a player's
+  `Carrying:` and a thing's `Contains:` — and a HAVEN thing showed
+  contents it should have kept. `internal/golden/look_test.go` now
+  pins the shape; before it, nothing in the harness looked at
+  anything but a room.
+
+Three things `do_look_at` does are still missing, and each is
+recorded rather than hidden: look traps (the `_details` propdir,
+consulted when the match finds nothing), the LOOK propqueue, and
+`@teleport`'s own wording, which reports what moved where instead of
+"Teleported." — that one belongs with `do_teleport`, whose control
+rules diverge structurally anyway.
+
 ### The permission refusals, half fixed
 
 Upstream's `match_controlled` refuses with "Permission denied. (You

@@ -170,6 +170,52 @@ func (s *Server) runMesgProgram(w *world.World, descr int,
 	}
 }
 
+// canDoit is predicates.c's can_doit: could_doit, followed by
+// whichever of the four messages the outcome calls for.
+//
+// The default failure message is only used when the caller supplies
+// one. look_room passes none, so a room locked against whoever is
+// looking says nothing rather than borrowing an exit's wording.
+func (s *Server) canDoit(w *world.World, descr int,
+	who, thing ref.Ref, defaultFail string) bool {
+
+	me, o := w.Get(who), w.Get(thing)
+	if me == nil || o == nil || me.Location == ref.Nothing {
+		return false
+	}
+	zombie := me.Type() == ref.TypeThing &&
+		o.Flags&ref.Zombie != 0
+	if zombie && w.Tune.Bool("allow_zombies") &&
+		!isWizard(w, ownerOf(w, who)) {
+		s.notify(w, who, "Sorry, but zombies can't do that.")
+		return false
+	}
+
+	// A DARK player announces nothing to the room, so the "o"
+	// halves are suppressed for one.
+	quiet := me.Flags&ref.Dark != 0
+
+	if !couldDoit(s, w, descr, 1, who, thing) {
+		if hasMesg(w, thing, propFail) {
+			s.execOrNotifyProp(w, descr, who, thing,
+				propFail, "(@Fail)")
+		} else if defaultFail != "" {
+			s.notify(w, who, "%s", defaultFail)
+		}
+		if !quiet {
+			s.parseOProp(w, descr, who, me.Location,
+				thing, propOFail, me.Name, "(@Ofail)")
+		}
+		return false
+	}
+	s.execOrNotifyProp(w, descr, who, thing, propSucc, "(@Succ)")
+	if !quiet {
+		s.parseOProp(w, descr, who, me.Location, thing,
+			propOSucc, me.Name, "(@Osucc)")
+	}
+	return true
+}
+
 // parseOProp is parse_oprop: an "o" message, which is broadcast to
 // the room prefixed with the actor's name.
 //
