@@ -33,9 +33,10 @@ that have aged worst in the C:
   `@credits`, with the texts in Postgres and a configurable welcome banner.
 - **The configurator is in**: `cmd/fbeconfig`, an optional web interface over
   the same database, read-only while the server runs.
-- **What is not done is commands.** About 40 of Fuzzball's ~112 player
-  commands are missing. See `docs/upstream-coverage.md`, which is the audit
-  and the authority on this.
+- **What is not done is commands.** `commandTable` carries all 109 names
+  Fuzzball dispatches; 62 have handlers, 4 are declined outright, and the
+  rest resolve and say they are not implemented yet. See
+  `docs/upstream-coverage.md`, which is the audit and the authority.
 
 Two behaviours are deliberately not ported: `DEBUGGER_BREAK`'s interactive
 prompt, and the MPI tracer behind `{debug}`/`{debugif}`. Both would mean
@@ -43,56 +44,65 @@ taking over a connection's input, which nothing else in this server does.
 
 ## 2. Next Three Steps
 
-The plans at `~/.claude/plans/i-want-to-create-hashed-moore.md` (M0–M8) and
-`~/.claude/plans/rippling-roaming-backus.md` (the help system, the
-configurator, the audit) are **both fully executed**. There is no open plan.
-What follows is what the audit left on the table, in the order it is worth
-doing.
+The M0–M8 plan and the help-system/configurator/audit plan are both fully
+executed. The open plan is `~/.claude/plans/rippling-roaming-backus.md`,
+rewritten as **"closing the command gap"** — about 40 of Fuzzball's ~112
+commands are missing, plus five loose ends.
 
-1. **The message and lock property commands.** `@fail`, `@ofail`,
-   `@success`, `@osuccess`, `@drop`, `@odrop`, `@idescribe`, `@oecho`,
-   `@pecho`, `@propset`. These are the conspicuous half of the command gap
-   and the cheapest to close: every one sets a property `examine` already
-   prints and MUF already reads, so the work is the verb, not the engine.
-   `internal/game/build.go`'s `cmdDescribe` is the shape to copy.
+It runs in tranches. **Tranche 1 (S1–S12) is in progress**: fix the
+dispatcher, build the shared machinery, then close the command gap that needs
+no new engine.
 
-2. **The remaining commands**, in decreasing order of how often anyone will
-   miss them: `@owned`, `@contents`, `@entrances`, `@sweep`, `@register`,
-   `@relink`, `@clone`, `@attach`, `@trace`; then the wizard set (`@bless`,
-   `@unbless`, `@examine`, `@memory`, `@uncompile`, `@usage`, `@doing`,
-   `@wall`, `@restrict`); then the basics (`put`, `give`, `score`, `gripe`,
-   `uptime`, `leave`, `disembark`, `hand`). `throw`, `goto` and `read` are
-   upstream's alternate spellings of `drop`, `go` and `look` — dispatch
-   entries rather than one-line aliases, because upstream prefix-matches
-   bare commands and Emerald does not.
+Done so far:
 
-3. **The six compiler conditionals that are always false** — `$ifver`,
-   `$ifnver`, `$iflibver`, `$ifnlibver`, `$ifcancall`, `$ifncancall`
-   (`internal/muf/compiler/directive.go`). They need a live database the
-   compiler is not given, but `CANCALL?` and the program cache both exist
-   now, so the compiler can probably be handed what it needs through
-   `Options`. Deferred deliberately, not forgotten.
+- **S7 — licence.** GPL-3.0, matching upstream. Also corrected three wrong
+  claims in the docs, including `CLAUDE.md` asserting `internal/boolexp` was
+  "planned and not built" when it has been in use for months.
+- **S1 — the dispatcher is ported.** See §2a; this was the largest single
+  correction in the project's history and it had to come first.
+- **S2 — declined commands** say which of four reasons applies rather than
+  "not implemented yet", which was a promise for `@memory`, `@usage`,
+  `@reconfiguressl` and `@tops`.
+- **S3 — `match_controlled`** gives its real refusal for the five commands
+  upstream routes through it. Four others keep the old message deliberately,
+  because their divergence is behavioural: `@recycle`, for one, is currently
+  *more permissive* than upstream.
 
-Smaller things, each self-contained:
+Still to do in tranche 1:
 
-- **`@action` still aliases `@open`**, which is not upstream's behaviour:
-  `do_action` attaches an exit to a *named object* rather than to the room,
-  and says so in its own words.
-- **`resolveControlled`'s permission wording.** Upstream's `match_controlled`
-  says "Permission denied. (You don't control what was matched)"; Emerald
-  says "Permission denied." Some upstream commands reach the same point with
-  their own wording, so this needs a command-by-command comparison rather
-  than one edit.
-- **ANSI output over a live connection.** Real Fuzzball suppressed
-  `TEXTATTR`'s escape codes where Emerald sent them raw — probably a client
-  capability gate that nothing in Emerald's `NOTIFY` path checks. Not
-  specific to `TEXTATTR`.
-- **`ProgUID`/`find_uid` is approximated.** The dominant `REGUID` path is
-  covered; `STICKY`/`HAVEN`/`SETUID`/`HARDUID` are not, since they need a
-  `fr->perms` caller-stack concept nothing here has built.
-- **The repository declares no licence.** This is why the help content was
-  written fresh rather than taken from upstream's GPLv3 `.raw` files. Worth
-  settling deliberately rather than by accident.
+4. **S4 — MPI message-type flags.** `mpi.Env` models only `Blessed`;
+   upstream carries `ISPRIVATE`/`ISPUBLIC`/`ISLISTENER`/`ISLOCK` too, and
+   `exec_or_notify`, the propqueues and the `{tell}`/`{otell}` gates all read
+   them.
+5. **S5 — `muf.Frame.Perms`** (upstream's `fr->perms`) set at every launch
+   site, then the two missing `progUID` branches. The one step with a
+   security-shaped failure mode.
+6. **S6 — `exec_or_notify`.** A message property beginning `@` names a MUF
+   program to run. Emerald prints it as literal text, which is a **live bug**
+   in `look` today, not something the setters create. Needs S4 and S5.
+7. **S8 — the message property setters**, table-driven from
+   `set_standard_property`, absorbing `cmdDescribe`. Must follow S6.
+8. **S9–S12** — the trivial verbs, `@restrict`, `gripe`, and the checkflags
+   searches (`@owned`, `@contents`, `@entrances`, and fixing `@find`).
+
+Then tranche 2 (movement, containment, registration, the compiler
+conditionals), tranche 3 (the propqueues — the only work that changes how an
+existing world behaves), and tranche 4 (ANSI gating, the remaining
+divergences).
+
+Smaller things still open, each self-contained:
+
+- **`@action` still aliases `@open`.** Upstream's `do_action` attaches an exit
+  to a *named object* rather than to the room. Needs `register_object`, which
+  nothing in Emerald writes yet.
+- **Four commands' permission refusals** — `@link`, `@unlink`, `@teleport`,
+  `@recycle` — are structurally divergent, not just differently worded. See
+  `resolveControlled`'s doc comment, which names all four.
+- **ANSI output** is not gated. Upstream strips it unless the player has
+  `CHOWN_OK`, whose user-facing name is COLOR.
+- **`ProgUID`/`find_uid` is approximated** — two of four branches.
+- **`home` is matched as a command**, where upstream reaches it inside
+  `can_move` gated by `enable_home`, so it is a *direction*.
 
 ### How it got here
 
@@ -152,9 +162,19 @@ primitive. A primitive behaving oddly at low mucker level is worth checking
 against the C by hand.
 
 **A missing command is not always a silent gap.** `@chown` was absent while
-being a *prefix* of `@chown_lock`, so `lookupAtCommand` resolved it there and
-a wizard transferring ownership silently set a lock. When adding a command,
-check what its name is currently a prefix of.
+being a *prefix* of `@chown_lock`, so the old resolver sent it there and a
+wizard transferring ownership silently set a lock. This is why every command
+upstream dispatches now has a row in `commandTable` whether or not Emerald
+implements it: dropping a name widens every abbreviation it constrained.
+
+**Upstream's abbreviation rules are four different algorithms, not one.**
+`Matched()` is a case-insensitive prefix of the name; but the same trie also
+uses `strcmp` (so `@SHUTDOWN` is not `@shutdown`), `strcasecmp`,
+`strlen(command) < 7` to split `@chown` from `@chown_lock`, and one node with
+`string_prefix`'s arguments reversed so `@unb` is the shortest `@unbless`.
+`move` has no `Matched()` at all and accepts trailing text — `movex` runs it.
+A command's minimum abbreviation is *how deep the switch commits before
+reaching it*, which is what `min` in the table records.
 
 **`procQueue` holds the currently-running foreground process**, unlike
 upstream's `tqhead`. Every count and every wildcard match over it has to
@@ -230,7 +250,8 @@ internal/mpi/           — MPI parser + all 140 mfn_* functions
 internal/boolexp/       — lock expressions, boolexp.c ported directly
 internal/help/          — the built-in help texts, embedded and seeded
 internal/game/          — login, command dispatch, the commands, MUF/MPI
-                            hosts, process queue, editor, examine, help
+                            hosts, process queue, editor, examine, help;
+                            dispatch_table.go is Fuzzball's own command trie
 internal/web/           — the configurator's handlers and templates
 internal/admit/         — accept-time connection limits
 internal/golden/        — the differential test harness (THE oracle)
@@ -409,6 +430,10 @@ message explains its own findings.
 
 | Commit | Summary |
 |---|---|
+| `923c565` | `match_controlled`'s real refusal for the five commands that use it; four others stay divergent, and the doc comment says why each does. |
+| `e1ecf01` | Declined commands say which reason applies instead of "not yet". |
+| `329a016` | **Ported Fuzzball's command dispatcher.** The old unique-prefix resolver was a different algorithm and diverged both ways: `@to` worked here and not upstream, bare `e` worked upstream and not here. |
+| `f94979b` | GPL-3.0, and three stale documentation claims corrected. |
 | `4c5b8ed` | The upstream-manual audit (`docs/upstream-coverage.md`), and the two faults it found: `@chown` was missing *and* silently resolving to `@chown_lock`; `resolveControlled` reported failed matches in the wrong words. `@unlock` added alongside. |
 | `ffda4c7` | Packaged the configurator — a second Containerfile target, an `admin` compose profile bound to loopback. |
 | `998931a` | The configurator's pages: `@tune` editor, manual editor, player management, object inspector. |
@@ -437,7 +462,7 @@ All green as of `4c5b8ed`:
 - `make width-check` — no new line over 70 columns
 - `make test` (`go test -race ./...` against a scratch Postgres schema) —
   clean, no data races, across ~610 test functions
-- `make golden` — all 11 differential suites against a live Fuzzball 7
+- `make golden` — all 12 differential suites against a live Fuzzball 7
   container:
 
   | Suite | Covers |
@@ -448,6 +473,7 @@ All green as of `4c5b8ed`:
   | `TestHelpMatchesFuzzball` | the whole help system, both servers given the same texts |
   | `TestLockCommandsMatchFuzzball` | the `@lock` family, `@unlock`, an exit whose lock gates it |
   | `TestWizardCommandsMatchFuzzball` | `@stats`, `@boot`, `@force`, `@toad`, `@chown` |
+  | `TestDispatchMatchesFuzzball` | command resolution: whether both servers reach a command, and whether an abbreviation reaches the same one as its full name |
   | `TestForceMatchesFuzzball` | `FORCE`/`FORCEDBY`/`FORCEDBY_ARRAY` |
   | `TestConnectsMatchesFuzzball` | `DESCRHOST`/`DESCRUSER` at mlevel 4 |
   | `TestDebugTraceMatchesFuzzball` | the MUF debugger, by source line |
