@@ -50,7 +50,7 @@ func (s *Server) writeWho(w *world.World, d *session.Descriptor, filter string) 
 			o.Name,
 			idleFor(now.Sub(other.ConnectedAt)),
 			idleFor(other.IdleSince(now)),
-			getMesg(w, other.Player, "_/do"),
+			getMesg(w, other.Player, propDoing),
 		))
 		shown++
 	}

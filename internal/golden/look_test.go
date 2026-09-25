@@ -23,10 +23,9 @@ var lookScript = Script{
 	// A thing with no description, then with one. Neither shows a
 	// name line.
 	//
-	// The description goes on with @set rather than @describe
-	// because @describe's own confirmation is one of the wordings
-	// set_standard_property still owes, and this case is about
-	// look.
+	// The description goes on with @set rather than @describe so
+	// this case depends on nothing but the property, which is
+	// what look reads.
 	"@create widget",
 	"look widget",
 	"@set widget=_/de:A small widget.",

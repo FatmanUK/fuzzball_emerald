@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **40 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **30 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -71,21 +71,40 @@ and the compiler could probably be handed what it needs.
 
 ---
 
-## `muckhelp.html` — 40 commands missing
+## `muckhelp.html` — 30 commands missing
 
-Upstream dispatches about 112 commands; Emerald has 72 names covering
-72 of them, and 40 are absent. What is missing is **commands, not
+Upstream dispatches about 112 commands; Emerald has 82 names covering
+82 of them, and 30 are absent. What is missing is **commands, not
 engine**: the properties, locks and primitives behind most of these
 already work, and what is not there is the verb that sets them.
 
+The count is now exact rather than estimated, because
+`internal/game/dispatch_table.go` is every name upstream dispatches
+and a name with no handler says so when typed.
+
 ### Message and lock properties
 
-The most conspicuous group, and the cheapest to close. Every one of
-these sets a property that `examine` already prints and that MUF
-already reads:
+    @propset
 
-    @fail  @ofail  @success  @osuccess  @drop  @odrop
-    @idescribe  @oecho  @pecho  @propset
+Ten of this group have landed: `@fail`, `@ofail`, `@success`,
+`@osuccess`, `@drop`, `@odrop`, `@idescribe`, `@oecho`, `@pecho` and
+`@doing` are now rows in `internal/game/mesg_cmd.go`, driven by one
+port of `set_standard_property` — `set_standard_lock`'s exact twin,
+down to "no `=` means report it". `@describe` was absorbed into the
+same table, which is how it came to say "Object Description set."
+rather than "Description set.".
+
+One thing that family does cannot be reproduced. Reporting a property
+that is **not set** prints "`(null)`" upstream: `GETMESG` hands the
+NULL from `get_property_class` straight to a `%s`, and glibc renders
+it that way. It is undefined behaviour with a stable-looking output
+rather than a chosen wording, and a Go server has no null pointer to
+print — so Emerald prints nothing after the colon, and the golden
+case masks the line rather than dropping it, as `examine`'s "Memory
+used" is masked.
+
+`@propset` is the one left: it is not a message setter but a general
+property writer, with its own type syntax.
 
 ### Building and ownership
 
@@ -95,7 +114,7 @@ already reads:
 ### Wizard
 
     @bless  @unbless  @debug  @examine  @memory  @uncompile
-    @usage  @doing
+    @usage
 
 `@armageddon`, `@restart`, `@restrict`, `@teledump`, `@tops` and
 `@wall` are also absent. `@reconfiguressl` is **deliberately** absent:
@@ -150,26 +169,32 @@ name in it is a real command and is not secretly implemented.
 
 ### Abbreviations
 
-**Emerald's abbreviation rule is not upstream's**, and the two already
-disagree before any new command is added. `lookupAtCommand` takes any
-unique prefix over the whole table and answers nothing when a prefix
-is ambiguous. Upstream's `process_command` is a hand-written character
-trie with a different tie-break at each node — `string_prefix`,
-`strcmp` (case-sensitive), `strcasecmp`, `strlen(command) < 7`, and
-one node with the `string_prefix` arguments reversed.
+**Emerald's abbreviation rule used not to be upstream's**, and the two
+disagreed before any new command was added. `lookupAtCommand` took any
+unique prefix over the whole table and answered nothing when a prefix
+was ambiguous. Upstream's `process_command` is a hand-written
+character trie with a different tie-break at each node —
+`string_prefix`, `strcmp` (case-sensitive), `strcasecmp`,
+`strlen(command) < 7`, and one node with the `string_prefix`
+arguments reversed.
 
-Verified divergences today:
+The divergences that made the case:
 
-| Typed | Emerald | Fuzzball 7 |
+| Typed | Emerald, before | Fuzzball 7 |
 |---|---|---|
 | `@to` | `@toad` | Huh — `@toad` is `strcmp` (`game.c:1458`) |
 | `@co` | `@conlock` | Huh — `game.c:829` requires `command[3] == 'n'` |
 | `e` | Huh | `examine` — `Matched("examine")`, `game.c:1587` |
-| `i` | `inventory` | `inventory` (agrees by luck) |
+| `i` | `inventory` | `inventory` (agreed by luck) |
 
-Bare commands are prefix-matched upstream and exact-matched here,
-which is the `e` case. This is being fixed by porting the dispatch
-table rather than by adjusting the resolver.
+Two things settled the question. Adjusting the resolver could not
+reach a trie with four different tie-breaks; and adding the ~40
+missing verbs to the old resolver would have *lost* seven working
+abbreviations — `@a @b @e @re @pr @co @ow` — by making them
+ambiguous. So the trie was ported instead, as
+`internal/game/dispatch_table.go`, and
+`internal/golden/dispatch_test.go` drives every interesting
+abbreviation through both servers.
 
 ### What the audit found by accident
 

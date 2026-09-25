@@ -95,7 +95,6 @@ func init() {
 	register("@link", (*Server).cmdLink)
 	register("@unlink", (*Server).cmdUnlink)
 	register("@name", (*Server).cmdName)
-	register("@describe", (*Server).cmdDescribe)
 	register("@set", (*Server).cmdSet)
 	register("@password", (*Server).cmdPassword)
 	register("@find", (*Server).cmdFind)

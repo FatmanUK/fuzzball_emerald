@@ -12,8 +12,8 @@ import (
 // which is the caller context rather than anything the player typed.
 //
 // They are two different strings upstream — match_args and
-// match_cmdname — so printing only one of them would not have caught
-// the two being conflated.
+// match_cmdname — so printing only one of them would not have
+// caught the two being conflated.
 const execProgram = `: main
   "arg[" swap strcat "]" strcat me @ swap notify
   "cmd[" command @ strcat "]" strcat me @ swap notify
@@ -24,56 +24,56 @@ const execProgram = `: main
 // program above and #3 as its exit, so the dbrefs below are known
 // before anything runs.
 //
-// The description goes on with @set rather than @describe, because
-// @describe's own confirmation is one of the wordings
-// set_standard_property still owes; the property is the same either
-// way, and this case is about what reading it does.
+// Everything here goes on with @describe, the member of the
+// set_standard_property family that reads back through look. The rest
+// of the family is compared in mesg_test.go; this case is about what
+// reading one does.
 var execScript = Script{
 	"@create mirror",
 
 	// The ordinary case that must not change: no '@', so the
 	// value is MPI over text.
-	"@set mirror=_/de:{name:me} looks back at you.",
+	"@describe mirror={name:me} looks back at you.",
 	"look mirror",
 
 	// A dbref naming a program. The argument is MPI-parsed before
-	// the program sees it, and the program does all the talking —
-	// exec_or_notify adds nothing of its own.
-	"@set mirror=_/de:@2 for {name:me}",
+	// the program sees it, and the program does all the talking
+	// — exec_or_notify adds nothing of its own.
+	"@describe mirror=@2 for {name:me}",
 	"look mirror",
 
 	// A registered name, resolved through _reg/ on the object
 	// carrying the description and then outwards.
 	"@set #0=_reg/lib-desc:#2",
-	"@set mirror=_/de:@$lib-desc registered",
+	"@describe mirror=@$lib-desc registered",
 	"look mirror",
 
 	// A name that resolves to nothing prints the rest of the line
 	// *unparsed* — no MPI, which upstream's own comment calls a
 	// crazy edge case and leaves alone.
-	"@set mirror=_/de:@9999 plain {name:me} text",
+	"@describe mirror=@9999 plain {name:me} text",
 	"look mirror",
-	"@set mirror=_/de:@$nosuchreg plain text",
+	"@describe mirror=@$nosuchreg plain text",
 	"look mirror",
 
 	// ...and with nothing after it, the nothing-special message.
-	"@set mirror=_/de:@9999",
+	"@describe mirror=@9999",
 	"look mirror",
-	"@set mirror=_/de:@",
-	"look mirror",
-
-	// The scan does not skip leading space, so "@ spaced" names an
-	// empty program and prints "spaced".
-	"@set mirror=_/de:@ spaced",
+	"@describe mirror=@",
 	"look mirror",
 
-	// #3 exists and is an exit, not a program, so it falls through
-	// the same way a missing dbref does.
-	"@set mirror=_/de:@3 not a program",
+	// The scan does not skip leading space, so "@ spaced" names
+	// an empty program and prints "spaced".
+	"@describe mirror=@ spaced",
+	"look mirror",
+
+	// #3 exists and is an exit, not a program, so it falls
+	// through the same way a missing dbref does.
+	"@describe mirror=@3 not a program",
 	"look mirror",
 
 	// atoi stops at the first non-digit, so this is still #2.
-	"@set mirror=_/de:@2x trailing",
+	"@describe mirror=@2x trailing",
 	"look mirror",
 }
 

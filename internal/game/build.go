@@ -364,23 +364,6 @@ func (s *Server) cmdName(c *ctx) {
 	c.tell("Name set.")
 }
 
-// cmdDescribe sets an object's description.
-func (s *Server) cmdDescribe(c *ctx) {
-	name, desc, ok := strings.Cut(c.arg, "=")
-	if !ok {
-		c.tell("Usage: @describe <object>=<description>")
-		return
-	}
-	target, ok := s.matchControlled(c, strings.TrimSpace(name))
-	if !ok {
-		return
-	}
-	c.w.SetProp(target, propDesc, props.Value{
-		Type: props.String, Str: strings.TrimSpace(desc),
-	})
-	c.tell("Description set.")
-}
-
 // settableFlags lists the names @set accepts, in the order upstream's
 // str_to_flag tests them.
 //
