@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -502,3 +503,59 @@ func TestReadOnlyPagesOfferNoForms(t *testing.T) {
 // storeUnused keeps the store import honest if a test above is
 // removed; it is referenced by the helpers.
 var _ = store.Object{}
+
+// TestGripesPageListsAndPages checks the one page whose table only
+// ever grows, so paging is part of what it does rather than a nicety.
+func TestGripesPageListsAndPages(t *testing.T) {
+	srv, st := testServer(t)
+	c := authed(t, srv)
+	ctx := context.Background()
+
+	// Empty first, which must read as empty rather than as an
+	// error.
+	empty := c.get("/gripes").Body.String()
+	if !strings.Contains(empty, "Nobody has griped.") {
+		t.Errorf("an empty gripe log rendered as:\n%s", empty)
+	}
+
+	// More than one page of them, oldest numbered lowest so the
+	// ordering is checkable.
+	w := scratchWorld()
+	for i := 1; i <= gripesPerPage+3; i++ {
+		w.AddGripe(world.Gripe{
+			When:      int64(1_700_000_000 + i),
+			Who:       ref.Ref(0),
+			WhoName:   "Igor",
+			Where:     ref.Ref(0),
+			WhereName: "Nowhere",
+			Message:   fmt.Sprintf("complaint %d", i),
+		})
+	}
+	if err := st.Flush(ctx, w.TakeSnapshot()); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first page is the newest, and offers an older one but
+	// not a newer.
+	got := c.get("/gripes").Body.String()
+	if !strings.Contains(got,
+		fmt.Sprintf("complaint %d", gripesPerPage+3)) {
+		t.Errorf("the newest complaint is missing:\n%s", got)
+	}
+	if strings.Contains(got, "complaint 1<") {
+		t.Error("the oldest complaint is on page one too")
+	}
+	if !strings.Contains(got, "/gripes?from=") {
+		t.Error("page one offers no older page")
+	}
+
+	// And the second page has the rest.
+	got = c.get(fmt.Sprintf("/gripes?from=%d", gripesPerPage)).
+		Body.String()
+	if !strings.Contains(got, "complaint 1<") {
+		t.Errorf("the oldest complaint is missing:\n%s", got)
+	}
+	if !strings.Contains(got, "from=0") {
+		t.Error("page two offers no way back")
+	}
+}

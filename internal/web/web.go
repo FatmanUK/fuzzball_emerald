@@ -110,6 +110,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /players", s.required(s.getPlayers))
 	mux.HandleFunc("POST /players", s.required(s.postPlayers))
 	mux.HandleFunc("GET /objects", s.required(s.getObject))
+	// Read-only, like the object inspector: nothing here should
+	// be able to rewrite what somebody reported.
+	mux.HandleFunc("GET /gripes", s.required(s.getGripes))
 
 	// Anything not matched above is a 404 rather than a redirect
 	// to the login page: telling somebody who is not logged in

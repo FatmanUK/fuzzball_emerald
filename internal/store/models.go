@@ -155,8 +155,28 @@ const (
 	metaHelpSeed = "help_seed_version"
 )
 
+// Gripe is one complaint, upstream's line in the log file named by
+// file_log_gripes. Emerald has no game directory, so they are rows
+// — the same answer the help texts got, and for the same reason.
+//
+// The names are stored beside the refs because upstream's log line is
+// text: a player renamed or recycled afterwards would otherwise
+// rewrite history.
+type Gripe struct {
+	ID int64 `gorm:"primaryKey;autoIncrement"`
+	// At is Unix seconds.
+	At        int64  `gorm:"not null;index"`
+	Who       int32  `gorm:"not null"`
+	WhoName   string `gorm:"not null"`
+	Where     int32  `gorm:"not null"`
+	WhereName string `gorm:"not null"`
+	Message   string `gorm:"not null"`
+}
+
+func (Gripe) TableName() string { return "gripes" }
+
 // allModels is what Migrate creates.
 var allModels = []any{
 	&Object{}, &Property{}, &ExitDest{}, &Program{},
-	&TuneParam{}, &Macro{}, &HelpTopic{}, &Meta{},
+	&TuneParam{}, &Macro{}, &HelpTopic{}, &Gripe{}, &Meta{},
 }

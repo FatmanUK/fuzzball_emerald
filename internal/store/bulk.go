@@ -70,6 +70,38 @@ func (s *Store) Reset(ctx context.Context) error {
 	})
 }
 
+// LoadGripes reads the most recent complaints into the world, oldest
+// first, without marking any of them for writing.
+//
+// Only a tail is loaded: the whole log is in the table for the
+// configurator to page through, and what the game needs is what
+// "gripe" would show a wizard.
+func (s *Store) LoadGripes(ctx context.Context, w *world.World,
+	limit int) (int, error) {
+
+	var rows []Gripe
+	err := s.db.WithContext(ctx).Order("at desc, id desc").
+		Limit(limit).Find(&rows).Error
+	if err != nil {
+		return 0, fmt.Errorf("loading gripes: %w", err)
+	}
+	out := make([]world.Gripe, 0, len(rows))
+	for i := len(rows) - 1; i >= 0; i-- {
+		r := rows[i]
+		out = append(out, world.Gripe{
+			ID:        r.ID,
+			When:      r.At,
+			Who:       ref.Ref(r.Who),
+			WhoName:   r.WhoName,
+			Where:     ref.Ref(r.Where),
+			WhereName: r.WhereName,
+			Message:   r.Message,
+		})
+	}
+	w.SetGripes(out)
+	return len(out), nil
+}
+
 // LoadHelp reads every help corpus into the world, without marking
 // any of it for writing.
 func (s *Store) LoadHelp(ctx context.Context,

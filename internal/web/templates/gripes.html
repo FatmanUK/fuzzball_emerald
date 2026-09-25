@@ -1,0 +1,29 @@
+{{template "head" .}}
+{{with .Data}}
+<p>{{.Total}} complaint{{if ne .Total 1}}s{{end}} on record. The game
+itself shows only the most recent; this is the whole log.</p>
+
+{{if .Rows}}
+<table>
+  <tr><th>When</th><th>From</th><th>Where</th><th>Complaint</th></tr>
+  {{range .Rows}}
+  <tr>
+    <td><code>{{.When}}</code></td>
+    <td><a href="/objects?ref={{.WhoRef}}">{{.Who}}</a>
+      <code>{{.WhoRef}}</code></td>
+    <td><a href="/objects?ref={{.WhereRef}}">{{.Where}}</a>
+      <code>{{.WhereRef}}</code></td>
+    <td>{{.Message}}</td>
+  </tr>
+  {{end}}
+</table>
+
+<p class="row">
+  {{if ge .Newer 0}}<a href="/gripes?from={{.Newer}}">Newer</a>{{end}}
+  {{if ge .Older 0}}<a href="/gripes?from={{.Older}}">Older</a>{{end}}
+</p>
+{{else}}
+<p>Nobody has griped.</p>
+{{end}}
+{{end}}
+{{template "foot" .}}

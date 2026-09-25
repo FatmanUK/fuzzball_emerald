@@ -111,6 +111,9 @@ func (s *Store) Flush(ctx context.Context, snap world.Snapshot) error {
 		if err := writeHelp(tx, snap.Help); err != nil {
 			return err
 		}
+		if err := writeGripes(tx, snap.Gripes); err != nil {
+			return err
+		}
 		return writeMeta(tx, metaTop, fmt.Sprint(int32(snap.Top)))
 	})
 }
@@ -247,6 +250,33 @@ func writeMacros(tx *gorm.DB, macros []world.Macro) error {
 	}
 	if err := tx.CreateInBatches(rows, 200).Error; err != nil {
 		return fmt.Errorf("writing macros: %w", err)
+	}
+	return nil
+}
+
+// writeGripes appends the complaints made since the last flush.
+//
+// This is the one thing in a snapshot that is added rather than
+// replaced, because a gripe log is append-only: nothing edits or
+// deletes a complaint, so there is nothing for a whole-table rewrite
+// to make visible.
+func writeGripes(tx *gorm.DB, gripes []world.Gripe) error {
+	if len(gripes) == 0 {
+		return nil
+	}
+	rows := make([]Gripe, 0, len(gripes))
+	for _, g := range gripes {
+		rows = append(rows, Gripe{
+			At:        g.When,
+			Who:       int32(g.Who),
+			WhoName:   g.WhoName,
+			Where:     int32(g.Where),
+			WhereName: g.WhereName,
+			Message:   g.Message,
+		})
+	}
+	if err := tx.CreateInBatches(rows, 200).Error; err != nil {
+		return fmt.Errorf("writing gripes: %w", err)
 	}
 	return nil
 }

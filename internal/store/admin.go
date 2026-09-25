@@ -304,3 +304,29 @@ func (s *Store) SetFlags(ctx context.Context, r ref.Ref,
 	}
 	return nil
 }
+
+// CountGripes is how many complaints are on record.
+func (s *Store) CountGripes(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.db.WithContext(ctx).Model(&Gripe{}).Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("counting gripes: %w", err)
+	}
+	return n, nil
+}
+
+// Gripes reads a page of complaints, newest first.
+//
+// This is the configurator's reader, not the game's: the game holds
+// the recent ones in memory from boot, and the whole log is here.
+func (s *Store) Gripes(ctx context.Context, offset, limit int) (
+	[]Gripe, error) {
+
+	var out []Gripe
+	err := s.db.WithContext(ctx).Order("at desc, id desc").
+		Offset(offset).Limit(limit).Find(&out).Error
+	if err != nil {
+		return nil, fmt.Errorf("reading gripes: %w", err)
+	}
+	return out, nil
+}

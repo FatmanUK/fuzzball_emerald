@@ -6,6 +6,7 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/timefmt"
+	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
 func init() {
@@ -14,6 +15,8 @@ func init() {
 	register("@trace", (*Server).cmdTrace)
 	register("@uncompile", (*Server).cmdUncompile)
 	register("@wall", (*Server).cmdWall)
+	register("gripe", (*Server).cmdGripe)
+	register("@restrict", (*Server).cmdRestrict)
 }
 
 // cmdScore is do_score (pennies.c:112): how much currency the player
@@ -108,4 +111,91 @@ func (s *Server) cmdWall(c *ctx) {
 	s.securityLog().Warn("wall",
 		"player", c.who.String(), "name", nameOf(c.w, c.who),
 		"message", c.arg)
+}
+
+// cmdGripe is do_gripe (speech.c:147): file a complaint.
+//
+// With no message a wizard is shown what has been filed and anybody
+// else is told how to file one. With a message it is recorded, the
+// complainer is thanked, and every connected wizard is told at once
+// — which is the part that makes gripe useful rather than a
+// suggestion box nobody opens.
+//
+// Where the complaints go is the decision this needed. Upstream
+// appends to the file named by file_log_gripes; Emerald has no game
+// directory, so they are rows in Postgres — the same answer the
+// help texts got, loaded at boot and written behind like everything
+// else. That keeps the reading in memory, since nothing in this
+// server touches the database after boot, and it gives the
+// configurator something to show. Only the most recent
+// world.GripeLimit are held, because upstream's file grows without
+// bound and a wizard on a world that has been up for years should not
+// have it all thrown at them.
+func (s *Server) cmdGripe(c *ctx) {
+	msg := c.arg
+	if msg == "" {
+		if !isWizard(c.w, ownerOf(c.w, c.who)) {
+			c.tell("If you wish to gripe, use " +
+				"'gripe <message>'.")
+			return
+		}
+		got := c.w.Gripes()
+		if len(got) == 0 {
+			c.tell("Nobody has griped.")
+			return
+		}
+		for _, g := range got {
+			c.send(g.GripeLine())
+		}
+		return
+	}
+
+	me := c.w.Get(c.who)
+	loc := me.Location
+	c.w.AddGripe(world.Gripe{
+		Who:       c.who,
+		WhoName:   me.Name,
+		Where:     loc,
+		WhereName: nameOf(c.w, loc),
+		Message:   msg,
+	})
+	c.tell("Your complaint has been duly noted.")
+
+	shout := sprintf("## GRIPE from %s: %s", me.Name, msg)
+	for _, d := range s.hub.Connected() {
+		if isWizard(c.w, ownerOf(c.w, d.Player)) {
+			d.Send(shout)
+		}
+	}
+}
+
+// cmdRestrict is do_restrict (game.c:520): wizards-only login.
+//
+// "on" and "off" are compared case-sensitively upstream, so
+// "@restrict ON" reports the current state rather than setting it.
+// That reads like an oversight and is reproduced.
+//
+// The mode is a field on the server rather than a @tune parameter,
+// because upstream's wizonly_mode is a runtime global: persisting it
+// would make a maintenance window survive a restart, which is the
+// opposite of what somebody turning it on wants. Upstream sets it
+// from two more places Emerald does not have — a -wizonly command
+// line flag, and a sanity violation found at boot.
+func (s *Server) cmdRestrict(c *ctx) {
+	switch strings.TrimSpace(c.arg) {
+	case "on":
+		s.wizOnly = true
+		c.tell("Login access is now restricted to " +
+			"wizards only.")
+	case "off":
+		s.wizOnly = false
+		c.tell("Login access is now unrestricted.")
+	default:
+		state := "off"
+		if s.wizOnly {
+			state = "on"
+		}
+		c.tell("Restricted connection mode is currently %s.",
+			state)
+	}
 }

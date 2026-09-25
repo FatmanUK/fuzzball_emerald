@@ -478,3 +478,59 @@ func assertWorldsMatch(t *testing.T, want, got *world.World) {
 		return true
 	})
 }
+
+// TestGripesAppendRatherThanReplace is the one thing in a snapshot
+// that is added instead of written whole, so the flush path is worth
+// pinning: two flushes must leave two gripes, not the second one.
+func TestGripesAppendRatherThanReplace(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	w := buildWorld(t)
+	if err := s.Flush(ctx, w.TakeSnapshot()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.AddGripe(world.Gripe{
+		When: 1000, Who: ref.Ref(1), WhoName: "Wizard",
+		Where: ref.Ref(0), WhereName: "Room",
+		Message: "the first complaint",
+	})
+	if err := s.Flush(ctx, w.TakeSnapshot()); err != nil {
+		t.Fatal(err)
+	}
+	w.AddGripe(world.Gripe{
+		When: 2000, Who: ref.Ref(1), WhoName: "Wizard",
+		Where: ref.Ref(0), WhereName: "Room",
+		Message: "the second complaint",
+	})
+	if err := s.Flush(ctx, w.TakeSnapshot()); err != nil {
+		t.Fatal(err)
+	}
+
+	// A third flush with nothing new must not write a gripe
+	// again, which is what marking them dirty rather than
+	// clearing the list would do.
+	if err := s.Flush(ctx, w.TakeSnapshot()); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := world.New()
+	n, err := s.LoadGripes(ctx, reloaded, world.GripeLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("loaded %d gripes, want 2", n)
+	}
+	got := reloaded.Gripes()
+	// Oldest first, which is the order a log file has them.
+	if got[0].Message != "the first complaint" ||
+		got[1].Message != "the second complaint" {
+		t.Errorf("gripes came back as %q then %q",
+			got[0].Message, got[1].Message)
+	}
+	if got[0].WhoName != "Wizard" || got[0].WhereName != "Room" {
+		t.Errorf("the names were not kept: %+v", got[0])
+	}
+}

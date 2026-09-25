@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **25 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **23 commands missing** of about 112. The engine behind most of them exists; the commands do not. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -71,10 +71,10 @@ and the compiler could probably be handed what it needs.
 
 ---
 
-## `muckhelp.html` — 25 commands missing
+## `muckhelp.html` — 23 commands missing
 
-Upstream dispatches about 112 commands; Emerald has 87 names covering
-87 of them, and 25 are absent. What is missing is **commands, not
+Upstream dispatches about 112 commands; Emerald has 89 names covering
+89 of them, and 23 are absent. What is missing is **commands, not
 engine**: the properties, locks and primitives behind most of these
 already work, and what is not there is the verb that sets them.
 
@@ -115,8 +115,7 @@ property writer, with its own type syntax.
 
     @bless  @unbless  @debug  @examine  @memory  @usage
 
-`@armageddon`, `@restart`, `@restrict` and `@teledump` are also
-absent. `@reconfiguressl` is **deliberately** absent:
+`@armageddon`, `@restart` and `@teledump` are also absent. `@reconfiguressl` is **deliberately** absent:
 TLS is configured from the environment, because a TLS-only server
 cannot read its listener configuration out of a database it has not
 opened.
@@ -130,7 +129,7 @@ that drive it over MCP are missing.
 
 ### Basics
 
-    put  give  gripe  disembark  leave  hand  throw  goto  read
+    put  give  disembark  leave  hand  throw  goto  read
 
 `throw`, `goto` and `read` are upstream's alternate spellings of
 `drop`, `go` and `look`. They are not one-line aliases, though: they
@@ -164,6 +163,38 @@ no handler, so the abbreviations around them stay upstream's, and
 typing one says which of the four reasons applies. The list lives in
 `declined` in `internal/game/dispatch.go`, and a test checks every
 name in it is a real command and is not secretly implemented.
+
+### Where the gripe log lives
+
+Upstream appends a complaint to the file named by `file_log_gripes`,
+and a bare `gripe` from a wizard spits that whole file back. Emerald
+has no game directory, so this needed deciding, and the answer is the
+one the help texts got: **rows in Postgres**, loaded at boot and
+written behind like everything else.
+
+That keeps the two architectural rules intact. Nothing in the running
+server reads the database after boot — the recent complaints are in
+memory from the load, and a new one is appended there and carried out
+by the next flush. And the write-behind snapshot carries *new* gripes
+rather than the whole list, which is the only place it does that: a
+gripe log is append-only, so there is no deletion for a whole-table
+rewrite to make visible.
+
+Two consequences worth knowing:
+
+- **`gripe` shows only the most recent `world.GripeLimit`.** Upstream's
+  file grows without bound and hands a wizard the lot; on a world that
+  has been up for years that is a flood. The whole log is still in the
+  table.
+- **The configurator has a `/gripes` page**, which is where the full
+  history is read, paged. It is read-only for the reason the object
+  inspector is: nothing there should be able to rewrite what somebody
+  reported.
+
+The rendering is upstream's log line, `vlog2file`'s timestamp and
+`log_gripe`'s format — including the dbrefs carrying **no** `#`, which
+is how every log line upstream spells a ref and which the golden case
+compares.
 
 ### Abbreviations
 

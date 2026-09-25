@@ -108,16 +108,30 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 		return
 	}
 
-	// The password was right; the server may still be full. A
-	// true wizard is exempt, so an admin can always get in to
-	// deal with whatever filled it up.
-	if s.serverFull(w) && !o.Flags.IsTrueWizard() {
-		d.Send(w.Tune.String("playermax_bootmesg"))
-		s.securityLog().Warn("refused login: server full",
-			"player", player.String(), "name", o.Name,
-			"host", d.Hostname, "limit", w.Tune.Int("playermax_limit"))
-		d.Close()
-		return
+	// The password was right; the server may still be shut to
+	// them. A true wizard is exempt from both tests, so an admin
+	// can always get in — to lift the restriction, or to deal
+	// with whatever filled the place up.
+	if !o.Flags.IsTrueWizard() {
+		log := s.securityLog()
+		if s.wizOnly {
+			d.Send(wizOnlyBootMesg)
+			log.Warn("refused login: wizards only",
+				"player", player.String(),
+				"name", o.Name, "host", d.Hostname)
+			d.Close()
+			return
+		}
+		if s.serverFull(w) {
+			d.Send(w.Tune.String("playermax_bootmesg"))
+			log.Warn("refused login: server full",
+				"player", player.String(),
+				"name", o.Name, "host", d.Hostname,
+				"limit",
+				w.Tune.Int("playermax_limit"))
+			d.Close()
+			return
+		}
 	}
 
 	// A correct password stored in one of Fuzzball's formats is
@@ -137,6 +151,17 @@ func (s *Server) doConnect(w *world.World, d *session.Descriptor, user, pass str
 
 	s.finishLogin(w, d, player)
 }
+
+// The two things wizonly_mode says, which are not @tune parameters
+// because upstream compiles them in: the banner line somebody sees
+// before they type anything, and the refusal when they do.
+const (
+	wizOnlyBanner = "## The game is currently in maintenance " +
+		"mode, and only wizards will be able to connect."
+	wizOnlyBootMesg = "Sorry, but the game is in maintenance " +
+		"mode currently, and only wizards are allowed to " +
+		"connect.  Try again later."
+)
 
 // serverFull reports whether the playermax cap has been reached,
 // upstream's "tp_playermax && con_players_curr >=
@@ -169,7 +194,12 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 		return
 	}
 	// A brand-new character has no wizard bit to be exempt by, so
-	// the cap simply applies.
+	// both tests simply apply.
+	if s.wizOnly {
+		d.Send(wizOnlyBootMesg)
+		d.Close()
+		return
+	}
 	if s.serverFull(w) {
 		d.Send(w.Tune.String("playermax_bootmesg"))
 		d.Close()

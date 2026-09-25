@@ -104,3 +104,82 @@ func maskUptime(s string) string {
 	}
 	return strings.Join(kept, "\n")
 }
+
+// restrictScript covers @restrict and gripe, which are together
+// because both are short and neither needs a fixture of its own.
+//
+// @restrict really does shut the door, so it is turned back off
+// before anything else runs — the oracle's own connection survives
+// either way, since the test is applied at login.
+var restrictScript = Script{
+	"@restrict",
+	// "on" and "off" are compared case-sensitively, so this
+	// reports rather than setting.
+	"@restrict ON",
+	"@restrict on",
+	"@restrict",
+	"@restrict off",
+	"@restrict",
+
+	// gripe with a message thanks the complainer and tells every
+	// connected wizard, which #1 is.
+	"gripe the doors stick",
+	"gripe and the floor creaks",
+
+	// Reading them back. Upstream spits its log file and Emerald
+	// renders its rows, so the timestamp cannot agree and is
+	// masked; the rest of the line is upstream's own format.
+	"gripe",
+	"gr",
+}
+
+// TestRestrictAndGripeMatchFuzzball checks both against the C server.
+func TestRestrictAndGripeMatchFuzzball(t *testing.T) {
+	requireOracle(t)
+	ctx := context.Background()
+
+	fx, err := WriteFixture(t.TempDir(), ": main 1 pop ;")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const quiet = 400 * time.Millisecond
+	oracle, err := RunOracleQuiet(ctx, fx, restrictScript, quiet)
+	if err != nil {
+		t.Fatalf("driving the oracle: %v", err)
+	}
+	emerald, err := RunEmeraldSteps(ctx, fx, restrictScript, nil)
+	if err != nil {
+		t.Fatalf("driving this server: %v", err)
+	}
+
+	for i, cmd := range restrictScript {
+		var want, got string
+		if i < len(oracle) {
+			want = oracle[i]
+		}
+		if i < len(emerald) {
+			got = emerald[i]
+		}
+		if diffs := Compare(maskGripeTime(want),
+			maskGripeTime(got)); len(diffs) > 0 {
+			t.Errorf("%q\n%s", cmd, Render(diffs))
+		}
+	}
+}
+
+// gripeStamp is the timestamp on a logged gripe, which is the moment
+// it was filed and so cannot agree between two servers.
+var gripeStamp = regexp.MustCompile(
+	`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d: GRIPE`)
+
+func maskGripeTime(s string) string {
+	var kept []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		line = gripeStamp.ReplaceAllString(line,
+			"<time>: GRIPE")
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}

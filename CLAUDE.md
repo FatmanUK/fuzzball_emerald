@@ -143,9 +143,12 @@ Saving therefore never touches a live object and never pauses the game, which is
 what replaces Fuzzball's dump cycle. `@dump` is a forced flush.
 
 A snapshot carries more than objects: program source changed by the editor,
-and the macro table. Both are held apart from the object graph — source because
-saving a program rewrites its text without touching any field on the object,
-macros because they belong to no object at all. `World.SetSource` is the
+the macro table, the help corpora and any new gripes. All are held apart from
+the object graph — source because saving a program rewrites its text without
+touching any field on the object, the rest because they belong to no object at
+all. Gripes are the one thing a snapshot **appends** rather than replaces,
+because a gripe log is append-only and there is no deletion for a whole-table
+rewrite to make visible. `World.SetSource` is the
 loading path and marks nothing; `World.SaveSource` is the editor's and marks
 the source for writing.
 
@@ -336,6 +339,33 @@ corpus, upstream's `file_connection_help`. An earlier version re-sent the
 banner, which is the one thing somebody typing `help` at a login screen has
 already read. **The motd is shown on a successful connect**, not only on
 demand.
+
+## The gripe log
+
+`gripe` files a complaint, and upstream appends it to the file named by
+`file_log_gripes`. Emerald has no game directory, so complaints are **rows in
+Postgres** — the same answer the help texts got, loaded at boot and written
+behind like everything else. Three things about that are load-bearing:
+
+- **A snapshot carries new gripes, not the whole list.** It is the only part of
+  a snapshot that is added rather than replaced, because a gripe log is
+  append-only: nothing edits or deletes a complaint, so there is nothing for a
+  whole-table rewrite to make visible.
+- **`gripe` shows only the most recent `world.GripeLimit`**, which keeps the
+  reading in memory and stops a world that has been up for years flooding
+  somebody's client. The whole log is still in the table, and the
+  configurator's `/gripes` page is where it is read.
+- **The rendering is upstream's log line**, `vlog2file`'s timestamp and
+  `log_gripe`'s format — with the dbrefs carrying **no** `#`, which is how
+  every log line upstream spells a ref. The golden case compares it.
+
+`@restrict` is `wizonly_mode`, and it is a field on `Server` rather than a
+`@tune` parameter because upstream's is a runtime global: persisting it would
+make a maintenance window survive a restart. Its "on" and "off" are compared
+**case-sensitively**, so `@restrict ON` reports rather than sets; that reads
+like an oversight and is reproduced. Upstream sets the same flag from two
+places Emerald has no equivalent of — a `-wizonly` command-line flag, and a
+sanity violation found at boot.
 
 ## MCP
 
@@ -654,6 +684,11 @@ here and the server has to be stopped. Nothing else about a player is writable:
 the rest of the flag word means different things by type, and **the flag word
 carries the type**, which is why `TestPlayersTogglesFlags` checks the type bits
 survive a whole-word write.
+
+`/gripes` is the whole complaint log, paged, and is **read-only** for the same
+reason `/objects` is: nothing here should be able to rewrite what somebody
+reported. The game itself shows only the most recent `world.GripeLimit`, so
+this is where the history is.
 
 `/objects` is **read-only even when the world is free**. Changing an object
 means threading containment chains, checking that an owner exists, and applying

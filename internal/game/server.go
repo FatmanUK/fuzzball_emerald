@@ -37,6 +37,11 @@ type Server struct {
 
 	// started is when the server came up, for uptime.
 	started time.Time
+	// wizOnly is upstream's wizonly_mode: while it is set, only a
+	// true wizard may log in. It is deliberately not persisted
+	// — a maintenance window that survived a restart would be
+	// the opposite of useful.
+	wizOnly bool
 
 	// programs caches compiled MUF.
 	programs map[ref.Ref]compiled
@@ -149,10 +154,15 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 		for _, line := range s.welcomeLines(w, d) {
 			d.Send(line)
 		}
-		// Someone arriving at a full server is told so now
+		// Someone arriving at a shut server is told so now
 		// rather than after they have typed a password, which
-		// is upstream's own welcome_user behaviour.
-		if s.serverFull(w) {
+		// is upstream's own welcome_user behaviour. The two
+		// are an if/else there as well: maintenance mode
+		// refuses everyone the cap would have, so saying both
+		// would be saying it twice.
+		if s.wizOnly {
+			d.Send(wizOnlyBanner)
+		} else if s.serverFull(w) {
 			if msg := w.Tune.String("playermax_warnmesg"); msg != "" {
 				d.Send(msg)
 			}

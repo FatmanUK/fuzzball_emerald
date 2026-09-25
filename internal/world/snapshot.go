@@ -23,6 +23,12 @@ type Snapshot struct {
 	// Macros carries the whole editor macro table when it
 	// changed, for the same reason Tune does.
 	Macros []Macro
+	// Gripes carries the complaints made since the last snapshot.
+	// Unlike Help and Macros this is the new rows rather than the
+	// whole list, because a gripe log is append-only and a world
+	// that has been up for years should not rewrite it every
+	// flush.
+	Gripes []Gripe
 	// Help carries every help corpus that changed, keyed by
 	// folded corpus name and written whole. It is keyed per
 	// corpus rather than sent as one list so that appending a
@@ -37,6 +43,7 @@ type Snapshot struct {
 func (s Snapshot) Empty() bool {
 	return len(s.Objects) == 0 && len(s.Deleted) == 0 && s.Tune == nil &&
 		len(s.Programs) == 0 && s.Macros == nil &&
+		len(s.Gripes) == 0 &&
 		s.Help == nil
 }
 
@@ -74,6 +81,11 @@ func (w *World) TakeSnapshot() Snapshot {
 	if w.macrosDirty {
 		s.Macros = w.Macros()
 		w.macrosDirty = false
+	}
+
+	if len(w.newGripes) > 0 {
+		s.Gripes = w.newGripes
+		w.newGripes = nil
 	}
 
 	if len(w.helpDirty) > 0 {

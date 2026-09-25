@@ -55,6 +55,14 @@ type World struct {
 	// the motd does not rewrite the manual.
 	helpDirty map[string]struct{}
 
+	// gripes are the complaints on record, oldest first, bounded
+	// to the most recent gripeLimit. newGripes are the ones made
+	// since the last flush: the list is append-only, so unlike
+	// macros and help it is written incrementally rather than
+	// whole.
+	gripes    []Gripe
+	newGripes []Gripe
+
 	Tune *tune.Set
 	// tuneDirty records that the parameter table changed.
 	tuneDirty bool

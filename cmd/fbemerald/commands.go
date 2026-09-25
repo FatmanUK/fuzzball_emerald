@@ -129,8 +129,14 @@ func cmdServe(args []string) error {
 		}
 	}
 
+	gripes, err := st.LoadGripes(ctx, w, world.GripeLimit)
+	if err != nil {
+		return fmt.Errorf("loading gripes: %w", err)
+	}
+
 	log.Info("world loaded",
 		"help_topics", topics,
+		"gripes", gripes,
 		"programs", progs,
 		"macros", len(macros),
 		"objects", rep.Objects,
