@@ -140,7 +140,13 @@ func (h *lockHost) RunLock(descr int, player, prog, thing ref.Ref) bool {
 	f.Perms = muf.HardUID
 	f.SetReserved(realPlayer, h.Location(player), thing, "")
 	f.Descr = descr
-	f.Supplicant = thing
+	// The supplicant is whoever is being *tested* against the
+	// lock, not the object carrying it: SUPPLICANT exists so a
+	// lock program can ask who is asking. Upstream is
+	// "tmpfr->supplicant = player", using the original player
+	// rather than realPlayer, and this used to pass thing —
+	// which answered with the locked object, backwards.
+	f.Supplicant = player
 
 	callerLevel := h.level
 	if callerLevel == 0 {

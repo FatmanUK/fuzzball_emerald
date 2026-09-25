@@ -302,3 +302,68 @@ func TestCouldDoitPlayerDestRequiresJumpOK(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestLockProgramSeesTheSupplicant pins which object SUPPLICANT
+// answers with inside a program used as a lock constant.
+//
+// It is whoever is being *tested* — the primitive's whole purpose
+// is letting a lock program ask who is asking. This used to answer
+// with the locked object instead, which no lock could have made use
+// of.
+func TestLockProgramSeesTheSupplicant(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	ctx := context.Background()
+	var prog, gate, mortal ref.Ref
+	err := h.engine.Do(ctx, func(w *world.World) {
+		here := w.Get(h.wizRef()).Location
+
+		p := w.Create("lockprog.muf", ref.TypeProgram,
+			h.wizRef())
+		p.Flags = p.Flags.SetMLevel(3)
+		prog = p.Ref
+
+		g := w.Create("gate", ref.TypeThing, h.wizRef())
+		if err := w.MoveTo(g.Ref, here); err != nil {
+			t.Error(err)
+		}
+		gate = g.Ref
+
+		m := w.Create("Mortal", ref.TypePlayer, ref.Nothing)
+		m.Owner = m.Ref
+		mortal = m.Ref
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The program reports to the wizard, who is the connected
+	// player: the frame's own "me" is the supplicant, who is not.
+	src := sprintf(": main %s supplicant \"%%d\" fmtstring "+
+		"notify 1 ;\n", h.wizRef().String())
+	err = h.engine.Do(ctx, func(w *world.World) {
+		w.SaveSource(prog, src)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.out()
+
+	err = h.engine.Do(ctx, func(w *world.World) {
+		host := &lockHost{s: h.s, w: w}
+		host.RunLock(h.d.ID, mortal, prog, gate)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := h.out()
+	if !strings.Contains(got, mortal.String()) {
+		t.Errorf("SUPPLICANT reported %q, want the tested "+
+			"player %v", got, mortal)
+	}
+	if strings.Contains(got, gate.String()) {
+		t.Errorf("SUPPLICANT gave the locked object %v: %q",
+			gate, got)
+	}
+}
