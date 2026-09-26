@@ -33,12 +33,16 @@ that have aged worst in the C:
   `@credits`, with the texts in Postgres and a configurable welcome banner.
 - **The configurator is in**: `cmd/fbeconfig`, an optional web interface over
   the same database, read-only while the server runs.
-- **The command gap that needed no new engine is closed.** `commandTable`
-  carries every name Fuzzball dispatches; 92 have handlers, 4 are declined
-  outright, and the remaining 20 resolve and say they are not implemented
-  yet. What is left needs machinery — `enter_room`, registration, the
-  compiler conditionals, the propqueues — rather than verbs. See
+- **The command surface is essentially complete.** `commandTable` carries
+  every name Fuzzball dispatches: **109 rows, 99 with handlers, 10
+  without**, and five of those ten are declined outright rather than
+  missing. What is left is `@armageddon` and `@restart` (process
+  lifecycle), `@mcpedit` and `@mcpprogram` (the MCP editor drive), and
+  `@sweep` (which needs the LISTENER flag). See
   `docs/upstream-coverage.md`, which is the audit and the authority.
+- **Every compiler directive now works**, including the six conditionals
+  that used to be treated as false. They are answered through two
+  callbacks rather than by giving the compiler a world.
 
 Two behaviours are deliberately not ported: `DEBUGGER_BREAK`'s interactive
 prompt, and the MPI tracer behind `{debug}`/`{debugif}`. Both would mean
@@ -84,44 +88,68 @@ What tranche 1 actually delivered, in the order it was committed:
   the pattern wrapped in `*…*`, `lookup_cost` charged, and an invented
   200-result cap removed.
 
-**The next three steps are in
-`~/.claude/plans/movement-containment-registration.md`**, which is tranche 2
-re-scoped against what tranche 1 actually found:
+**Tranche 2 is executed too** — groups A through E of
+`~/.claude/plans/movement-containment-registration.md`, plus two of F:
 
-1. **The two divergences tranche 1 found and deferred**: `trimCommand` trims
-   the whole argument where upstream keeps `full_command` untouched, and
-   `runProgram` puts the argument in the COMMAND variable where upstream puts
-   the verb. Both sit in code group B is about to rewrite.
-2. **`enter_room`** (`move.c:123`), in five pieces — the loop check and the
-   HOME ladder, the five-part notification gate, the STICKY drop-to flush,
-   autolook, the penny find. **None of `quiet_moves`, `autolook_cmd`,
-   `penny_rate` or `secure_thing_movement` is read anywhere in
-   `internal/game`**: all four load and all four do nothing.
-3. **`do_get` and `do_drop`**, then `leave`/`disembark` and the
-   `put`/`throw`/`hand` entries. `get` and `drop` are Emerald's own
-   inventions — twenty lines each against upstream's ninety — and they are
-   the largest invented behaviour left in the server.
+- **A** — `ctx.rest` is upstream's `full_command`, and COMMAND is the verb.
+  One typed line is three strings (`game.c:677-696`) and Emerald carried
+  one; every launch site chooses COMMAND differently and none agreed.
+- **B** — `enter_room`, and the four `@tune` parameters that existed,
+  loaded and were read nowhere: `quiet_moves`, `autolook_cmd`,
+  `penny_rate`, `secure_thing_movement`.
+- **`trigger()`** — not in the plan. An exit does something different per
+  destination type, and Emerald treated everything that was not a room, a
+  program or NIL as a plain move.
+- **C** — `do_get` and `do_drop` properly, so `put`, `throw`, `hand` and
+  `take` are honest spellings of them; `leave`/`disembark`; `send_home`.
+- **D** — `@register` and the `_reg` write path, `@propset`, `@action`
+  (retiring the `@open` alias), `@attach`, `@clone`, `@relink`,
+  `@bless`/`@unbless`, `give`, `read`, `@newpassword`, and the
+  `=<regname>` argument on six building commands.
+- **E** — the six compiler conditionals, through two callbacks rather
+  than by giving the compiler a world. Plus a recursion guard on
+  `compileProgram`, which `$ifcancall` makes necessary.
+- **F, partly** — `@examine` (the `@san` family's fourth), `@debug`, and
+  `@teledump` declined.
 
-Then tranche 3 (the propqueues — the only work that changes how an existing
-world behaves) and tranche 4 (ANSI gating).
+Three matcher bugs turned up along the way, each wider than the step that
+found it: `Matcher.Everything` was missing `match_registered` and
+`match_player`; `Matcher.Exits` was missing three of `match_all_exits`'
+five stages, so an action attached to a thing could not be reached at all;
+and `look` is deliberately *narrower* than `match_everything`, which
+making the first correct then made wrong.
+
+**The next three steps**, in order of how much they change:
+
+1. **`do_teleport`** (`wiz.c:150`), which four golden cases have now run
+   into. Its confirmation says "X teleported to Y." where Emerald says
+   "Teleported.", and its control rules are per victim type. The
+   `@recycle`/`@link`/`@unlink` structural divergences
+   `resolveControlled`'s doc comment names belong with it — four commits.
+2. **`do_tune`** (`tune.c:680`). Upstream says "Parameter set." and then
+   echoes the parameter and `*done*`; bare `@tune` lists where Emerald
+   has its own `#list`. The movement golden case had to avoid `@tune`
+   entirely because of it.
+3. **Tranche 3, the propqueues**, which is the only work left that
+   changes how an existing world behaves: props sitting inert in the
+   starter world and in every imported `.db` start executing. LISTENER
+   flag maintenance first, then `@sweep` on that alone, then
+   `propqueue`/`envpropqueue`, then the call sites one commit each.
+
+Then tranche 4 (ANSI gating), and `choose_thing`'s missing tie-breaks —
+no preferred type, no `check_keys`, no environment distance — which
+matter for `get` and `drop`.
 
 Smaller things still open, each self-contained:
 
-- **`@action` still aliases `@open`.** Upstream's `do_action` attaches an exit
-  to a *named object* rather than to the room. Needs `register_object`, which
-  nothing in Emerald writes yet.
-- **Four commands' permission refusals** — `@link`, `@unlink`, `@teleport`,
-  `@recycle` — are structurally divergent, not just differently worded. See
-  `resolveControlled`'s doc comment, which names all four.
-- **`@teleport`'s confirmation** says "Teleported." where upstream reports
-  what moved where. Found by the `look` golden case; it belongs with
-  `do_teleport`, whose control rules diverge structurally anyway.
-- **`trimCommand` trims the whole argument.** Upstream keeps `full_command`
-  untouched and trims only `arg1`/`arg2`, so `say`, `pose`, `page` and
-  `gripe` all lose leading whitespace here. Found by the gripe golden case.
-- **`runProgram` puts the argument in the COMMAND variable**, where upstream
-  puts the verb: `match_cmdname` and `match_args` are two different strings
-  and `SetReserved` makes them one.
+- **Two commands' permission refusals** — `@link` and `@recycle` — are
+  structurally divergent, not just differently worded. `@unlink` and
+  `@teleport` are now per-type ports; see `resolveControlled`'s doc comment
+  for what is left.
+- **`@bless` does not bless directories**, which upstream does. The effect is
+  confined to the count and to `examine`'s marker, and making it agree needs
+  a flag that can live on a valueless node — `internal/props`, `examine` and
+  the store together.
 - **ANSI output** is not gated. Upstream strips it unless the player has
   `CHOWN_OK`, whose user-facing name is COLOR.
 - **`home` is matched as a command**, where upstream reaches it inside
@@ -204,6 +232,32 @@ uses `strcmp` (so `@SHUTDOWN` is not `@shutdown`), `strcasecmp`,
 `move` has no `Matched()` at all and accepts trailing text — `movex` runs it.
 A command's minimum abbreviation is *how deep the switch commits before
 reaching it*, which is what `min` in the table records.
+
+**One typed line is three strings.** `full_command` is the line after the verb
+with exactly *one* character skipped, `arg1`/`arg2` are trimmed at both ends,
+and `match_cmdname` is the verb (`game.c:677-696`). The commands that print
+back what was typed read the first; everything else reads the second; a program
+gets the third in COMMAND and the first on its stack. Emerald carried one
+string and used it for all three, and **every launch site chooses COMMAND
+differently**: a command or exit gets the typed verb, INTERP *inherits the
+caller's*, `{muf}` gets `<&how>(MPI)`, a message property gets `(@Desc)`, QUEUE
+gets "Queued Event."
+
+**The matcher is five functions, not one, and three were incomplete.**
+`match_everything` includes `match_registered` and (for a wizard)
+`match_player`; `match_all_exits` has *five* stages, of which actions on
+things in inventory and actions on things in the room were missing entirely —
+so an action attached to a thing was unreachable. And `do_look_at` builds its
+own narrower list, so making `match_everything` correct made `look` wrong in
+the same run. `choose_thing`'s last resort is a **coin toss**, which means no
+golden case can name an object that matches two things.
+
+**`$ifcancall` is not `CANCALL?`.** They read alike and weigh different things:
+the primitive uses the target program's own mucker level and the running
+frame's effective one, the directive uses both *owners'* levels, because at
+compile time there is no frame. Sharing one function between them makes one
+wrong. And `$ifcancall` compiles the program it asks about, so anything doing
+that needs a recursion guard.
 
 **A message property beginning `@` is a *call*, not text.** `exec_or_notify`
 (`property.c:2454`) runs the program it names — `@123 args` or `@$reg args` —
@@ -481,6 +535,8 @@ message explains its own findings.
 
 | Commit | Summary |
 |---|---|
+| *(pending)* | Containment, exit destinations, registration, building, the six compiler conditionals. Groups C–E of the movement plan plus two of F. One commit rather than four because GPG's pinentry timed out on every attempt; the message carries the four sections. |
+| `f1bdf5a` | **A typed line is three strings**, and `enter_room` is ninety. COMMAND was the argument at every launch site; `say`/`pose`/`@wall`/`gripe` lost leading whitespace; four movement `@tune` parameters were read nowhere. |
 | `e0a06f2` | `@owned`, `@contents`, `@entrances`, and `@find` done properly — `*…*` wrapping, `lookup_cost` charged, an invented 200-result cap gone. `internal/muf`'s `FlagCheck` exported rather than ported twice. |
 | `ee20174` | `@restrict`, and `gripe` — complaints are rows in Postgres with a configurator page, and a snapshot **appends** them rather than replacing, the only place it does that. |
 | `3c26240` | `score`, `uptime`, `@trace`, `@uncompile`, `@wall`. `timestr_long` moved from `internal/mpi` to `internal/timefmt` rather than written twice. |
@@ -515,15 +571,36 @@ they are read-only reference.
 
 ## 6. Testing Status
 
-All green as of `e0a06f2`:
+All green as of the pending commit above:
 
 - `go vet ./...` — clean
 - `make fmt-check` — clean (gofmt plus the 70-column reflow)
 - `make width-check` — no new line over 70 columns
 - `make test` (`go test -race ./...` against a scratch Postgres schema) —
-  clean, no data races, across ~650 test functions
-- `make golden` — all 18 differential suites against a live Fuzzball 7
-  container:
+  clean, no data races, across ~670 test functions
+- `make golden` — all 28 differential suites against a live Fuzzball 7
+  container. The twelve added since tranche 1:
+
+  | Suite | Covers |
+  |---|---|
+  | `TestExecOrNotifyMatchesFuzzball` | a message property that names a MUF program |
+  | `TestLookMatchesFuzzball` | `look` per type: name lines, the three headings, HAVEN |
+  | `TestMessageSettersMatchFuzzball` | the eleven `set_standard_property` commands |
+  | `TestMiscCommandsMatchFuzzball` | `score`, `uptime`, `@trace`, `@uncompile`, `@wall` |
+  | `TestRestrictAndGripeMatchFuzzball` | `@restrict`'s three answers, `gripe` filed and read back |
+  | `TestSearchCommandsMatchFuzzball` | the four checkflags searches, all six display modes |
+  | `TestReservedVariablesMatchFuzzball` | what a program is handed, reached four ways |
+  | `TestSpeechMatchesFuzzball` | the `full_command` commands, whitespace and pose separators |
+  | `TestMoveMatchesFuzzball` | `enter_room` and `trigger`'s five destination types |
+  | `TestGetDropMatchesFuzzball` | containment, and the five spellings of get and drop |
+  | `TestRegisterMatchesFuzzball` | `@register`'s four argument shapes, `@propset`'s six types |
+  | `TestActionMatchesFuzzball` | `@action`, `@attach`, `@clone`, the `=<regname>` argument |
+  | `TestBlessMatchesFuzzball` | `@bless`, `@unbless`, `@relink` |
+  | `TestGiveMatchesFuzzball` | `give`'s four paths, `read`, `@newpassword` |
+  | `TestConditionalsMatchFuzzball` | the six compiler conditionals |
+  | `TestWizSmallMatchesFuzzball` | `@examine` per type, `@debug` |
+
+  and the sixteen from before:
 
   | Suite | Covers |
   |---|---|

@@ -493,10 +493,27 @@ type compiled struct {
 // compileProgram compiles a program, caching the result. A program
 // that fails to compile caches its error too, so a broken one is not
 // recompiled on every use.
+//
+// The recursion guard is not decoration. $ifcancall compiles the
+// program it is asking about, so two libraries that each check the
+// other would compile each other for ever — on the world goroutine,
+// which means the whole server. Upstream has the same shape and the
+// same exposure; a cycle here fails the inner compile instead, which
+// makes the condition false rather than hanging.
 func (s *Server) compileProgram(w *world.World, r ref.Ref) (*muf.Program, error) {
 	if c, ok := s.programs[r]; ok {
 		return c.prog, c.err
 	}
+	if s.compiling[r] {
+		return nil, errMsg("that program is already " +
+			"being compiled: a compile-time check on " +
+			"it would recurse")
+	}
+	if s.compiling == nil {
+		s.compiling = map[ref.Ref]bool{}
+	}
+	s.compiling[r] = true
+	defer delete(s.compiling, r)
 
 	src, ok := w.Source(r)
 	if !ok {
@@ -547,6 +564,8 @@ func (s *Server) compileSource(w *world.World, r ref.Ref,
 		Defines:        s.definesFor(w, r),
 		Macros:         w.MacroTable(),
 		Include:        s.includerFor(w),
+		ObjVersion:     s.objVersionFor(w, r),
+		CanCall:        s.canCallFor(w, r),
 		MuckName:       w.Tune.String("muckname"),
 		Version:        Version,
 		CommentsStrict: w.Tune.Bool("muf_comments_strict"),
@@ -773,4 +792,121 @@ func (s *Server) reportMUFErrorTo(w *world.World, who ref.Ref, f *muf.Frame,
 		"line", rep.Line,
 		"instruction", rep.Inst,
 		"error", rep.Msg)
+}
+
+// muf version properties, from include/props.h.
+const (
+	propMufVersion    = "_version"
+	propMufLibVersion = "_lib-version"
+)
+
+// compileTargetFor resolves the object a compiler conditional names.
+//
+// The matcher is narrower than the one $include uses and narrower
+// again than match_everything: match_registered, match_absolute and
+// — for $ifver only — match_me. "this" is the program being
+// compiled, which $ifver spells specially and $ifcancall does not
+// accept.
+func compileTargetFor(w *world.World, prog ref.Ref, target string,
+	allowMe bool) (ref.Ref, bool) {
+
+	if ascii.EqualFold(target, "this") {
+		return prog, true
+	}
+	owner := ownerOf(w, prog)
+	m := match.New(w, owner, target).Registered().Absolute()
+	if allowMe {
+		m = m.Me()
+	}
+	r := m.Result()
+	if r == ref.Nothing || r == ref.Ambiguous || !w.Valid(r) {
+		return ref.Nothing, false
+	}
+	return r, true
+}
+
+// objVersionFor answers $ifver and $iflibver.
+//
+// An object with no version property reads as "0.0" rather than
+// failing, which is what makes "$ifver $lib 1.0" false against a
+// library that never declared one instead of refusing to compile.
+func (s *Server) objVersionFor(w *world.World,
+	prog ref.Ref) func(string, bool) (string, bool) {
+
+	return func(target string, lib bool) (string, bool) {
+		r, ok := compileTargetFor(w, prog, target, true)
+		if !ok {
+			return "", false
+		}
+		path := propMufVersion
+		if lib {
+			path = propMufLibVersion
+		}
+		v, found := w.GetProp(r, path)
+		if !found || v.Type != props.String || v.Str == "" {
+			return "0.0", true
+		}
+		return v.Str, true
+	}
+}
+
+// canCallFor answers $ifcancall.
+//
+// This is *not* CANCALL?'s test, though they read alike. The
+// primitive (p_misc.c:1274) weighs the target program's own mucker
+// level and the running frame's effective one; the directive
+// (compile.c:3837) weighs both *owners'* levels, because at compile
+// time there is no frame to have a level. Sharing one function
+// between them would make one of the two wrong.
+//
+// The target is compiled if it has to be, which upstream does too:
+// the public functions it exports are not known otherwise.
+func (s *Server) canCallFor(w *world.World,
+	prog ref.Ref) func(string, string) (bool, bool) {
+
+	return func(target, function string) (bool, bool) {
+		r, ok := compileTargetFor(w, prog, target, false)
+		if !ok {
+			return false, false
+		}
+		o := w.Get(r)
+		if o == nil || o.Type() != ref.TypeProgram {
+			// Resolving to something that is not a
+			// program is not an error: the condition is
+			// simply false, since a non-program exports
+			// nothing.
+			return false, true
+		}
+
+		// Both levels are the *owners'*.
+		targetOwner := mlevelOf(w, o.Owner)
+		callerOwner := mlevelOf(w, ownerOf(w, prog))
+		if targetOwner <= 0 {
+			return false, true
+		}
+		if callerOwner < 4 && o.Owner != ownerOf(w, prog) &&
+			!linkable(o.Flags, o.Type()) {
+			return false, true
+		}
+
+		p, err := s.compileProgram(w, r)
+		if err != nil {
+			return false, true
+		}
+		pub, found := p.Publics[ascii.Fold(function)]
+		if !found {
+			return false, true
+		}
+		return callerOwner >= pub.MLevel, true
+	}
+}
+
+// mlevelOf is MLevel(x): the mucker level of an object, which for a
+// player is what their own flags say.
+func mlevelOf(w *world.World, r ref.Ref) int {
+	o := w.Get(r)
+	if o == nil {
+		return 0
+	}
+	return o.Flags.MLevel()
 }

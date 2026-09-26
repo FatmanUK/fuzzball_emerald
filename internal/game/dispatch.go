@@ -208,6 +208,9 @@ var declined = map[string]string{
 		"settings from a database it has not opened",
 	"@tops": "this server does not profile programs, which is " +
 		"also why examine reports no cumulative runtime",
+	"@teledump": "it base64-encodes the flat-file dump over " +
+		"the connection, and this server has no dump " +
+		"file to send — the world lives in Postgres",
 }
 
 // dispatch runs one resolved command, or reports that this server

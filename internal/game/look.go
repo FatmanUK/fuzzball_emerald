@@ -51,15 +51,21 @@ func (s *Server) cmdLook(c *ctx) {
 		s.lookHere(c.w, c.d.ID, c.who)
 		return
 	}
-	target := match.New(c.w, c.who, c.arg).Everything().Result()
-	switch target {
-	case ref.Nothing:
-		c.tell("I don't see that here.")
-	case ref.Ambiguous:
-		c.tell("I don't know which one you mean.")
-	default:
-		s.lookAt(c.w, c.d.ID, c.who, target)
+	// do_look_at's own matcher, which is *narrower* than
+	// match_everything: no registrations, so "look $thing" finds
+	// nothing even when a program could resolve the name. And a
+	// failed match says what match_msg_nomatch says, which is
+	// where the look-trap branch ends up.
+	m := match.New(c.w, c.who, c.arg).Exits().Neighbor().
+		Possession()
+	if isWizard(c.w, ownerOf(c.w, c.who)) {
+		m = m.Absolute().Player()
 	}
+	target := m.Here().Me().Result()
+	if !noisyMatch(c, c.arg, target) {
+		return
+	}
+	s.lookAt(c.w, c.d.ID, c.who, target)
 }
 
 // lookHere shows what the player is standing in, which is look_room

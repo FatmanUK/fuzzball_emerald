@@ -112,12 +112,14 @@ func (s *Server) cmdCreate(c *ctx) {
 	if !s.requireBuilder(c) {
 		return
 	}
-	name, costArg, _ := strings.Cut(c.arg, "=")
+	name, rest, _ := strings.Cut(c.arg, "=")
 	name = strings.TrimSpace(name)
 	if name == "" {
-		c.tell("Usage: @create <name> [=<cost>]")
+		c.tell("Usage: @create <name> [=<cost>[=<regname>]]")
 		return
 	}
+	costArg, rname, _ := strings.Cut(rest, "=")
+	rname = strings.TrimSpace(rname)
 
 	// A thing costs money to make and is worth a fraction of what
 	// was paid, which is what gives objects a value at all.
@@ -143,6 +145,7 @@ func (s *Server) cmdCreate(c *ctx) {
 		return
 	}
 	c.tell("Object %s created.", unparse(c.w, c.who, o.Ref))
+	s.registerBuilt(c, rname, o.Ref)
 }
 
 // cmdDig makes a room.
@@ -150,12 +153,14 @@ func (s *Server) cmdDig(c *ctx) {
 	if !s.requireBuilder(c) {
 		return
 	}
-	name, parentName, _ := strings.Cut(c.arg, "=")
+	name, rest, _ := strings.Cut(c.arg, "=")
 	name = strings.TrimSpace(name)
 	if name == "" {
-		c.tell("Usage: @dig <name> [=<parent>]")
+		c.tell("Usage: @dig <name> [=<parent>[=<regname>]]")
 		return
 	}
+	parentName, rname, _ := strings.Cut(rest, "=")
+	rname = strings.TrimSpace(rname)
 
 	if !s.payFor(c.w, c.who, int(c.w.Tune.Int("room_cost"))) {
 		c.tell("Sorry, you don't have enough %s to dig a room.",
@@ -163,10 +168,12 @@ func (s *Server) cmdDig(c *ctx) {
 		return
 	}
 
-	parent := c.w.Tune.Ref("default_room_parent")
-	if !c.w.Valid(parent) {
-		parent = ref.GlobalEnvironment
-	}
+	// The default parent is the nearest ABODE room *above* the
+	// player's own room, and default_room_parent only when there
+	// is none — so digging inside somebody's realm parents the
+	// new room into that realm rather than at the top of the
+	// world.
+	parent := defaultRoomParent(c.w, c.who)
 
 	o := c.w.Create(name, ref.TypeRoom, c.who)
 	o.Dropto = ref.Nothing
@@ -197,6 +204,7 @@ func (s *Server) cmdDig(c *ctx) {
 			c.tell("Parent set to %s.", unparse(c.w, c.who, r))
 		}
 	}
+	s.registerBuilt(c, rname, o.Ref)
 }
 
 // cmdOpen makes an exit in the current room.
@@ -204,12 +212,17 @@ func (s *Server) cmdOpen(c *ctx) {
 	if !s.requireBuilder(c) {
 		return
 	}
-	name, destName, hasDest := strings.Cut(c.arg, "=")
+	name, rest, _ := strings.Cut(c.arg, "=")
 	name = strings.TrimSpace(name)
 	if name == "" {
-		c.tell("Usage: @open <name>[;<alias>...] [=<destination>]")
+		c.tell("Usage: @open <name>[;<alias>...] " +
+			"[=<destination>[=<regname>]]")
 		return
 	}
+	destName, rname, _ := strings.Cut(rest, "=")
+	destName = strings.TrimSpace(destName)
+	rname = strings.TrimSpace(rname)
+	hasDest := destName != ""
 
 	here := c.w.Get(c.who).Location
 	if !c.w.Valid(here) {
@@ -242,15 +255,57 @@ func (s *Server) cmdOpen(c *ctx) {
 				c.w.Tune.String("pennies"))
 			return
 		}
-		if dest, ok := s.resolveLinkTarget(c, strings.TrimSpace(destName)); ok {
+		if dest, ok := s.resolveLinkTarget(c, destName); ok {
 			o.Dest = []ref.Ref{dest}
 			c.w.Modified(o.Ref)
 			c.tell("%s", linkedTo(c, dest))
 		}
 	}
+	s.registerBuilt(c, rname, o.Ref)
 }
 
-// resolveLinkTarget finds what an exit should point at.
+// defaultRoomParent is do_dig's own search for where a new room
+// belongs: the nearest ABODE room *above* the digger's own room,
+// falling back to default_room_parent and then to #0.
+//
+// Emerald used to go straight to default_room_parent, so digging
+// inside somebody's realm put the new room at the top of the world
+// instead of inside the realm.
+func defaultRoomParent(w *world.World, who ref.Ref) ref.Ref {
+	me := w.Get(who)
+	if me == nil {
+		return ref.GlobalEnvironment
+	}
+	// LOCATION(LOCATION(player)): the walk starts above the room
+	// the digger is standing in, not at it.
+	parent := ref.Nothing
+	if room := w.Get(me.Location); room != nil {
+		parent = room.Location
+	}
+	for i := 0; parent != ref.Nothing && i <= w.Len(); i++ {
+		o := w.Get(parent)
+		if o == nil {
+			break
+		}
+		if o.Flags&ref.Abode != 0 {
+			return parent
+		}
+		parent = o.Location
+	}
+	if fallback := w.Tune.Ref("default_room_parent"); w.Valid(
+		fallback) {
+		return fallback
+	}
+	return ref.GlobalEnvironment
+}
+
+// resolveLinkTarget is parse_linkable_dest (db.c:1971): what an exit
+// should point at.
+//
+// Every refusal here names the object it is refusing, and the failed
+// match goes through noisy_match_result like every other command's
+// — "I don't understand 'X'." An earlier version said "I don't see
+// that here." and refused without naming anything.
 func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
 	if name == "" {
 		c.tell("Link it to what?")
@@ -258,23 +313,30 @@ func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
 	}
 	r := match.New(c.w, c.who, name).Absolute().Me().Here().Home().Nil().
 		Possession().Neighbor().Player().Result()
-	switch r {
-	case ref.Nothing:
-		c.tell("I don't see that here.")
+	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
-	case ref.Ambiguous:
-		c.tell("I don't know which one you mean.")
-		return ref.Nothing, false
-	case ref.Home, ref.Nil:
+	}
+	if r == ref.Home || r == ref.Nil {
 		return r, true
+	}
+
+	o := c.w.Get(r)
+	// Linking to a player is a separate refusal from being unable
+	// to link, and a separate @tune parameter — which nothing
+	// in this server read before.
+	if o.Type() == ref.TypePlayer &&
+		!c.w.Tune.Bool("teleport_to_player") {
+		c.tell("You can't link to players.  Destination "+
+			"%s ignored.", unparse(c.w, c.who, r))
+		return ref.Nothing, false
 	}
 	// Anyone may link to a room or thing flagged to allow it, or
 	// to anything they control.
-	o := c.w.Get(r)
 	linkable := o.Flags&ref.LinkOK != 0 ||
 		(o.Type() == ref.TypeRoom || o.Type() == ref.TypeThing) && o.Flags&ref.Abode != 0
 	if !linkable && !s.controls(c.w, c.who, r) {
-		c.tell("You can't link to that.")
+		c.tell("You can't link to %s.",
+			unparse(c.w, c.who, r))
 		return ref.Nothing, false
 	}
 	return r, true
@@ -344,18 +406,54 @@ func (s *Server) cmdUnlink(c *ctx) {
 	if !ok {
 		return
 	}
+	// Like @link, this is four operations wearing one name, and
+	// each says what it did. An exit is unlinked, a room loses
+	// its drop-to, a thing's home goes back to its owner and a
+	// player's to player_start.
+	//
+	// The refund and the priority reset are upstream's too: an
+	// exit that had a destination returns link_cost to whoever
+	// owns it, and an exit with any mucker bits loses them, which
+	// is announced separately because it changes how strongly the
+	// exit binds.
 	o := c.w.Get(target)
 	switch o.Type() {
 	case ref.TypeExit:
+		if len(o.Dest) != 0 {
+			s.refund(c.w, o.Owner,
+				int(c.w.Tune.Int("link_cost")))
+		}
 		o.Dest = nil
+		c.w.Modified(target)
+		c.tell("Unlinked.")
+		if o.Flags.RawMLevel() != 0 {
+			o.Flags = o.Flags.SetMLevel(0)
+			c.w.Modified(target)
+			c.tell("Action priority Level reset to 0.")
+		}
 	case ref.TypeRoom:
 		o.Dropto = ref.Nothing
+		c.w.Modified(target)
+		c.tell("Dropto removed.")
+	case ref.TypeThing:
+		o.Home = o.Owner
+		c.w.Modified(target)
+		c.tell("Thing's home reset to owner.")
+	case ref.TypePlayer:
+		o.Home = c.w.Tune.Ref("player_start")
+		c.w.Modified(target)
+		c.tell("Player's home reset to default player " +
+			"start room.")
 	default:
-		c.tell("You can't unlink that.")
-		return
+		c.tell("You can't unlink that!")
 	}
-	c.w.Modified(target)
-	c.tell("Unlinked.")
+}
+
+// refund puts money back in somebody's pocket, which @unlink does
+// when it takes a destination away.
+func (s *Server) refund(w *world.World, owner ref.Ref, amount int) {
+	w.SetProp(owner, propValue, props.Value{Type: props.Int,
+		Num: valueOf(w, owner) + int64(amount)})
 }
 
 // cmdName renames an object.

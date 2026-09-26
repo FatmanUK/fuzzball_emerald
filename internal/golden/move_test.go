@@ -69,6 +69,43 @@ var moveScript = Script{
 	"@fail blocked=The way is barred.",
 	"blocked",
 
+	// trigger() does something different for every destination
+	// type, and Emerald used to treat everything that was not a
+	// room, a program or NIL as a plain move.
+	//
+	// A metalink: an exit pointing at another exit runs it, with
+	// pflag off so it cannot move the player itself.
+	"@open meta=#5",
+	"meta",
+	"@succ meta=The link fires.",
+	"meta",
+	"@succ meta=",
+
+	// A thing the exit does not live inside is *fetched* rather
+	// than entered, to wherever the exit hangs. The anvil is left
+	// in the Workshop and the exit is here, so using it brings
+	// the anvil here.
+	"@create anvil",
+	"@open fetch=anvil",
+	"north",
+	"drop anvil",
+	"south",
+	"@contents here",
+	"fetch",
+	"@contents here",
+	"get anvil",
+
+	// An exit linked to a player jumps to them, and only if they
+	// are JUMP_OK — and only if teleport_to_player allows
+	// linking to one at all, which is its own refusal and names
+	// the player.
+	"@open visit=me",
+
+	// An exit with no destination at all says what an exit whose
+	// destinations all did nothing says.
+	"@open idle",
+	"idle",
+
 	// A drop-to that is STICKY sweeps the room when the last
 	// player leaves. #0 is where the player returns to, so the
 	// sweep is checked from the Workshop.

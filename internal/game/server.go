@@ -37,6 +37,10 @@ type Server struct {
 
 	// started is when the server came up, for uptime.
 	started time.Time
+	// compiling names the programs a compile is currently inside,
+	// so a $ifcancall cycle between two libraries fails rather
+	// than recursing on the world goroutine.
+	compiling map[ref.Ref]bool
 	// lookDepth is enter_room's donelook counter: an autolook
 	// command that moves the player again would otherwise not
 	// stop.

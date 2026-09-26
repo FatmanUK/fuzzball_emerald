@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
@@ -199,4 +200,101 @@ func (s *Server) requireGod(c *ctx, cmd string) bool {
 		"command", cmd, "by", c.who.String(), "byName", nameOf(c.w, c.who))
 	c.tell("You are not allowed to %s.", cmd)
 	return false
+}
+
+func init() {
+	register("@examine", (*Server).cmdExamineSanity)
+	register("@debug", (*Server).cmdDebug)
+}
+
+// cmdExamineSanity is do_examine_sanity (sanity.c:187), the fourth of
+// the @san family: every raw field of one object, and everything in
+// the database that points at it.
+//
+// It is not `examine`. That one renders an object for a player; this
+// prints the fields a chain repair would act on, which is what makes
+// it useful on a world that will not boot. The names are unparsed
+// with **no viewer** — unparse_object(NOTHING, ...) — so every
+// dbref shows, whatever the flags say.
+func (s *Server) cmdExamineSanity(c *ctx) {
+	// There is no "here" default: an empty argument goes straight
+	// to the matcher and fails, which is upstream's own behaviour
+	// and not the same as `examine`'s.
+	name := strings.TrimSpace(c.arg)
+	d := match.New(c.w, c.who, name).Everything().Result()
+	if !noisyMatch(c, name, d) {
+		return
+	}
+
+	o := c.w.Get(d)
+	if o == nil || o.Type() == ref.TypeGarbage {
+		c.tell("Object:         *GARBAGE* %s", d)
+	} else {
+		c.tell("Object:         %s", sanName(c.w, d))
+	}
+	if o == nil {
+		c.tell("Done.")
+		return
+	}
+
+	c.tell("  Owner:          %s", sanName(c.w, o.Owner))
+	c.tell("  Location:       %s", sanName(c.w, o.Location))
+	c.tell("  Contents Start: %s", sanName(c.w, o.Contents))
+	c.tell("  Exits Start:    %s", sanName(c.w, o.Exits))
+	c.tell("  Next:           %s", sanName(c.w, o.Next))
+
+	switch o.Type() {
+	case ref.TypeThing:
+		c.tell("  Home:           %s", sanName(c.w, o.Home))
+		c.tell("  Value:          %d", valueOf(c.w, d))
+	case ref.TypeRoom:
+		c.tell("  Drop-to:        %s", sanName(c.w, o.Dropto))
+	case ref.TypePlayer:
+		c.tell("  Home:           %s", sanName(c.w, o.Home))
+		c.tell("  Pennies:        %d", valueOf(c.w, d))
+	case ref.TypeExit:
+		c.tell("  Links:")
+		for _, dest := range o.Dest {
+			c.tell("    %s", sanName(c.w, dest))
+		}
+	}
+
+	// Every object whose chain fields point here, which is what a
+	// damaged chain looks like from the other end.
+	c.tell("Referring Objects:")
+	c.w.Each(func(other *world.Object) bool {
+		if other.Contents == d {
+			c.tell("  By contents field: %s",
+				sanName(c.w, other.Ref))
+		}
+		if other.Exits == d {
+			c.tell("  By exits field:    %s",
+				sanName(c.w, other.Ref))
+		}
+		if other.Next == d {
+			c.tell("  By next field:     %s",
+				sanName(c.w, other.Ref))
+		}
+		return true
+	})
+	c.tell("Done.")
+}
+
+// sanName unparses a ref with no viewer, which is what the sanity
+// commands do: SanPrintObject passes NOTHING as the player, so the
+// flags and the dbref always show whoever is looking.
+func sanName(w *world.World, r ref.Ref) string {
+	return unparse(w, ref.Nothing, r)
+}
+
+// cmdDebug is do_debug (wiz.c:1309), whose only option is "display
+// propcache" and only under DISKBASE.
+//
+// Emerald has no diskbase — properties live in memory and in
+// Postgres — so every argument reaches the same answer, which is
+// exactly what upstream compiled without DISKBASE does. The command
+// is here rather than declined because it is not missing: this *is*
+// its behaviour.
+func (s *Server) cmdDebug(c *ctx) {
+	c.tell("Unrecognized option.")
 }

@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **20 commands missing** of about 112. What is left is engine, not verbs. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **10 of 109 dispatched names have no handler**, and five of those are deliberate. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -59,22 +59,63 @@ so a survey counts them.
 degradation: they hit the unrecognised-directive branch, so a program
 using one did not compile at all.
 
-Six conditionals are **recognised and treated as false**, which is a
-deliberate limitation rather than an omission:
+**The six conditionals now work.** `$ifver`, `$ifnver`, `$iflibver`,
+`$ifnlibver`, `$ifcancall` and `$ifncancall` used to be recognised and
+treated as false, because they need a live database the compiler is
+deliberately denied.
 
-    $ifver  $ifnver  $iflibver  $ifnlibver  $ifcancall  $ifncancall
+They are answered through two callbacks instead, the shape `$include`
+already used: `Options.ObjVersion` reads the version property off a
+named object, and `Options.CanCall` applies upstream's four-part
+public-function test. The compiler still has no world.
 
-They need a live database the compiler is not given. A program using
-one takes its `$else` branch and the compiler says so in a note. This
-is worth revisiting: `CANCALL?` and the program cache both exist now,
-and the compiler could probably be handed what it needs.
+Three things were settled by doing it:
+
+- **A version comparison is "is the wanted version at most the one the
+  object has"**, both sides parsed as floats with anything unparseable
+  reading as 0.0. An object with no version property reads as "0.0"
+  rather than failing, so `$ifver $lib 1.0` is *false* against a
+  library that never declared one.
+- **Failing to resolve the object is a compile error**, not a false
+  condition — the one place these differ from `$iflib`.
+- **`$ifcancall` is not `CANCALL?`'s test.** The primitive weighs the
+  target program's own mucker level and the running frame's effective
+  one; the directive weighs both *owners'* levels, because at compile
+  time there is no frame. They read alike and sharing one function
+  between them would make one wrong.
+
+`$ifcancall` compiles the program it asks about, so `compileProgram`
+gained a **recursion guard**: two libraries that each check the other
+would otherwise compile each other for ever, on the world goroutine.
 
 ---
 
-## `muckhelp.html` — 20 commands missing
+## `muckhelp.html` — 10 of 109 names have no handler
 
-Upstream dispatches about 112 commands; Emerald has 92 names covering
-92 of them, and 20 are absent.
+`internal/game/dispatch_table.go` is every name Fuzzball 7 dispatches:
+**109 rows, 99 with handlers, 10 without.** The count is exact rather
+than estimated, because the table *is* the command surface and a name
+with no handler says so when typed.
+
+The ten, and why:
+
+    @memory  @usage  @reconfiguressl  @tops  @teledump   deliberate
+    @armageddon  @restart                                lifecycle
+    @mcpedit  @mcpprogram                                MCP editor
+    @sweep                                               LISTENER flag
+
+`@teledump` joins the deliberate list: it base64-encodes the flat-file
+dump over the connection, and this server has no dump file to send.
+
+`@armageddon` and `@restart` are implementable but touch process
+lifecycle and deployment rather than the game — armageddon exits
+*without* writing, which write-behind makes a deliberate choice rather
+than a free one, and restart needs a supervisor to restart into. They
+say "not yet", which is accurate.
+
+This is a different shape of gap from the one this document opened
+with. It used to be **verbs, not engine** — about forty commands whose
+properties, locks and primitives already worked. Those have all landed.
 
 That characterisation has now flipped. It used to be **commands, not
 engine** — the properties, locks and primitives behind most of the
@@ -89,7 +130,7 @@ and a name with no handler says so when typed.
 
 ### Message and lock properties
 
-    @propset
+Nothing left in this group.
 
 Ten of this group have landed: `@fail`, `@ofail`, `@success`,
 `@osuccess`, `@drop`, `@odrop`, `@idescribe`, `@oecho`, `@pecho` and
@@ -108,16 +149,18 @@ print — so Emerald prints nothing after the colon, and the golden
 case masks the line rather than dropping it, as `examine`'s "Memory
 used" is masked.
 
-`@propset` is the one left: it is not a message setter but a general
-property writer, with its own type syntax.
+`@propset` has landed too. It is not a message setter but a general
+property writer, with six types and its own syntax — and it is one of
+only two commands that write a property the *player* names, which is
+why it carries a restriction check the message setters do not need.
 
 ### Building and ownership
 
-    @attach  @clone  @register  @relink  @sweep
+    @sweep
 
 ### Wizard
 
-    @bless  @unbless  @debug  @examine  @memory  @usage
+    @debug  @examine  @memory  @usage
 
 `@armageddon`, `@restart` and `@teledump` are also absent. `@reconfiguressl` is **deliberately** absent:
 TLS is configured from the environment, because a TLS-only server
@@ -167,6 +210,39 @@ no handler, so the abbreviations around them stay upstream's, and
 typing one says which of the four reasons applies. The list lives in
 `declined` in `internal/game/dispatch.go`, and a test checks every
 name in it is a real command and is not secretly implemented.
+
+### One thing @bless does that is recorded rather than reproduced
+
+`blessprops_wildcard` also blesses **directories**, which `first_prop`
+walks and Emerald's `props.Tree` does not report because a directory
+carries no value of its own.
+
+The effect is confined to the count `@bless` reports and to the marker
+`examine` prints: `Prop_Blessed` reads a path's own flags, and a
+blessed directory does not bless its children. Making it agree means a
+flag that can live on a valueless node, which touches `internal/props`,
+`examine` and the store together — and would have to persist, since
+upstream's dumps carry propdir flags. Its own step.
+
+### What cannot be compared at all
+
+Two things in the matcher are genuinely non-deterministic upstream, so
+no golden case can pin them:
+
+- **`choose_thing`'s last resort is a coin toss** (`match.c:175`). Two
+  objects with the same name, at the same environment distance, with
+  no type preference to separate them, resolve *randomly*. Any script
+  that names one of a pair would diverge half the time.
+- **The penny find** is `RANDOM() % penny_rate`, which is why the
+  movement suite sets that parameter to zero and the payout is a unit
+  test.
+
+`choose_thing` itself is only partly ported: Emerald's tie-break is an
+exit's priority level and the longest matching alias, where upstream
+also weighs a preferred type, whether an object is locked against the
+searcher (`check_keys`), and environment distance. That matters for
+`get` and `drop`, which pass `check_keys` so that a locked container
+loses to an unlocked one.
 
 ### The four checkflags searches
 

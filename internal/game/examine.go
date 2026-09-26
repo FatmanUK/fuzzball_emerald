@@ -384,7 +384,7 @@ func (s *Server) listProps(c *ctx, target ref.Ref, dir, pattern string) int {
 		}
 		if rest == "" || recurse {
 			count++
-			c.send(displayProp(c.w, c.who, o.Props, path))
+			c.send(s.displayProp(c, o.Props, path))
 		}
 		next := rest
 		if recurse {
@@ -419,7 +419,10 @@ func propIsHidden(path string) bool {
 //
 // A path that holds children shows a trailing slash, and one that
 // holds only children shows as a directory with no value of its own.
-func displayProp(w *world.World, who ref.Ref, tree *props.Tree, path string) string {
+func (s *Server) displayProp(c *ctx, tree *props.Tree,
+	path string) string {
+
+	w, who := c.w, c.who
 	shown := "/" + path
 	if len(tree.Children(path)) > 0 {
 		shown += "/"
@@ -444,13 +447,35 @@ func displayProp(w *world.World, who ref.Ref, tree *props.Tree, path string) str
 	case props.Float:
 		return fmt.Sprintf("%s flt %s:%.17g", blessed, shown, v.Float)
 	case props.Lock:
-		s := v.Str
-		if s == "" {
-			s = unlockedValue
-		}
-		return fmt.Sprintf("%s lok %s:%s", blessed, shown, s)
+		// A lock is stored as its *unparsed* string, written
+		// with fullname off — so "#1" rather than
+		// "One(#1PWM3)". displayprop renders it with names
+		// (unparse_boolexp's fullname argument is 1), which
+		// means re-parsing it the way every other reader
+		// does.
+		return fmt.Sprintf("%s lok %s:%s", blessed, shown,
+			s.lockText(w, c.d.ID, who, v.Str))
 	}
 	return "- dir " + shown + ":(no value)"
+}
+
+// lockText renders a stored lock the way displayprop does: re-parsed
+// through the disk-loader path, then unparsed with names.
+//
+// A lock that will not parse shows as unlocked, which is what
+// upstream's TRUE_BOOLEXP unparses to.
+func (s *Server) lockText(w *world.World, descr int,
+	who ref.Ref, stored string) string {
+
+	if stored == "" {
+		return unlockedValue
+	}
+	host := &lockHost{s: s, w: w}
+	b, err := boolexp.Parse(host, descr, who, stored, true)
+	if err != nil {
+		return unlockedValue
+	}
+	return boolexp.Unparse(host, who, b, true)
 }
 
 // canLink reports whether someone may link an object, which is also

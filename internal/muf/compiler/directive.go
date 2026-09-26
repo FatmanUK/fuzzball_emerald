@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
@@ -71,17 +72,10 @@ func (c *compiler) directive(word string) error {
 		_, found := c.include(tok.text)
 		return c.skipConditional(found == (name == "iflib"))
 
-	// Conditionals that need more of a live server than the
-	// compiler is given. Treated as false, taking the $else
-	// branch when there is one.
-	case "ifver", "ifnver", "iflibver", "ifnlibver", "ifcancall", "ifncancall":
-		// These take two arguments: an object and a version
-		// or name.
-		_, _, _ = c.argToken("$" + name)
-		_, _, _ = c.argToken("$" + name)
-		c.notes = append(c.notes,
-			"$"+name+" was treated as false: it needs more than the compiler is given")
-		return c.skipConditional(false)
+	case "ifver", "ifnver", "iflibver", "ifnlibver":
+		return c.ifVersion(name)
+	case "ifcancall", "ifncancall":
+		return c.ifCanCall(name)
 
 	// Directives that set a property on the program object. The
 	// value is recorded so the caller can apply it; none of them
@@ -621,4 +615,109 @@ func isConditionalDirective(d string) bool {
 		return true
 	}
 	return false
+}
+
+// ifVersion is $ifver, $ifnver, $iflibver and $ifnlibver: compare a
+// version property against a number.
+//
+// The comparison is "is the required version at most the one the
+// object has", and both sides are parsed as floats with anything
+// unparseable reading as 0.0 — so "$ifver $lib 1.2" is true when
+// the library says 1.2 or more. An object with no version property
+// reads as "0.0" rather than failing.
+//
+// Failing to *resolve* the object is a compile error, not a false
+// condition, which is the one place these differ from $iflib.
+func (c *compiler) ifVersion(name string) error {
+	target, ok, err := c.argToken("$" + name)
+	if err != nil || !ok {
+		return err
+	}
+	lib := name == "iflibver" || name == "ifnlibver"
+
+	have, found := "", false
+	if c.opts.ObjVersion != nil {
+		have, found = c.opts.ObjVersion(target.text, lib)
+	}
+	if !found {
+		if c.opts.ObjVersion == nil {
+			// No host to ask. Recorded rather than
+			// failing the compile, since a program using
+			// it would otherwise not build at all.
+			_, _, _ = c.argToken("$" + name)
+			c.notes = append(c.notes, "$"+name+
+				" was treated as false: no database"+
+				" to read a version from")
+			return c.skipConditional(false)
+		}
+		return c.errf("I don't understand what object you " +
+			"want to check with $ifver.")
+	}
+
+	want, ok, err := c.argToken("$" + name)
+	if err != nil || !ok {
+		return err
+	}
+	if want.text == "" {
+		return c.errf("I don't understand what version you " +
+			"want to compare to with $ifver.")
+	}
+	c.lex.restOfLine()
+
+	met := parseVersion(want.text) <= parseVersion(have)
+	if name == "ifnver" || name == "ifnlibver" {
+		met = !met
+	}
+	return c.skipConditional(met)
+}
+
+// parseVersion reads a version the way upstream does: sscanf with
+// "%lg", and 0.0 for anything that is not a float at all.
+func parseVersion(s string) float64 {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0
+	}
+	return f
+}
+
+// ifCanCall is $ifcancall and $ifncancall: whether the program being
+// compiled may call a named public function of another object.
+//
+// Upstream's test has four parts, all of which need the *target's*
+// compiled publics — it compiles the target if it has to — so the
+// whole question is asked of the host through Options.CanCall. What
+// the compiler keeps is the argument handling and which way round the
+// answer goes.
+func (c *compiler) ifCanCall(name string) error {
+	target, ok, err := c.argToken("$" + name)
+	if err != nil || !ok {
+		return err
+	}
+
+	fn, ok, err := c.argToken("$" + name)
+	if err != nil || !ok {
+		return err
+	}
+	if fn.text == "" {
+		return c.errf("I don't understand what function " +
+			"you want to check for.")
+	}
+	c.lex.restOfLine()
+
+	if c.opts.CanCall == nil {
+		c.notes = append(c.notes, "$"+name+
+			" was treated as false: no database was "+
+			"available to check a public function")
+		return c.skipConditional(false)
+	}
+	can, found := c.opts.CanCall(target.text, fn.text)
+	if !found {
+		return c.errf("I don't understand what object you " +
+			"want to check in ifcancall.")
+	}
+	if name == "ifncancall" {
+		can = !can
+	}
+	return c.skipConditional(can)
 }

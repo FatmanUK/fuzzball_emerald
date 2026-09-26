@@ -50,6 +50,26 @@ type Options struct {
 	// and every $iflib is false.
 	Include func(target string) (map[string]string, bool)
 
+	// ObjVersion answers $ifver and $iflibver: the _version or
+	// _lib-version property of the object a target names, and
+	// whether that object could be resolved at all. "this" means
+	// the program being compiled.
+	//
+	// Like Include, this exists so the compiler needs no world:
+	// the caller resolves the target and reads the property. When
+	// nil, both directives are treated as false.
+	ObjVersion func(target string, lib bool) (string, bool)
+
+	// CanCall answers $ifcancall: whether the program being
+	// compiled may call the named public function of the object a
+	// target names. The caller applies upstream's four-part test,
+	// which needs the target's compiled publics and both owners'
+	// mucker levels.
+	//
+	// The second return reports whether the target resolved,
+	// which is a compile *error* rather than a false condition.
+	CanCall func(target, function string) (bool, bool)
+
 	// MuckName and Version fill the __muckname and __version
 	// built-ins, whose values come from the running server.
 	MuckName string

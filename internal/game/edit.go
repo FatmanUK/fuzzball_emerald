@@ -810,11 +810,9 @@ func (s *Server) cmdProgram(c *ctx) {
 			return
 		}
 		c.tell("Program %s created.", unparse(c.w, c.who, program))
-		if rname != "" {
-			c.w.SetProp(ref.GlobalEnvironment, "_reg/"+rname,
-				propRef(program))
-			c.tell("Registered as $%s", rname)
-		}
+		// register_object, on the *player* — create.c:434,
+		// not on #0 with a message of its own.
+		s.registerBuilt(c, rname, program)
 	}
 	s.edit(c, program)
 }

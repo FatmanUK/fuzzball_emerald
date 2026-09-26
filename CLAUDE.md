@@ -397,6 +397,159 @@ each: an exit is "Linked to X." (or "Linked to HOME." — unparsing `HOME` gives
 other failure gets — "You can't go that way." An earlier version answered
 "That exit doesn't go anywhere.", which was invented here.
 
+## Exit traversal
+
+`internal/game/move.go`'s `trigger` is `move.c:482`. An exit has a **list** of
+destinations and every one of them fires; what each does depends on its type,
+and an earlier version treated everything that was not a room, a program or NIL
+as a plain move.
+
+- **A room** is walked into, subject to three guards that all say "You can't go
+  that way.": a non-wizard THING may not enter a ZOMBIE room, a VEHICLE may not
+  enter a VEHICLE, and a guest may not pass a GUEST room or exit.
+- **A thing** is *boarded* when the exit is inside it and it is a VEHICLE —
+  `dest == LOCATION(exit)`, which is why no boarding exit can be made while
+  `@action` aliases `@open`. Otherwise the thing is **fetched**: to the exit's
+  own location, or to its location's location when the exit hangs on a thing,
+  so an exit on a bag brings something to the room rather than into the bag.
+  A non-STICKY exit that fetched something then sends the exit's home object
+  home.
+- **A player** is jumped to, if they are JUMP_OK — "That player does not wish
+  to be disturbed." otherwise. Linking to one at all needs
+  `teleport_to_player`, which nothing read before.
+- **An exit** is a metalink: `trigger` calls itself with `pflag` off, so the
+  inner exit's rooms and players are skipped and the player cannot be moved
+  twice.
+- **A program** is run REGUID, and refused for a guest if either the program or
+  the exit is GUEST.
+
+**"Done." is what an exit says when nothing it pointed at counted as a
+success**, which includes an exit with no destinations reached through a
+metalink.
+
+**`HOME` as a destination is resolved per player**, and a home that is a THING
+is refused with "That would be an undefined operation." rather than entered.
+
+**Every refusal in `parse_linkable_dest` names its object.** "I don't
+understand 'X'." for a failed match — `noisy_match_result`, like every other
+command — "You can't link to players.  Destination X ignored." (two spaces),
+and "You can't link to X."
+
+## get and drop
+
+`internal/game/getdrop.go` is `do_get` and `do_drop`, and the five spellings
+of the two: **`take` is another get; `put`, `throw` and `hand` are other
+drops.** Upstream dispatches them to the same two functions, and its own
+comment says the three differ only in their help files.
+
+**The second argument is most of what they do.** With two arguments, `get`
+takes the *first* as the container — `get bag=key` — and `drop` takes it as
+the destination. Emerald's own versions had no second argument at all, which
+is why the three aliases could not be aliases.
+
+**A container's `@conlock` defaults to false**, so an unopened container is
+shut. That ordering is load-bearing and not what the messages suggest: the
+conlock is tested *before* the "You can't steal stuff from players." check, so
+taking from a player who has set no conlock is refused as an unopenable
+container and never reaches the steal message.
+
+**`get` from a container and from the floor differ in more than one message.**
+From a container it runs `could_doit` and reports "You can't get that."; from
+the floor it runs `can_doit`, which means the `@succ` and `@osucc` show.
+
+**`drop` says which of three things happened.** Into a room, "Dropped." (or the
+thing's own `@drop`), plus the room's `@drop`, plus an `@odrop` from each — and
+the *room's* `@odrop` is prefixed with the **thing's** name, not the player's.
+Into a thing, "Put away." Into a player, a pair of lines naming both sides.
+Only the room case has messages at all.
+
+**A room's drop-to is immediate unless the room is STICKY.** Dropping into such
+a room puts the thing straight through the drop-to; only a STICKY room holds
+things until everybody leaves, which is `maybe_dropto`'s job.
+
+**`leave` and `disembark` are one command**, and each of its refusals is its
+own sentence. Boarding a vehicle needs an exit **inside** it — `trigger()`
+requires `dest == LOCATION(exit)` — which no implemented command can make while
+`@action` still aliases `@open`.
+
+**`@link` and `@unlink` are each several operations wearing one name**, and
+say so differently for each type. `@link`: "Linked to X." for an exit (or
+"Linked to HOME." — unparsing `HOME` gives `*HOME*`, the lock spelling),
+"Home set." for a thing or player, "Dropto set." for a room. `@unlink`:
+"Unlinked." plus a `link_cost` refund and, if the exit had mucker bits,
+"Action priority Level reset to 0."; "Dropto removed."; "Thing's home reset to
+owner."; "Player's home reset to default player start room."
+
+## Actions, clones and blessing
+
+`internal/game/action.go` is `@action`, `@attach`, `@clone`, `@relink`, `@bless`
+and `@unbless`.
+
+**`@action` was an alias for `@open`, which is worse than missing.** Upstream's
+`do_action` attaches the exit to a **named object** rather than to the room, so
+a world using it got exits in the wrong place and no complaint. It also does
+not link, which is the other half of what separates it from `@open`.
+
+**`@relink` checks the new target before breaking the old link.** That is the
+whole point of the command — `@unlink` then `@link` leaves an exit pointing
+nowhere when the second half fails — and it is why its checks duplicate
+`@link`'s rather than calling into it. None of its refusals is worded the same
+as `@link`'s for the same condition, and `_do_unlink` runs *quietly* in the
+middle, so the only line between the checks and the link is "Attempting to
+relink...".
+
+**`@clone`'s cost is the original's value**, floored at `object_cost`, via
+`OBJECT_GETCOST` — so cloning something valuable costs what it is worth. A
+wizard's clone copies hidden properties and nobody else's does.
+
+**Only `@bless` has the usage guard.** `@unbless` goes straight through with an
+empty pattern, matches nothing and reports zero. Its count line says
+"unblessed" where `@bless`'s says "blessed". And upstream also blesses
+**directories**, which Emerald does not — recorded in
+`docs/upstream-coverage.md`, because making it agree needs a flag that can live
+on a valueless node.
+
+**The `=<regname>` argument is the last argument of six commands** — `@open`,
+`@dig`, `@create`, `@program`, `@action`, `@clone` — and it registers on the
+**player**, not on `#0`, through `register_object`'s own messages.
+
+**`@dig`'s default parent is the nearest ABODE room above the digger's**, and
+`default_room_parent` only when there is none. Going straight to the parameter
+puts a room dug inside somebody's realm at the top of the world instead.
+
+## Registration and arbitrary properties
+
+`internal/game/propset.go` is `@register` (`set.c:1077`) and `@propset`
+(`set.c:929`) — the two commands that write a property the *player* names
+rather than one a verb implies, which is why both carry a restriction check the
+message setters do not need.
+
+**Nothing wrote `_reg/` before.** `$include` and `Matcher.Registered` read a
+propdir only the MUF editor's own `q` ever filled in.
+
+**`@register`'s argument shape is genuinely awkward**, and the prefix test is
+on the whole argument rather than its first word: upstream writes
+`string_prefix(arg1, "#me")`, which asks whether the argument *starts with*
+`#me`. Testing it the other way round makes an empty argument match every
+prefix, which made `@register =wid` behave as `@register #me =wid`. With no `=`
+at all it lists rather than sets.
+
+**A registration is stored as a ref**, and read back as any of four forms,
+because real databases contain all of them.
+
+**`@propset`'s type may be abbreviated to any prefix**, and an empty type is a
+string — so `@propset me=:foo:bar` is the short form. Only the type and path
+are trimmed; a value may begin or end with a space.
+
+**`parse_boolexp` has its own message for a name it cannot resolve** — "I
+don't see X here." — and upstream shows it *before* the caller's "I don't
+understand that lock." `boolexp.ParseError.Notify` is that message; anything
+parsing a lock from player input has to report it.
+
+**A lock property is displayed with names.** It is *stored* unparsed with
+fullname off — "#1" — and `displayprop` renders it with `unparse_boolexp`'s
+fullname argument set, so reading one back means re-parsing it.
+
 ## The four checkflags searches
 
 `@find`, `@owned`, `@contents` and `@entrances` (`internal/game/find.go`) are
@@ -536,6 +689,30 @@ copies fields one at a time; `trig` is among them and `perms` is not, so a
 HARDUID program's child runs REGUID. It reads like an oversight in the C, it is
 observable, and it is reproduced.
 
+**The six compiler conditionals are answered through callbacks**, not by giving
+the compiler a world. `Options.ObjVersion` reads `_version` or `_lib-version`
+off a named object for `$ifver`/`$iflibver`, and `Options.CanCall` answers
+`$ifcancall` — the same shape `Options.Include` already used for `$include` and
+`$iflib`. With either nil the directive is treated as false and a note says so,
+which is what the compiler's own tests rely on.
+
+Three details are load-bearing. A version comparison is "is the **wanted**
+version at most the one the object has", both sides parsed as floats with
+anything unparseable reading as 0.0; an object with no version property reads
+as "0.0" rather than failing. Failing to *resolve* the object is a compile
+**error**, unlike `$iflib`. And `$ifcancall` is **not** `CANCALL?`'s test even
+though they read alike: the primitive (`p_misc.c:1274`) weighs the target
+program's own mucker level and the running frame's effective one, while the
+directive (`compile.c:3837`) weighs both *owners'* levels, because at compile
+time there is no frame to have a level. Sharing one function between them would
+make one of the two wrong.
+
+**`compileProgram` has a recursion guard, and needs one.** `$ifcancall`
+compiles the program it is asking about, so two libraries that each check the
+other would compile each other for ever — on the world goroutine, which means
+the whole server. A cycle fails the inner compile instead, which makes the
+condition false.
+
 **Some compiler directives write properties, and the compiler cannot.**
 `$author`, `$note`, `$version`, `$lib-version`, `$doccmd`, `$pubdef` and
 `$libdef` all set a property on the program object, but `internal/muf/compiler`
@@ -656,6 +833,31 @@ dead command.
 upstream applies them at the dispatch site — including for commands this
 server has not implemented. `internal/game/build.go`'s `requireWizard` and
 friends are now shadowed for anything dispatched.
+
+**`Matcher.Exits` is `match_all_exits`, and three of its five stages were
+missing.** The room, then **actions on things the searcher is carrying**, then
+**actions on things in the room**, then the searcher's own, and only then the
+environment chain. Without the two object-action stages an action attached to a
+thing — exactly what `@action` makes — could not be reached at all. A searcher
+inside a THING is in a vehicle, so the walk continues from that vehicle's
+*home*; the walk is bounded at 88 levels; and a YIELD room blocks everything
+behind it but an OVERT one.
+
+**`choose_thing` is only partly ported, and its last resort is a coin toss.**
+Emerald's tie-break is an exit's priority and the longest matching alias;
+upstream also weighs a preferred type, whether an object is locked against the
+searcher (`check_keys`, which `get` and `drop` pass), and environment distance
+— and then tosses a coin (`match.c:175`). **No golden case can pin a name that
+matches two objects**, which is why the clone suite clones each thing once.
+
+**`Matcher.Everything` is `match_everything`, and two searches were missing
+from it.** `Registered` means a `$name` resolves for every command that takes
+an object; without it `look $wid` and `@describe $wid=...` found nothing a
+program had registered. `Player` is added when the searcher or its owner is a
+wizard, so a wizard can name somebody elsewhere. But **`look` is deliberately
+narrower**: `do_look_at` builds its own list without `match_registered`, so
+`look $thing` really does fail, and a failed look says `match_msg_nomatch`'s
+"I don't understand 'X'." rather than "I don't see that here."
 
 **Command precedence is load-bearing.** `QUIT` and `WHO` are compared
 case-sensitively before anything else, and exits are matched before built-in
@@ -820,7 +1022,21 @@ loopback and binding it wider is a logged warning, not a refusal — unlike
 ## Sanity checking
 
 `@sanity` reports inconsistency, `@sanfix` repairs it, `@sanchange` edits one
-reference by hand. All three are God-only, refused from inside a `@force`, and
+reference by hand, and **`@examine` prints one object's raw fields** —
+`do_examine_sanity`, which is not `examine`. That one renders an object for a
+player; this prints the chain fields a repair would act on, plus everything in
+the database pointing at it, which is what makes it useful on a world that will
+not boot. Its names are unparsed with **no viewer**, so every dbref shows
+whatever the flags say, and it has **no "here" default**: an empty argument
+goes to the matcher and fails.
+
+`@debug` is here too. Its only upstream option is "display propcache" and only
+under DISKBASE, which Emerald does not have — so every argument reaches
+"Unrecognized option.", which is exactly what upstream compiled without
+DISKBASE does. It is implemented rather than declined because that *is* its
+behaviour.
+
+All four of the @san family are God-only, refused from inside a `@force`, and
 are the only `@`-commands that cannot be abbreviated — upstream compares them
 with `strcmp`, and "@san" should not be enough to run something that can
 rewrite ownership.

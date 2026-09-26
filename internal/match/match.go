@@ -304,6 +304,26 @@ func (m *Matcher) matchContents(container ref.Ref) {
 	}
 }
 
+// Inside is match_rmatch (match.c:1001): what is in a named
+// container, its exits included.
+//
+// Only a room, a player or a thing has anything to search — an exit
+// or a program contributes nothing rather than being an error, which
+// is how "get key from sword" comes to say it cannot find the key
+// rather than complaining about the sword.
+func (m *Matcher) Inside(container ref.Ref) *Matcher {
+	o := m.w.Get(container)
+	if o == nil {
+		return m
+	}
+	switch o.Type() {
+	case ref.TypeRoom, ref.TypePlayer, ref.TypeThing:
+		m.matchContents(container)
+		m.matchExitsOn(container)
+	}
+	return m
+}
+
 // Player matches a player by name, anywhere in the game. A leading
 // '*' is Fuzzball's way of forcing a player match.
 func (m *Matcher) Player() *Matcher {
@@ -317,31 +337,108 @@ func (m *Matcher) Player() *Matcher {
 	return m
 }
 
-// Exits matches an exit reachable from the player, walking out
-// through the environment tree. A nearer exit does not automatically
-// win: exits carry a priority level, and the highest one reached
-// takes precedence.
+// Exits is match_all_exits (match.c:794): every action reachable from
+// the searcher, in upstream's order.
+//
+// There are five places to look, and three of them were missing. The
+// room, then **actions on things the searcher is carrying**, then
+// **actions on things in the room**, then the searcher's own, and
+// only then the environment chain walking out. Without the two
+// object-action stages an action attached to a thing — which is
+// exactly what @action makes — could not be reached at all.
+//
+// Two more details are upstream's. A searcher standing inside a THING
+// is in a vehicle, so the environment walk continues from that
+// vehicle's *home* rather than its location. And the walk is bounded
+// at 88 levels, which upstream hard-codes.
+//
+// A nearer exit does not automatically win: exits carry a priority
+// level and the highest reached takes precedence. Upstream also
+// tracks block_equals, which makes an exact match at one stage
+// suppress equal-priority ties at later ones; that belongs to
+// choose_thing, whose tie-break this package does not model.
 func (m *Matcher) Exits() *Matcher {
 	o := m.w.Get(m.from)
 	if o == nil {
 		return m
 	}
-	// Exits attached to what the player is carrying are reachable
-	// too.
-	m.matchExitsOn(m.from)
 
 	loc := o.Location
-	// Bounded, so a cycle in a damaged environment tree cannot
-	// hang the world goroutine.
-	for i := 0; loc != ref.Nothing && i <= m.w.Len(); i++ {
-		m.matchExitsOn(loc)
-		parent := m.w.Get(loc)
-		if parent == nil {
+	// A YIELD room blocks the environment chain behind it: only a
+	// room flagged OVERT is matched past one.
+	blocking := false
+	if room := m.w.Get(loc); room != nil &&
+		room.Flags&ref.Yield != 0 {
+		blocking = true
+	}
+	m.matchRoomExits(loc)
+	m.matchObjectActions(m.from)
+	m.matchObjectActions(loc)
+	m.matchRoomExits(m.from)
+
+	if loc == ref.Nothing {
+		return m
+	}
+	// Inside a vehicle, the chain continues from where the
+	// vehicle lives rather than from where it happens to be.
+	if room := m.w.Get(loc); room != nil &&
+		room.Type() == ref.TypeThing {
+		loc = room.Home
+		if loc == ref.Nothing {
+			return m
+		}
+		m.matchRoomExits(loc)
+	}
+
+	for limit := 88; limit > 0; limit-- {
+		room := m.w.Get(loc)
+		if room == nil {
 			break
 		}
-		loc = parent.Location
+		loc = room.Location
+		if loc == ref.Nothing {
+			break
+		}
+		next := m.w.Get(loc)
+		if next == nil {
+			break
+		}
+		if !blocking || next.Flags&ref.Overt != 0 {
+			m.matchRoomExits(loc)
+		}
+		if !blocking && next.Flags&ref.Yield != 0 {
+			blocking = true
+		}
 	}
 	return m
+}
+
+// matchRoomExits is match_room_exits: the actions attached to one
+// object, when that object is a kind that can hold any.
+func (m *Matcher) matchRoomExits(loc ref.Ref) {
+	o := m.w.Get(loc)
+	if o == nil {
+		return
+	}
+	switch o.Type() {
+	case ref.TypePlayer, ref.TypeRoom, ref.TypeThing:
+		m.matchExitsOn(loc)
+	}
+}
+
+// matchObjectActions is match_invobj_actions and
+// match_roomobj_actions, which are the same function with a different
+// container: the actions attached to any *thing* inside it.
+func (m *Matcher) matchObjectActions(container ref.Ref) {
+	if container == ref.Nothing {
+		return
+	}
+	for _, r := range m.w.Contents(container) {
+		o := m.w.Get(r)
+		if o != nil && o.Type() == ref.TypeThing {
+			m.matchExitsOn(r)
+		}
+	}
 }
 
 // matchExitsOn tries every exit attached to one object.
@@ -453,10 +550,42 @@ func priority(f ref.Flags) int {
 	return 1
 }
 
-// Everything runs the searches a bare command name should try, in the
-// order Fuzzball tries them.
+// Everything is match_everything (match.c:884): the searches a bare
+// command name should try, in the order Fuzzball tries them.
+//
+// Two of them were missing and their absence was wide. **Registered**
+// means a "$name" resolves for every command that takes an object —
+// without it "look $wid" and "@describe $wid=..." could not find
+// anything a program had registered. And **Player**, which upstream
+// adds when the searcher or its owner is a wizard, so a wizard can
+// name somebody who is elsewhere; several callers were adding it by
+// hand, which is now redundant rather than wrong.
 func (m *Matcher) Everything() *Matcher {
-	return m.Absolute().Me().Here().Possession().Neighbor().Exits()
+	m = m.Exits().Neighbor().Possession().Me().Here().
+		Registered().Absolute()
+	if m.wizardSearcher() {
+		m = m.Player()
+	}
+	return m
+}
+
+// wizardSearcher is match_everything's own test: the object the
+// search happens around, or its owner, or the player being answered.
+func (m *Matcher) wizardSearcher() bool {
+	for _, r := range []ref.Ref{m.from, m.who} {
+		o := m.w.Get(r)
+		if o == nil {
+			continue
+		}
+		if o.Flags.IsWizard() {
+			return true
+		}
+		if owner := m.w.Get(o.Owner); owner != nil &&
+			owner.Flags.IsWizard() {
+			return true
+		}
+	}
+	return false
 }
 
 // Thing runs the searches for naming an object to act on, which

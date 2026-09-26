@@ -89,19 +89,11 @@ func init() {
 	register("move", (*Server).cmdGo)
 	register("home", (*Server).cmdHome)
 	register("inventory", (*Server).cmdInventory)
-	register("get", (*Server).cmdGet)
-	register("take", (*Server).cmdGet)
-	register("drop", (*Server).cmdDrop)
 	register("examine", (*Server).cmdExamine)
 
 	register("@create", (*Server).cmdCreate)
 	register("@dig", (*Server).cmdDig)
 	register("@open", (*Server).cmdOpen)
-	// @action is upstream's do_action, which attaches an exit to
-	// a named object rather than to the room, and says so in its
-	// own words. Until that is ported it is an alias for @open,
-	// which differs in where the exit lands.
-	register("@action", (*Server).cmdOpen)
 	register("@link", (*Server).cmdLink)
 	register("@unlink", (*Server).cmdUnlink)
 	register("@name", (*Server).cmdName)

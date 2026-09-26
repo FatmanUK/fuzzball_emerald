@@ -154,12 +154,15 @@ func TestUnimplementedCommandsSaySo(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
-	h.send("@bless me=x")
+	// Any name in the table with no handler and no entry in
+	// `declined` will do — the two say different things, and
+	// this is the "not yet" half.
+	h.send("@mcpedit")
 	got := h.out()
 	if !strings.Contains(got, "does not implement") {
-		t.Errorf("@bless said:\n%s", got)
+		t.Errorf("@mcpedit said:\n%s", got)
 	}
-	if !strings.Contains(got, "@bless") {
+	if !strings.Contains(got, "@mcpedit") {
 		t.Errorf("the message does not name the command:\n%s", got)
 	}
 }
