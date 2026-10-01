@@ -265,7 +265,15 @@ func (s *Server) enterRoom(w *world.World, descr int,
 		moveObject(w, who, loc)
 
 		if old != ref.Nothing {
-			// propqueue: _depart, _odepart.
+			// The departure hooks, before anything is
+			// said about the move. Each runs twice: once
+			// on the mover's own properties, once up the
+			// *old room's* environment chain — two
+			// different starting objects, which is why
+			// upstream calls both and not just the
+			// environment walk.
+			s.departQueues(w, descr, who, old, exit)
+
 			s.announceMove(w, who, old, exit, "%s has left.")
 
 			// A room whose drop-to is STICKY holds its
@@ -284,10 +292,56 @@ func (s *Server) enterRoom(w *world.World, descr int,
 
 	if loc != old {
 		s.maybeFindPenny(w, who, loc)
-		// propqueue: _arrive, _oarrive. After the autolook,
+		// The arrival hooks come last, after the autolook,
 		// which upstream comments on: a message from them
 		// would otherwise be lost in the spam of the move.
+		// And unlike the departure pair these are *only*
+		// environment walks, starting from the mover — so
+		// getparent takes them through the new room and
+		// upwards in one pass.
+		s.arriveQueues(w, descr, who, loc, exit)
 	}
+}
+
+// departQueues runs _depart and _odepart, which is four calls rather
+// than two: the mover's own properties and then the old room's
+// environment chain, for each of the pair.
+func (s *Server) departQueues(w *world.World, descr int,
+	who, old, exit ref.Ref) {
+
+	r := propqRun{
+		descr: descr, player: who, where: old, trigger: exit,
+		exclude: ref.Nothing, mlev: 1,
+	}
+	for _, q := range [...]struct {
+		prop, arg string
+		private   bool
+	}{
+		{propDepart, "Depart", true},
+		{propODepart, "Odepart", false},
+	} {
+		r.arg, r.private = q.arg, q.private
+		r.what = who
+		s.propqueue(w, r, q.prop)
+		r.what = old
+		s.envpropqueue(w, r, q.prop)
+	}
+}
+
+// arriveQueues runs _arrive and _oarrive, which are environment walks
+// from the *mover* rather than from the room — so the mover's own
+// properties, the new room's, and everything above it, in one pass.
+func (s *Server) arriveQueues(w *world.World, descr int,
+	who, loc, exit ref.Ref) {
+
+	r := propqRun{
+		descr: descr, player: who, where: loc, trigger: exit,
+		what: who, exclude: ref.Nothing, mlev: 1,
+	}
+	r.arg, r.private = "Arrive", true
+	s.envpropqueue(w, r, propArrive)
+	r.arg, r.private = "Oarrive", false
+	s.envpropqueue(w, r, propOArrive)
 }
 
 // announceMove tells a room that somebody came or went, subject to
@@ -319,7 +373,7 @@ func (s *Server) announceMove(w *world.World, who, room, exit ref.Ref,
 		e.Type() == ref.TypeExit && e.Flags&ref.Dark != 0 {
 		return
 	}
-	s.notifyRoom(w, room, []ref.Ref{who}, format, o.Name)
+	s.notifyRoomFrom(w, who, room, []ref.Ref{who}, format, o.Name)
 }
 
 // maybeDropto is move.c:51: when the last player leaves a room whose

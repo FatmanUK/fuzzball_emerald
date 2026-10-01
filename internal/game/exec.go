@@ -240,7 +240,7 @@ func (s *Server) parseOProp(w *world.World, descr int,
 	if text == "" {
 		return
 	}
-	s.notifyRoom(w, dest, []ref.Ref{player}, "%s",
+	s.notifyRoomFrom(w, player, dest, []ref.Ref{player}, "%s",
 		prefixMessage(text, prefix))
 }
 

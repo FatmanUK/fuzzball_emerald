@@ -55,11 +55,23 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 //
 // "Done." is what an exit says when nothing it pointed at counted as
 // a success, which includes an exit with no destinations at all.
+//
+// **The metalink depth bound is a deliberate divergence.** Upstream
+// recurses with nothing to stop it, so an exit linked to itself —
+// or a ring of two — crashes the server on the C stack. That is
+// reachable from `@link`, which does not test for it, and it takes
+// the whole world down. Emerald refuses past maxMetalinkDepth and
+// says so, which is the one answer a self-linked exit can give that
+// is not a crash. maxMetalinkDepth bounds how many exits one exit may
+// chain through, matching enter_room's own donelook bound of eight.
+const maxMetalinkDepth = 8
+
 func (s *Server) trigger(c *ctx, exit ref.Ref, pflag bool) {
 	e := c.w.Get(exit)
 	if e == nil {
 		return
 	}
+
 	me := c.w.Get(c.who)
 	if me == nil {
 		return
@@ -133,7 +145,14 @@ func (s *Server) trigger(c *ctx, exit ref.Ref, pflag bool) {
 			// A metalink: run the other exit, with pflag
 			// off so it cannot move the player itself.
 			c.w.Used(dest)
+			if s.metaDepth >= maxMetalinkDepth {
+				c.tell("Exit aborted because of " +
+					"metalink loop.")
+				break
+			}
+			s.metaDepth++
 			s.trigger(c, dest, false)
+			s.metaDepth--
 			if hasMesg(c.w, exit, propSucc) {
 				succ = true
 			}

@@ -60,7 +60,7 @@ func TestSetPropMarksListener(t *testing.T) {
 		t.Error("a _listen property did not set the flag")
 	}
 	if !w.IsListener(o.Ref) {
-		t.Error("IsListener says no with the flag and the prop set")
+		t.Error("IsListener said no with both set")
 	}
 
 	// Deleting the property leaves the flag, which is upstream's:
@@ -68,7 +68,7 @@ func TestSetPropMarksListener(t *testing.T) {
 	// is what makes that invisible.
 	o.Props.Delete("_listen/hello")
 	if o.Flags&ref.Listener == 0 {
-		t.Error("the flag was cleared on delete; upstream keeps it")
+		t.Error("the flag was cleared; upstream keeps it")
 	}
 	if w.IsListener(o.Ref) {
 		t.Error("IsListener trusted a stale flag")
@@ -126,7 +126,7 @@ func TestHasListenPropIsExact(t *testing.T) {
 		t.Error("_listenup counted as a listen propqueue")
 	}
 	if w.IsListener(o.Ref) {
-		t.Error("IsListener reported a flag with no propqueue")
+		t.Error("IsListener took a flag with no propqueue")
 	}
 
 	// A propdir with no value of its own does count, because

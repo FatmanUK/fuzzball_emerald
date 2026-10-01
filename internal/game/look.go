@@ -135,6 +135,7 @@ func (s *Server) lookAt(w *world.World, descr int,
 		}
 		s.lookSimple(w, descr, who, target)
 		s.listContents(w, who, target, "Carrying:")
+		s.lookQueue(w, descr, who, target)
 
 	case ref.TypeThing:
 		if me.Location != o.Location && o.Location != who &&
@@ -149,6 +150,7 @@ func (s *Server) lookAt(w *world.World, descr int,
 			s.listContents(w, who, target, "Contains:")
 			w.Used(target)
 		}
+		s.lookQueue(w, descr, who, target)
 
 	default:
 		s.lookSimple(w, descr, who, target)
@@ -157,6 +159,7 @@ func (s *Server) lookAt(w *world.World, descr int,
 		if o.Type() != ref.TypeProgram {
 			w.Used(target)
 		}
+		s.lookQueue(w, descr, who, target)
 	}
 }
 
@@ -209,6 +212,26 @@ func (s *Server) lookRoom(w *world.World, descr int,
 	// there; a world that wants an "obvious exits" line supplies
 	// it from its own programs, as the starter world does.
 	s.listContents(w, who, loc, "Contents:")
+
+	s.lookQueue(w, descr, who, loc)
+}
+
+// lookQueue runs the _lookq propqueue, which is the last thing a look
+// of any kind does.
+//
+// Its argument is the dbref of what was looked at, written "#123",
+// where every other propqueue passes a word — so a program hooked
+// here is told what it is describing and a hook on #0 can serve the
+// whole world. It is a private queue: whatever it produces goes to
+// whoever looked.
+func (s *Server) lookQueue(w *world.World, descr int,
+	who, target ref.Ref) {
+
+	s.envpropqueue(w, propqRun{
+		descr: descr, player: who, where: target,
+		trigger: who, what: target, exclude: ref.Nothing,
+		arg: propqArg(target), mlev: 1, private: true,
+	}, propLookQueue)
 }
 
 // listContents is look_contents: a heading, then whatever the player

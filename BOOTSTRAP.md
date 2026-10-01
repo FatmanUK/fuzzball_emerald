@@ -139,10 +139,13 @@ ahead of tranche 3:
   reads only its first character, a timespan refuses a bare count of seconds,
   an integer is `number()`, and a dbref is *matched* against a short list.
 
-**Tranche 3, the propqueues, is under way**, and it is the only work left that
-changes how an existing world behaves: props sitting inert in the starter world
-and in every imported `.db` start executing. Its first half is done and changes
-nothing —
+**Tranche 3, the propqueues, is executed.** It was the only work left that
+changes how an existing world *behaves* rather than what it says: properties
+that had sat inert in the starter world and in every imported `.db` now run —
+the starter world alone carries two `_arrive` hooks and six `_connect` hooks
+that had never fired.
+
+Its first half changes nothing and had to come first:
 
 - **The LISTENER flag is maintained**, in `internal/world/listen.go`. Nothing
   maintained it before, so `@sweep` could not have told the truth. It is set in
@@ -156,14 +159,35 @@ nothing —
   so every dbref after a `@recycle` was one higher than upstream's. `@recycle`'s
   own confirmation and its `@tune` guard came with it.
 
-What is left of the tranche: `propqueue`/`envpropqueue`/`listenqueue`, then the
-call sites one commit each — `_depart`/`_odepart` and `_arrive`/`_oarrive` in
-`enter_room`, `_lookq` in `do_look_at`, `_connect`/`_disconnect` in the login
-path, and `_listen`/`~listen`/`~olisten` wherever text is sent to a room.
+Then the machinery and the five call-site groups: `propqueue`,
+`envpropqueue` and `listenqueue`, with `_depart`/`_odepart` and
+`_arrive`/`_oarrive` in `enter_room`, `_lookq` in `do_look_at`,
+`_connect`/`_disconnect` at login and logout, and the three listen queues in
+`notify_except`. `Server.deferred` is the part of upstream's timequeue that
+neither the process table nor `mpiEvents` already covered, which is what makes
+a listener answer *after* the line that woke it.
 
-Then tranche 4 (ANSI gating), and `choose_thing`'s missing tie-breaks —
-no preferred type, no `check_keys`, no environment distance — which
-matter for `get` and `drop`.
+Two findings from writing its golden case, each wider than the step:
+
+- **MPI's `{force}` is half implemented** — the whole unblessed path, seven
+  refusals, is missing, and MPI reports only the innermost failing function
+  where upstream walks back out. Recorded, not built.
+- **`trigger` had no bound on metalink recursion**, so an exit linked to
+  itself crashed the server on the Go stack — as it does upstream on the C
+  stack. Bounded, which is the one deliberate divergence in the tranche.
+
+**The next step is tranche 4, ANSI gating** — upstream strips ANSI unless
+the player has `CHOWN_OK`, whose user-facing name is COLOR. Every
+`Descriptor.Send` caller runs on the world goroutine, so the gate takes an
+`AllowANSI func() bool` the game installs and reads live: no pushed flag and
+no staleness window. Two things to get right there: `strip_bad_ansi` and
+`strip_ansi` are *different functions* rather than one with a flag, and
+`ansiPattern` (`internal/muf/prim_string2.go`) is narrower than either and is
+`ANSI_STRIP`'s golden-tested contract, so a second, wider stripper belongs in
+its own package.
+
+Then `choose_thing`'s missing tie-breaks — no preferred type, no
+`check_keys`, no environment distance — which matter for `get` and `drop`.
 
 Smaller things still open, each self-contained:
 
@@ -179,16 +203,18 @@ Smaller things still open, each self-contained:
   confined to the count and to `examine`'s marker, and making it agree needs
   a flag that can live on a valueless node — `internal/props`, `examine` and
   the store together.
-- **ANSI output** is not gated. Upstream strips it unless the player has
-  `CHOWN_OK`, whose user-facing name is COLOR.
+- **MPI's `{force}`** has none of its unblessed path: seven refusals, and a
+  blessed gate that reads `!allow_zombies && !blessed` upstream. MPI also
+  reports only the innermost failing function where upstream walks back out,
+  which affects every nested failure.
 - **`home` is matched as a command**, where upstream reaches it inside
   `can_move` gated by `enable_home`, so it is a *direction*.
 - **The four `_sys/` properties** upstream writes on #0 at boot —
   `startuptime`, `maxpennies`, `dumpinterval`, `max_connects` — are not
   written, so MUF reading them gets nothing. `uptime` works because the
   server keeps its own start time.
-- **Look traps** (the `_details` propdir) and the **LOOK propqueue** are the
-  two parts of `do_look_at` still missing.
+- **Look traps** — the `_details` propdir, consulted when a look finds
+  nothing — are the one part of `do_look_at` still missing.
 
 ### How it got here
 

@@ -336,16 +336,28 @@ func (s *Server) warnInteractive(d *session.Descriptor) {
 	d.Send("***  You are currently using the MUF program editor.  ***")
 }
 
-// announceConnect tells the player's room that they have arrived.
+// announceConnect tells the player's room that they have arrived, and
+// runs the _connect propqueues.
+//
+// The announcement is for the first connection only and the queues
+// are for **every** one, which upstream's own comment calls odd and
+// leaves alone: the `connect` action is likewise first-only.
+// Reproduced because a world whose _connect sets a "last host"
+// property needs it on a reconnect too.
 func (s *Server) announceConnect(w *world.World, d *session.Descriptor, alreadyOn bool) {
-	if alreadyOn {
-		return // they were already here
-	}
 	o := w.Get(d.Player)
 	if o == nil || o.Location == ref.Nothing {
 		return
 	}
-	s.notifyRoom(w, o.Location, []ref.Ref{d.Player}, "%s has connected.", o.Name)
+	if !alreadyOn {
+		s.notifyRoom(w, o.Location, []ref.Ref{d.Player},
+			"%s has connected.", o.Name)
+	}
+	// ts_useobject is already done by the login path above, where
+	// upstream does it here, after the queues. Same count either
+	// way; doing it twice is not.
+	s.connectQueues(w, d.ID, d.Player, o.Location,
+		propConnect, propOConnect, "Connect", "Oconnect")
 }
 
 // announceDisconnect tells the player's room that they have gone.
@@ -359,7 +371,34 @@ func (s *Server) announceDisconnect(w *world.World, d *session.Descriptor) {
 	if o == nil || o.Location == ref.Nothing {
 		return
 	}
-	s.notifyRoom(w, o.Location, []ref.Ref{d.Player}, "%s has disconnected.", o.Name)
+	s.notifyRoom(w, o.Location, []ref.Ref{d.Player},
+		"%s has disconnected.", o.Name)
+	s.connectQueues(w, d.ID, d.Player, o.Location,
+		propDisconnect, propODisconnect,
+		"Disconnect", "Odisconnect")
+}
+
+// connectQueues runs one of the two connect/disconnect propqueue
+// pairs. Both are environment walks from the *player*, so getparent
+// takes them through the room and upwards in one pass — the same
+// shape _arrive uses, and unlike _depart's four calls.
+func (s *Server) connectQueues(w *world.World, descr int,
+	who, loc ref.Ref, prop, oprop, arg, oarg string) {
+
+	r := propqRun{
+		descr: descr, player: who, where: loc,
+		// The trigger is NOTHING: nothing in the world caused
+		// this, so a program hooked here has no TRIGGER to
+		// read. That is upstream's, and it is why a _connect
+		// program cannot tell which descriptor woke it except
+		// through DESCR.
+		trigger: ref.Nothing, what: who, exclude: ref.Nothing,
+		mlev: 1,
+	}
+	r.arg, r.private = arg, true
+	s.envpropqueue(w, r, prop)
+	r.arg, r.private = oarg, false
+	s.envpropqueue(w, r, oprop)
 }
 
 // loginWho lists who is online, for someone who has not logged in

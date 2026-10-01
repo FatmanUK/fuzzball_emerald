@@ -67,6 +67,21 @@ type Server struct {
 	// mpiEvents holds what MPI's {delay} has scheduled, fired by
 	// the tick.
 	mpiEvents []mpiEvent
+	// deferred is the rest of upstream's timequeue: work a listen
+	// propqueue has filed for a later tick, so a listener answers
+	// *after* the line that woke it. See propqueue.go.
+	deferred []deferredEvent
+
+	// metaDepth bounds trigger's metalink recursion. Upstream has
+	// no equivalent and an exit linked to itself crashes it; see
+	// trigger's doc comment.
+	metaDepth int
+
+	// propqLevel is upstream's propq_level, the recursion counter
+	// the propqueues share. One counter across every queue type,
+	// which is what stops an _arrive that departs from looping
+	// through a _depart that arrives.
+	propqLevel int
 
 	// lastQuotaRefill is where the spam limiter's clock stands,
 	// advanced a whole time slice at a time.
@@ -364,11 +379,48 @@ const propPuppetEcho = "_/pecho"
 // before walking them. Rooms are skipped, because a room is not an
 // audience.
 //
-// Listener objects and the propqueues that drive them are not
-// implemented.
+// The listen propqueues fire from here, which is where upstream puts
+// them: notify_except runs them on the room, then up the environment
+// chain, and then on every object in the room — before delivering a
+// word to anybody. notifyRoom passes no speaker, so a caller that
+// knows one uses notifyRoomFrom.
 func (s *Server) notifyRoom(w *world.World, room ref.Ref, except []ref.Ref, format string, args ...any) {
-	text := sprintf(format, args...)
+	s.notifyRoomFrom(w, ref.Nothing, room, except,
+		"%s", sprintf(format, args...))
+}
 
+// notifyRoomFrom is notify_except, with the speaker named.
+//
+// The speaker matters for two things a listener can see: the room a
+// listening program is told the line happened in is the *speaker's*
+// location rather than the room being notified, and the ignore filter
+// is applied between the speaker and each recipient.
+//
+// Upstream's environment walk here is inconsistent with itself and is
+// reproduced: the first step upwards is LOCATION(room) and every step
+// after it is getparent, so a VEHICLE room's chain is followed
+// differently on the first hop than on the rest.
+func (s *Server) notifyRoomFrom(w *world.World, from, room ref.Ref,
+	except []ref.Ref, format string, args ...any) {
+
+	text := sprintf(format, args...)
+	where := from
+	if o := w.Get(from); o != nil {
+		where = o.Location
+	}
+
+	if w.Tune.Bool("allow_listeners") {
+		s.notifyListeners(w, from, ref.Nothing, room, where,
+			text)
+		if w.Tune.Bool("allow_listeners_env") {
+			s.envListeners(w, from, room, where, text)
+		}
+	}
+
+	// Delivery, which is separate from the queues above: the
+	// container's own listen props have already fired, and
+	// upstream's walk over the contents skips rooms, so neither
+	// half can run twice on one object.
 	tell := func(r ref.Ref) {
 		o := w.Get(r)
 		if o == nil || containsRef(except, r) {
@@ -388,7 +440,34 @@ func (s *Server) notifyRoom(w *world.World, room ref.Ref, except []ref.Ref, form
 
 	tell(room)
 	for _, r := range w.Contents(room) {
+		if o := w.Get(r); o != nil &&
+			o.Type() != ref.TypeRoom &&
+			!containsRef(except, r) {
+			s.notifyListeners(w, from, ref.Nothing, r,
+				where, text)
+		}
 		tell(r)
+	}
+}
+
+// envListeners runs the listen propqueues up the environment chain
+// from a room.
+//
+// The first step upwards is LOCATION(room) and every step after it is
+// getparent, which is inconsistent with itself and is upstream's: a
+// VEHICLE room's chain is followed differently on the first hop than
+// on the rest.
+func (s *Server) envListeners(w *world.World, from, room,
+	where ref.Ref, text string) {
+
+	srch := ref.Nothing
+	if o := w.Get(room); o != nil {
+		srch = o.Location
+	}
+	for srch != ref.Nothing {
+		s.notifyListeners(w, from, ref.Nothing, srch, where,
+			text)
+		srch = getParent(w, srch)
 	}
 }
 

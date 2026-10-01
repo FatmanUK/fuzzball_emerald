@@ -18,7 +18,8 @@ func (s *Server) cmdSay(c *ctx) {
 	o := c.w.Get(c.who)
 	c.tell("You say, \"%s\"", c.rest)
 	if o.Location != ref.Nothing {
-		s.notifyRoom(c.w, o.Location, []ref.Ref{c.who},
+		s.notifyRoomFrom(c.w, c.who, o.Location,
+			[]ref.Ref{c.who},
 			"%s says, \"%s\"", o.Name, c.rest)
 	}
 }
@@ -45,7 +46,7 @@ func (s *Server) cmdPose(c *ctx) {
 		c.send(line)
 		return
 	}
-	s.notifyRoom(c.w, o.Location, nil, "%s", line)
+	s.notifyRoomFrom(c.w, c.who, o.Location, nil, "%s", line)
 }
 
 // cmdWhisper speaks privately to someone in the same room.

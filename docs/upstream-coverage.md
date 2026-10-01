@@ -14,7 +14,7 @@ Written against Emerald at the commit that adds this file.
 
 | Document | State |
 |---|---|
-| [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
+| [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **All 140 functions, and the documented limits check out.** Two gaps found later: `{force}`'s unblessed path, and error reporting that does not walk back out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
 | [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **9 of 109 dispatched names have no handler**, and five of those are deliberate. |
 
@@ -24,9 +24,12 @@ correctly**.
 
 ---
 
-## `mpihelp.html` — nothing missing
+## `mpihelp.html` — all 140 functions, two gaps inside them
 
-All 140 `mfn_*` functions are implemented and golden-verified. The
+All 140 `mfn_*` functions are implemented and golden-verified. Two
+things inside them are not, both found later by golden cases written
+for something else and both recorded below under "MPI's {force} is
+half implemented". The
 documented limits were checked against both servers:
 
 | Limit | The page says | Upstream's source says | Emerald |
@@ -379,10 +382,10 @@ live rather than latent:
   pins the shape; before it, nothing in the harness looked at
   anything but a room.
 
-Two things `do_look_at` does are still missing, and each is recorded
-rather than hidden: look traps (the `_details` propdir, consulted when
-the match finds nothing) and the LOOK propqueue. The third was
-`@teleport`'s wording, and `do_teleport` is ported now — see below.
+One thing `do_look_at` does is still missing, and it is recorded
+rather than hidden: look traps, the `_details` propdir consulted when
+the match finds nothing. The other two have landed — `@teleport`'s
+wording, and the LOOK propqueue, which is tranche three.
 
 ### The permission refusals, half fixed
 
@@ -416,6 +419,24 @@ for itself and applies its own rule:
 The other three stay on `resolveControlled`, which keeps the old
 message rather than pretending to be upstream's. Each needs its own
 commit.
+
+### MPI's {force} is half implemented
+
+Found by the propqueue golden case, which tried to use it to drive the
+recursion limit. `mfn_force` (`mfuns2.c:2760`) has an **unblessed
+path** Emerald does not: with `allow_zombies` set, an unblessed
+`{force}` is allowed to proceed and is then subject to seven refusals
+of its own — a dark puppet, an owner flagged ZOMBIE, a no-puppets
+room, a thing named after a player, the XFORCIBLE flag, the force
+lock, and God. Emerald refuses every unblessed `{force}` outright with
+"Permission Denied.", where upstream's wording for the XFORCIBLE case
+alone is "Permission denied: forced object not @set Xforcible."
+
+It also found that **MPI reports only the innermost failing
+function**. Upstream walks back out, so `{null:{force:...}}` prints
+the `{FORCE}` error and then `{NULL} (arg 1)`; Emerald prints the
+first line and stops. That is the error *reporting*, not the
+evaluation, and it affects every nested MPI failure.
 
 ### @tune: two things still collapsed
 

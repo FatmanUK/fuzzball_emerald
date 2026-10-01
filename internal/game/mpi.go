@@ -114,6 +114,18 @@ func (s *Server) evalMPI(w *world.World, descr int,
 	viewer, what ref.Ref, text, how string, blessed bool,
 	kind mpi.MesgType) string {
 
+	return s.evalMPIAs(w, descr, viewer, what, text, how, "", "",
+		blessed, kind)
+}
+
+// evalMPIAs is evalMPI with {&cmd} and {&arg} spelled out, which the
+// propqueues need: propqueue sets match_cmdname to the queue's own
+// name — "Depart", "Arrive", "#123" — and match_args to the empty
+// string, so a description's "both empty" is not the only answer.
+func (s *Server) evalMPIAs(w *world.World, descr int,
+	viewer, what ref.Ref, text, how, cmd, arg string,
+	blessed bool, kind mpi.MesgType) string {
+
 	if !strings.ContainsRune(text, '{') {
 		return text
 	}
@@ -149,8 +161,8 @@ func (s *Server) evalMPI(w *world.World, descr int,
 	// revisit — Emerald has no ambient equivalent of those two
 	// globals to fill them from.
 	_ = env.SetVar("how", how)
-	_ = env.SetVar("cmd", "")
-	_ = env.SetVar("arg", "")
+	_ = env.SetVar("cmd", cmd)
+	_ = env.SetVar("arg", arg)
 
 	// Eval reports a failure to the viewer and yields empty text
 	// rather than propagating, so a broken description cannot

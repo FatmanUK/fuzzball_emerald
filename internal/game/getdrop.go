@@ -257,7 +257,7 @@ func (s *Server) cmdDrop(c *ctx) {
 		s.parseOProp(c.w, c.d.ID, c.who, loc, thing,
 			propODrop, me.Name, "(@Odrop)")
 	} else {
-		s.notifyRoom(c.w, loc, []ref.Ref{c.who},
+		s.notifyRoomFrom(c.w, c.who, loc, []ref.Ref{c.who},
 			"%s drops %s.", me.Name, o.Name)
 	}
 	// The room's @odrop is prefixed with the *thing's* name

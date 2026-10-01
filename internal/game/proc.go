@@ -199,6 +199,7 @@ func (s *Server) Tick(w *world.World) {
 	s.refillQuotas(w, now)
 	s.fireTimers(w, now)
 	s.fireMPIEvents(w, now)
+	s.fireDeferred(w, now)
 	for _, p := range s.procs.due(now) {
 		s.resume(w, p, nil)
 	}

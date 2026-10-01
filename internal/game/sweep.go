@@ -44,7 +44,8 @@ func (s *Server) cmdSweep(c *ctx) {
 	if name == "" || ascii.EqualFold(name, "here") {
 		thing = c.w.Get(c.who).Location
 	} else {
-		thing = match.New(c.w, c.who, name).Everything().Result()
+		thing = match.New(c.w, c.who, name).
+			Everything().Result()
 		if !noisyMatch(c, name, thing) {
 			return
 		}
@@ -79,12 +80,13 @@ func (s *Server) cmdSweep(c *ctx) {
 	}
 
 	c.tell("Listening rooms down the environment:")
-	for loc := thing; loc != ref.Nothing; loc = getParent(c.w, loc) {
+	for loc := thing; loc != ref.Nothing; {
 		if c.w.IsListener(loc) {
 			c.tell("  %s is a listening room.",
 				unparse(c.w, c.who, loc))
 		}
 		s.sweepTraps(c, loc)
+		loc = getParent(c.w, loc)
 	}
 
 	c.tell("**End of list**")

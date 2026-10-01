@@ -33,7 +33,7 @@ func (h *mufHost) Notify(who ref.Ref, msg string) {
 }
 
 func (h *mufHost) NotifyExcept(room ref.Ref, except []ref.Ref, msg string) {
-	h.s.notifyRoom(h.w, room, except, "%s", msg)
+	h.s.notifyRoomFrom(h.w, h.caller, room, except, "%s", msg)
 }
 
 func (h *mufHost) Name(obj ref.Ref) string { return nameOf(h.w, obj) }

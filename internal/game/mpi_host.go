@@ -19,6 +19,12 @@ func (h *mpiHost) NotifyExcept(room mpi.Ref, except []mpi.Ref, msg string) {
 	for i, r := range except {
 		skip[i] = ref.Ref(r)
 	}
+	// No speaker is named: mpiHost is built without one at a
+	// dozen call sites, so {otell} reaches the listen propqueues
+	// with "from" unset, which costs the ignore filter and makes
+	// a listening program's "where" the room rather than the
+	// speaker's location. Worth closing when mpiHost grows a
+	// viewer field.
 	h.s.notifyRoom(h.w, ref.Ref(room), skip, "%s", msg)
 }
 

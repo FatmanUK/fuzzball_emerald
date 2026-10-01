@@ -117,5 +117,6 @@ func (w *World) HasListenProp(r ref.Ref) bool {
 // and a property to back it.
 func (w *World) IsListener(r ref.Ref) bool {
 	o := w.objs[r]
-	return o != nil && o.Flags&ref.Listener != 0 && w.HasListenProp(r)
+	return o != nil && o.Flags&ref.Listener != 0 &&
+		w.HasListenProp(r)
 }

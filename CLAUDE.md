@@ -427,6 +427,15 @@ as a plain move.
 success**, which includes an exit with no destinations reached through a
 metalink.
 
+**The metalink depth bound is a deliberate divergence.** Upstream recurses
+through one with nothing to stop it, so an exit linked to itself — or a ring
+of two — exhausts the C stack and takes the server down, and `@link` does not
+test for it. Emerald refuses past `maxMetalinkDepth` with "Exit aborted because
+of metalink loop.", which is the one answer that is not a crash. The bound
+counts metalinks *only*: a trigger reached through the autolook is a different
+recursion with its own counter, and counting both would make eight ordinary
+moves report a metalink loop.
+
 **`HOME` as a destination is resolved per player**, and a home that is a THING
 is refused with "That would be an undefined operation." rather than entered.
 
@@ -752,6 +761,79 @@ tried exactly as `pose`, then `pos`, then `po`, stopping at the first that
 matches. An **unlinked** exit traps nothing, because `exit_matches_name`
 requires a destination.
 
+## The propqueues
+
+`internal/game/propqueue.go` is `timequeue.c`'s `propqueue` (`:1912`),
+`envpropqueue` (`:2068`) and `listenqueue` (`:2240`): the mechanism by which a
+**property is a hook**. A world writes `_arrive`, `_depart`, `_connect`,
+`_disconnect`, `_lookq`, `_listen`, `~listen`, `~olisten` or one of the "o"
+halves, and the server runs whatever it names.
+
+This is the only work in the port that changes how an existing world
+*behaves* rather than what it says. The starter world already carries two
+`_arrive` hooks and six `_connect` hooks that had never fired.
+
+**A property names a program four ways, and one of them is not a program.** A
+leading `&` means the rest is MPI; `#123` or a bare number is a dbref; `$name`
+is a registration looked up on the **object carrying the property**, not on the
+player. Anything else names nothing and the queue does nothing — *silently*,
+which is why a typo in an `_arrive` is so hard to notice. A `Ref`-typed
+property is taken directly, which is `get_property_dbref` being tried first.
+
+**The recursion counter is shared across every queue type.** One
+`propq_level`, capped at eight, so a `_depart` that triggers an `_arrive` that
+triggers a `_depart` runs out of depth rather than looping. It is checked
+*after* the program is resolved, so "Propqueue stopped to prevent infinite
+loop." appears for a property that would otherwise have run.
+
+**`mt` is private, not public.** Upstream's parameter is documented as "this is
+a public message" and the code does the opposite: set, MPI runs `ISPRIVATE` and
+the output goes to the triggering player; clear, MPI runs `ISPUBLIC` and the
+output is pronoun-substituted, prefixed `>> ` and broadcast to every *player*
+in the room but the trigger. Every non-"o" queue passes it set.
+
+**The call sites do not have one shape.** `_depart` and `_odepart` are **four**
+calls — the mover's own properties, then the old room's environment chain, for
+each of the pair. `_arrive`, `_oarrive`, `_connect` and the rest are
+environment walks from the **mover**, so `getparent` takes them through the
+room and upwards in one pass. `_lookq` walks from whatever was looked at, and
+its argument is that object's dbref written `#123` where every other queue
+passes a word. And the `_connect` pair fires on **every** connection where the
+"has connected" line and the `connect` action fire only on the first, which
+upstream's own comment calls odd.
+
+**`listenqueue` is propqueue's near-twin with four differences that all
+matter.** It is gated on the LISTENER flag (or the owner being ZOMBIE). Its
+value may be **conditional** — `Message=&MPI` runs the right-hand side only
+when the left `equalstr`-matches the text, and the `=` may be backslash-escaped
+— which no other propqueue has. It **queues** rather than runs, so a listener
+answers after the line that woke it: a MUF listener on the next tick and an MPI
+listener a second later, which is `add_muf_queue_event`'s zero delay against
+`add_mpi_event`'s one. And **MPI is opt-in**: `_listen` is called with it off,
+so a mortal cannot make a listener evaluate MPI at all.
+
+`Server.deferred` is the slice those queued events live in, drained by `Tick`
+— the part of upstream's timequeue that neither the process table nor
+`mpiEvents` already covers.
+
+**`notify_listeners` fires from `notifyRoomFrom`**, which is `notify_except`:
+the queues run on the room, then up the environment chain, then on every object
+in it, *before* a word is delivered to anybody. The speaker is passed
+explicitly because a listener can see it — the room a listening program is
+told about is the **speaker's** location, not the room being notified, and the
+ignore filter is applied between the two. `{otell}` is the one caller that
+passes no speaker, because `mpiHost` is built without one at a dozen sites.
+
+**Upstream's environment walk here is inconsistent with itself and is
+reproduced**: the first step upwards is `LOCATION(room)` and every step after
+it is `getparent`, so a VEHICLE room's chain is followed differently on the
+first hop than on the rest.
+
+A program launched from a propqueue runs **now**, in BACKGROUND mode and
+HARDUID, with COMMAND fixed at "Queued event." — note the lower-case "event",
+where the timequeue's own version says "Queued Event." — and the queue's name
+as the pushed argument. A listener's says "(_Listen)" instead.
+
 ## A recycled dbref comes back
 
 `World.Create` hands out a garbage dbref before allocating a fresh one, which
@@ -979,7 +1061,8 @@ the test it failed. A room with **no** description prints nothing, where
 anything else gets the nothing-special message. `look.c`'s own `can_see` is
 also not `controls`: a program shows only to whoever controls it or if it is
 a VEHICLE, exits and rooms are never listed, and a STICKY player sees nothing
-extra in the dark. Look traps — the `_details` propdir — are not ported.
+extra in the dark. Look traps — the `_details` propdir — are not ported, but
+the LOOK propqueue is: `_lookq` runs after everything else a look does.
 
 **`inventory` ends with `score`.** `do_inventory` finishes by calling
 `do_score`, so the money line is part of the command — including when there
