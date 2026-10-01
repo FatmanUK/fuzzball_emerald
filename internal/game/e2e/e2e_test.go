@@ -238,11 +238,11 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	if strings.Contains(transcript, "Either that player") {
 		t.Fatalf("login was refused:\n%s", transcript)
 	}
-	// The starter world carries six _connect hooks — cmd-watchfor
-	// and friends — which fired for the first time when the
-	// propqueues landed. They are real programs in a real world,
-	// so this is the one place a propqueue runs against something
-	// nobody wrote for a test.
+	// The starter world carries six _connect hooks —
+	// cmd-watchfor and friends — which fired for the first time
+	// when the propqueues landed. They are real programs in a
+	// real world, so this is the one place a propqueue runs
+	// against something nobody wrote for a test.
 	if strings.Contains(transcript, "Program Error") {
 		t.Errorf("a _connect hook failed:\n%s", transcript)
 	}

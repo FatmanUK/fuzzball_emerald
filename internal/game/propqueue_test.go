@@ -115,7 +115,7 @@ func TestPropqueueRefusesTheWrongProgram(t *testing.T) {
 	h.out()
 	h.send("look")
 	if got := h.out(); !strings.Contains(got, "ran") {
-		t.Errorf("a LINK_OK program was still refused:\n%s", got)
+		t.Errorf("LINK_OK was still refused:\n%s", got)
 	}
 
 	// And the mucker floor, which is tested against the program
