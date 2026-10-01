@@ -182,18 +182,24 @@ func (m *Matcher) Nil() *Matcher {
 	return m
 }
 
-// Absolute matches a "#123" reference. Only a wizard may name
-// arbitrary objects this way; for anyone else it resolves only to
-// what they control.
+// Absolute matches a "#123" reference.
+//
+// It has **no permission test**, which is upstream's: match_absolute
+// (match.c:366) calls absolute_name, and absolute_name checks only
+// that the reference parses and that the object exists. An earlier
+// version here resolved only to what the searcher controlled, which
+// made every command that takes a dbref refuse a mortal before its
+// own check could give the real reason — and made `look #5` fail
+// outright, where upstream really does let anyone look at anything by
+// number.
+//
+// What guards an object is each command's own rule: matchControlled's
+// "you don't control what was matched", @examine's limited view for a
+// non-owner, @teleport's per-type tests. Putting the test here
+// duplicated some of those and contradicted the rest.
 func (m *Matcher) Absolute() *Matcher {
 	r, ok := parseAbsolute(m.name)
-	if !ok {
-		return m
-	}
-	if !m.w.Valid(r) {
-		return m
-	}
-	if !m.controls(r) {
+	if !ok || !m.w.Valid(r) {
 		return m
 	}
 	m.addExact(r)

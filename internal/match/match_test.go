@@ -215,7 +215,15 @@ func TestPriority(t *testing.T) {
 	}
 }
 
-func TestAbsoluteRefRequiresControl(t *testing.T) {
+// TestAbsoluteRefNeedsNoPermission pins match_absolute's lack of one.
+// absolute_name (match.c:333) checks that the reference parses and
+// that the object exists, and nothing else: anybody may *name* any
+// object by number, and what stops them acting on it is the command's
+// own permission test.
+//
+// This test used to assert the opposite, which was invented here and
+// made a mortal's "look #5" fail where upstream answers.
+func TestAbsoluteRefNeedsNoPermission(t *testing.T) {
 	f := newFixture(t)
 	w := f.w
 
@@ -224,22 +232,20 @@ func TestAbsoluteRefRequiresControl(t *testing.T) {
 		t.Errorf("%v = %v, want the key", f.key, got)
 	}
 
-	// Something owned by someone else is not nameable by dbref.
+	// And something owned by somebody else is nameable too.
 	other := w.Create("Someone Else", ref.TypePlayer, ref.God)
 	secret := w.Create("a secret", ref.TypeThing, other.Ref)
 	if err := w.MoveTo(secret.Ref, f.room); err != nil {
 		t.Fatal(err)
 	}
-	if got := New(w, f.player, secret.Ref.String()).Absolute().Result(); got != ref.Nothing {
-		t.Errorf("%v = %v, want #-1 for an object the player does not control",
-			secret.Ref, got)
+	if got := New(w, f.player, secret.Ref.String()).Absolute().Result(); got != secret.Ref {
+		t.Errorf("%v = %v, want the object itself", secret.Ref, got)
 	}
 
-	// A wizard may name anything.
-	wiz := w.Create("Wizard", ref.TypePlayer, ref.God)
-	wiz.Flags |= ref.Wizard
-	if got := New(w, wiz.Ref, secret.Ref.String()).Absolute().Result(); got != secret.Ref {
-		t.Errorf("a wizard should reach %v, got %v", secret.Ref, got)
+	// A reference to nothing is still nothing.
+	gone := ref.Ref(9999)
+	if got := New(w, f.player, gone.String()).Absolute().Result(); got != ref.Nothing {
+		t.Errorf("%v = %v, want #-1", gone, got)
 	}
 }
 
