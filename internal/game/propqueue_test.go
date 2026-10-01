@@ -225,7 +225,8 @@ func TestPropqTargetReadsAllFourForms(t *testing.T) {
 			"Hi.", ref.Nothing, true},
 		{"hash", props.Value{Type: props.String,
 			Str: prog.Ref.String()}, "", prog.Ref, false},
-		{"bare number", props.Value{Type: props.String, Str: "2"},
+		{"bare number", props.Value{
+			Type: props.String, Str: "2"},
 			"", ref.Ref(2), false},
 		{"registered", props.Value{Type: props.String,
 			Str: "$hook"}, "", prog.Ref, false},
@@ -260,7 +261,8 @@ func (h *harness) installPropqProgram(t *testing.T, name,
 	if err := h.engine.Do(context.Background(),
 		func(w *world.World) {
 			wiz := h.wizRef()
-			prog := w.Create(name+".muf", ref.TypeProgram, wiz)
+			prog := w.Create(name+".muf",
+				ref.TypeProgram, wiz)
 			prog.Flags = prog.Flags.SetMLevel(3)
 			w.SetSource(prog.Ref, src)
 			r = prog.Ref
