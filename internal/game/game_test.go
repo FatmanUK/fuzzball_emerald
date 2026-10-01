@@ -188,8 +188,9 @@ func TestEveryCommandRuns(t *testing.T) {
 		"@create a widget", "@dig A Room", "@open out=here",
 		"@describe me=A test wizard.", "@set me=dark", "@set me=!dark",
 		"@set me=_test:value", "@set me=M3",
-		"@name me=Wizard", "@find widget", "@tune #list penny",
-		"@tune penny", "@tune penny=Groat",
+		"@name me=Wizard", "@find widget", "@tune penn*",
+		"@tune penny", "@tune penny=Groat", "@tune %penny",
+		"@tune info penny", "@tune info",
 		"@teleport me=here", "get widget", "drop widget",
 		"inventory", "@recycle widget",
 

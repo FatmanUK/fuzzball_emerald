@@ -119,22 +119,32 @@ five stages, so an action attached to a thing could not be reached at all;
 and `look` is deliberately *narrower* than `match_everything`, which
 making the first correct then made wrong.
 
-**The next three steps**, in order of how much they change:
+**`do_teleport` and `do_tune` are executed**, the two loose ends that stood
+ahead of tranche 3:
 
-1. **`do_teleport`** (`wiz.c:150`), which four golden cases have now run
-   into. Its confirmation says "X teleported to Y." where Emerald says
-   "Teleported.", and its control rules are per victim type. The
-   `@recycle`/`@link`/`@unlink` structural divergences
-   `resolveControlled`'s doc comment names belong with it — four commits.
-2. **`do_tune`** (`tune.c:680`). Upstream says "Parameter set." and then
-   echoes the parameter and `*done*`; bare `@tune` lists where Emerald
-   has its own `#list`. The movement golden case had to avoid `@tune`
-   entirely because of it.
-3. **Tranche 3, the propqueues**, which is the only work left that
-   changes how an existing world behaves: props sitting inert in the
-   starter world and in every imported `.db` start executing. LISTENER
-   flag maintenance first, then `@sweep` on that alone, then
-   `propqueue`/`envpropqueue`, then the call sites one commit each.
+- **`do_teleport`** (`wiz.c:102`) is four commands wearing one name, and
+  Emerald answered "Teleported." for all four. A player is walked in through
+  `enter_room`, a thing or a program is simply put somewhere, and a room is
+  *reparented* — "Parent of X set to Y." Its permission test cannot be
+  `match_controlled`, because it depends on the destination; that is why it
+  was one of the four commands left on `resolveControlled`, and three remain.
+  Two bugs fell out of writing its golden case: `match_absolute` has no
+  permission test upstream and Emerald had invented one, so a mortal's
+  `look #5` failed; and `do_inventory` ends with `do_score`, where Emerald
+  returned early and printed no money line at all.
+- **`do_tune`** (`tune.c:669`) is three commands, not two. A bare `@tune` is
+  the listing and `@tune info` is the annotated one, where Emerald had a
+  `#list` subcommand upstream has never had. A set is recognised by the line
+  containing an `=`, so `@tune x=` is a set that fails. And `tune_setparm` is
+  stricter than Emerald's parser in four ways a user can see — a boolean
+  reads only its first character, a timespan refuses a bare count of seconds,
+  an integer is `number()`, and a dbref is *matched* against a short list.
+
+**The next step is tranche 3, the propqueues**, which is the only work left
+that changes how an existing world behaves: props sitting inert in the starter
+world and in every imported `.db` start executing. LISTENER flag maintenance
+first, then `@sweep` on that alone, then `propqueue`/`envpropqueue`, then the
+call sites one commit each.
 
 Then tranche 4 (ANSI gating), and `choose_thing`'s missing tie-breaks —
 no preferred type, no `check_keys`, no environment distance — which
@@ -142,10 +152,14 @@ matter for `get` and `drop`.
 
 Smaller things still open, each self-contained:
 
-- **Two commands' permission refusals** — `@link` and `@recycle` — are
-  structurally divergent, not just differently worded. `@unlink` and
-  `@teleport` are now per-type ports; see `resolveControlled`'s doc comment
-  for what is left.
+- **Three commands' permission refusals** — `@link`, `@unlink` and
+  `@recycle` — are structurally divergent, not just differently worded.
+  See `resolveControlled`'s doc comment for what each needs.
+- **`@tune`'s God level.** `TUNE_MLEV` gives `#1` 255 and `GOD_PRIV` raises
+  the fourteen `file_*` parameters to match; the generator collapsed both to
+  `MLEV_WIZARD` and recorded `GodOnly`, which nothing reads. `SETSYSPARM`
+  also cannot tell bad syntax from a bad value. Both are invisible to the
+  oracle, whose player is `#1`.
 - **`@bless` does not bless directories**, which upstream does. The effect is
   confined to the count and to `examine`'s marker, and making it agree needs
   a flag that can live on a valueless node — `internal/props`, `examine` and

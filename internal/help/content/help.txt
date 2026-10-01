@@ -221,17 +221,28 @@ three to five.
 ~
 @tune
 @tune                   list every parameter
-@tune <name>            show one
+@tune <pattern>         list the ones whose name matches
+@tune info [<pattern>]  the same, with each group and description
 @tune <name>=<value>    set one
+@tune %<name>           put one back to its default
+
+A pattern is matched whole, with * and ? as wildcards: "penny" shows
+one parameter and "pen*" shows four. A listing ends with *done*.
 
 Parameters are a runtime interface as well as a setting: MUF reads
 them by name with SYSPARM, so renaming one breaks programs.
 ~
 @teleport|@tel
+@teleport <dest>        go there yourself
 @teleport <thing>=<dest>
-                        move something somewhere
+                        send something there
 
-You need to control the thing, and the destination has to accept it.
+A player is walked in and announced, a thing or a program is just put
+there, and a room is reparented. What you need to control depends on
+which: look at the refusal, which names the test it failed.
+
+A destination that is not here, in your hands or in the room needs its
+dbref or its $registered name.
 ~
 @boot
 @boot <player>          disconnect them

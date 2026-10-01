@@ -357,7 +357,7 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 	// characters are made out of band rather than at the login
 	// screen. Turn it off, as an operator would.
 	a.send("@tune registration=no")
-	a.expect("registration set to")
+	a.expect("Parameter set.")
 
 	b := ts.dial(t)
 	b.expect("Fuzzball Emerald")

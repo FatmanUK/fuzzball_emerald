@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/session"
@@ -134,84 +135,231 @@ func (s *Server) tellEveryoneShutdown() {
 	}
 }
 
-// cmdTune reads and writes @tune parameters.
+// cmdTune is tune.c:669's do_tune, which is three commands and not
+// the two Emerald had.
+//
+// **A bare `@tune` is the listing**, and `@tune <pattern>` narrows it
+// with `equalstr` — so wildcards work and nothing else does, which
+// is why `@tune penny` shows one parameter and `@tune penn` shows
+// none. Emerald had its own `#list` subcommand for this and answered
+// a bare `@tune` with a usage message; upstream has neither, and a
+// program reading a listing back could not have found it.
+//
+// **A set is recognised by the line containing an `=`**, not by the
+// value being non-empty — upstream tests `match_args`, the whole
+// typed line — so `@tune muckname=` really is a set, and fails as a
+// bad value rather than reading the parameter back. A name prefixed
+// with `%` is the other set: reset to the compiled-in default.
+//
+// **`@tune info` is the third**, adding the group and the one-line
+// label under each parameter. Its argument is space-separated rather
+// than `=`-separated, because it shares `arg1` with the pattern.
+//
+// Each reply is upstream's, and there are more of them than Emerald
+// had: "Parameter set." or "Parameter reset to default." followed by
+// the parameter as a listing would show it, or one of "Unknown
+// parameter.", "Bad parameter syntax.", "Bad parameter value." and
+// "Permission denied." — and a listing always ends "*done*", which
+// is how a program knows it has the lot.
 func (s *Server) cmdTune(c *ctx) {
-	arg := strings.TrimSpace(c.arg)
-
-	if arg == "" {
-		c.tell("Usage: @tune <parameter>  or  @tune <parameter>=<value>")
-		c.tell("       @tune #list [pattern]")
-		return
-	}
-
-	if strings.HasPrefix(arg, "#list") {
-		s.tuneList(c, strings.TrimSpace(strings.TrimPrefix(arg, "#list")))
-		return
-	}
-
-	name, value, assigning := strings.Cut(arg, "=")
+	name, value, hasEq := strings.Cut(c.arg, "=")
 	name = strings.TrimSpace(name)
-
-	p, found := tune.Lookup(name)
-	if !found {
-		if env, dropped := tune.DroppedReplacement(name); dropped {
-			if env != "" {
-				c.tell("%s is not a server parameter here; it is set with the %s environment variable.", name, env)
-			} else {
-				c.tell("%s no longer applies: every connection is already encrypted.", name)
-			}
-			return
-		}
-		c.tell("I don't know that parameter.")
-		return
-	}
+	// arg2 is left-trimmed only upstream, so a value may end in a
+	// space. It cannot begin with one.
+	value = strings.TrimLeft(value, " \t")
 
 	mlev := c.w.Get(c.who).Flags.MLevel()
-	if mlev < p.ReadMLev {
-		c.tell("Permission denied.")
+
+	resetting := strings.HasPrefix(name, string(tune.ResetFlag))
+	switch {
+	case name != "" && (hasEq || resetting):
+		s.tuneSet(c, name, value, mlev)
+	case name != "" && ascii.HasPrefix(name, tuneInfoCmd):
+		s.tuneInfo(c, name, mlev)
+	default:
+		s.tuneDisplay(c, name, mlev, false)
+	}
+}
+
+// tuneInfoCmd is upstream's TP_INFO_CMD.
+const tuneInfoCmd = "info"
+
+// tuneInfo handles "@tune info [pattern]", whose argument is split on
+// a space because it arrives in the same string as the command word.
+//
+// The usage message is unreachable from a typed line — arg1 has its
+// trailing whitespace removed before do_tune sees it, so "info " with
+// nothing after it cannot happen — and is reproduced anyway.
+func (s *Server) tuneInfo(c *ctx, name string, mlev int) {
+	rest, hasSpace := cutAfterSpace(name)
+	if !hasSpace {
+		s.tuneDisplay(c, "", mlev, true)
+		return
+	}
+	if rest = strings.TrimLeft(rest, " \t"); rest == "" {
+		c.tell("Usage is @tune %s [optional: <parameter>]",
+			tuneInfoCmd)
+		return
+	}
+	s.tuneDisplay(c, rest, mlev, true)
+}
+
+// cutAfterSpace is strchr(s, ' ') followed by a step past it.
+func cutAfterSpace(s string) (string, bool) {
+	i := strings.IndexByte(s, ' ')
+	if i < 0 {
+		return "", false
+	}
+	return s[i+1:], true
+}
+
+// tuneSet is do_tune's setting half, reporting tune_setparm's answer
+// and then showing what the parameter now holds.
+func (s *Server) tuneSet(c *ctx, name, value string, mlev int) {
+	// The one permission check do_tune makes for itself, and it
+	// is not about who is asking: a @tune inside a @force would
+	// let a program change the server's configuration through
+	// somebody else's hands.
+	if s.forceDepth > 0 {
+		c.tell("You cannot force setting a @tune.")
 		return
 	}
 
-	if !assigning {
+	bare := strings.TrimPrefix(name, string(tune.ResetFlag))
+	old := ""
+	if p, ok := tune.Lookup(bare); ok {
 		v, _ := c.w.Tune.Get(p.Name)
-		c.tell("%s: %s", p.Name, p.Format(v))
-		if p.Inert != "" {
-			c.tell("  (has no effect: %s)", p.Inert)
-		}
-		return
+		old = p.Format(v)
 	}
 
-	if mlev < p.WriteMLev || !c.w.Get(c.who).Flags.IsWizard() {
+	switch c.w.SetParm(name, value, mlev, s.tuneRefResolver(c)) {
+	case tune.SetSuccess:
+		c.tell("Parameter set.")
+		s.logTuned(c, bare, old)
+		s.tuneDisplay(c, bare, mlev, false)
+	case tune.SetSuccessDefault:
+		c.tell("Parameter reset to default.")
+		s.logTuned(c, bare, old)
+		s.tuneDisplay(c, bare, mlev, false)
+	case tune.SetUnknown:
+		// Emerald's one addition: the parameters it dropped
+		// on purpose say where their setting went, rather
+		// than reading as a typo.
+		env, dropped := tune.DroppedReplacement(bare)
+		if dropped {
+			s.tellDropped(c, bare, env)
+			return
+		}
+		c.tell("Unknown parameter.")
+	case tune.SetSyntax:
+		c.tell("Bad parameter syntax.")
+	case tune.SetBadVal:
+		c.tell("Bad parameter value.")
+	case tune.SetDenied:
 		c.tell("Permission denied.")
+	}
+}
+
+// tellDropped explains a Fuzzball parameter this server does not
+// have, which is always a consequence of being TLS-only.
+func (s *Server) tellDropped(c *ctx, name, env string) {
+	if env != "" {
+		c.tell("%s is not a server parameter here; "+
+			"it is set with the %s environment variable.",
+			name, env)
 		return
 	}
-	if err := c.w.SetTune(p.Name, strings.TrimSpace(value)); err != nil {
-		c.tell("%s", err.Error())
+	c.tell("%s no longer applies: "+
+		"every connection is already encrypted.", name)
+}
+
+func (s *Server) logTuned(c *ctx, name, old string) {
+	p, ok := tune.Lookup(name)
+	if !ok {
 		return
 	}
 	v, _ := c.w.Tune.Get(p.Name)
-	c.tell("%s set to %s.", p.Name, p.Format(v))
 	s.statusLog().Info("tune parameter changed",
-		"player", c.who.String(), "parameter", p.Name, "value", p.Format(v))
+		"player", c.who.String(), "parameter", p.Name,
+		"from", old, "to", p.Format(v))
 }
 
-// tuneList shows the parameters a player may read.
-func (s *Server) tuneList(c *ctx, pattern string) {
-	mlev := c.w.Get(c.who).Flags.MLevel()
-	shown := 0
-	for _, p := range tune.Params() {
-		if mlev < p.ReadMLev {
-			continue
+// tuneRefResolver is the match list tune_setparm uses for a dbref
+// parameter: absolute, registered, player, me, here — and nothing
+// nearby, so a room cannot be named by standing in it.
+func (s *Server) tuneRefResolver(c *ctx) func(string) (ref.Ref,
+	ref.ObjType, bool) {
+
+	return func(name string) (ref.Ref, ref.ObjType, bool) {
+		r := match.New(c.w, c.who, name).
+			Absolute().Registered().Player().Me().Here().
+			Result()
+		o := c.w.Get(r)
+		if o == nil {
+			return ref.Nothing, 0, false
 		}
-		if pattern != "" &&
-			!match.StringMatch(p.Name, pattern) {
-			continue
-		}
-		v, _ := c.w.Tune.Get(p.Name)
-		c.tell("%-32s %s", p.Name, p.Format(v))
-		shown++
+		return r, o.Type(), true
 	}
-	c.tell("%d parameter%s.", shown, plural(shown))
+}
+
+// tuneDisplay is tune_display_parms (tune.c:144): every parameter the
+// asker may read whose name the pattern matches, in the table's own
+// order, each as a type tag, a name, a value and up to two markers.
+//
+// "[default]" means nobody has changed it, and is what decides the
+// leading '%' when the table is written out. "[inactive]" is
+// upstream's word for a parameter whose feature was compiled out,
+// which here means a module this server does not have — see
+// tune.Param.Active, and note that Emerald's *inert* parameters are
+// not marked, because upstream does not mark its equivalents either.
+//
+// The ending matters: "No matching parameters." when nothing matched,
+// and "*done*" always.
+func (s *Server) tuneDisplay(c *ctx, pattern string, mlev int,
+	extended bool) {
+
+	// A pattern keeps its reset flag when it arrives from a set,
+	// and is treated as an ordinary name.
+	pattern = strings.TrimPrefix(pattern, string(tune.ResetFlag))
+
+	found := false
+	for _, p := range tune.Params() {
+		if p.ReadMLev > mlev {
+			continue
+		}
+		if pattern != "" && !ascii.SMatch(p.Name, pattern) {
+			continue
+		}
+		inactive := ""
+		if !p.Active() {
+			inactive = " [inactive]"
+		}
+		dflt := ""
+		if c.w.Tune.IsDefault(p.Name) {
+			dflt = " [default]"
+		}
+		c.send(sprintf("%-6s %-20s = %s%s%s", p.Type.Tag(),
+			p.Name, s.tuneValue(c, &p), inactive, dflt))
+		if extended {
+			c.send(sprintf("%-27s %s", p.Group, p.Label))
+		}
+		found = true
+	}
+	if !found {
+		c.tell("No matching parameters.")
+	}
+	c.tell("*done*")
+}
+
+// tuneValue renders a parameter for display, which is not quite how
+// it is stored: a dbref is unparsed for the reader, so it shows a
+// name and the flags that reader may see, where a dump writes "#0".
+func (s *Server) tuneValue(c *ctx, p *tune.Param) string {
+	v, _ := c.w.Tune.Get(p.Name)
+	if p.Type == tune.TypeDbref {
+		return unparse(c.w, c.who, v.Ref)
+	}
+	return p.Format(v)
 }
 
 // boot disconnects every descriptor for a player.

@@ -26,7 +26,7 @@ import (
 // touched from one a wizard has edited.
 //
 // Bump it whenever the content under content/ changes.
-const Version = "2"
+const Version = "3"
 
 //go:embed content
 var content embed.FS

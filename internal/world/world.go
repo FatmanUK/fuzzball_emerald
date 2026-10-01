@@ -320,6 +320,26 @@ func (w *World) SetTune(name, value string) error {
 	return nil
 }
 
+// SetParm applies tune_setparm's rules and marks the table for
+// persistence. It is what @tune and SETSYSPARM go through, as
+// upstream's two callers of tune_setparm do; SetTune and ResetTune
+// stay the loader's and the repairer's paths, where the value is one
+// this server wrote itself.
+// TuneRefResolver answers a dbref parameter's value the way
+// tune_setparm's own match does, and is passed in because the matcher
+// is a layer above this one.
+type TuneRefResolver func(string) (ref.Ref, ref.ObjType, bool)
+
+func (w *World) SetParm(name, val string, mlev int,
+	resolve TuneRefResolver) tune.SetResult {
+
+	r := w.Tune.SetParm(name, val, mlev, resolve)
+	if r == tune.SetSuccess || r == tune.SetSuccessDefault {
+		w.tuneDirty = true
+	}
+	return r
+}
+
 // ResetTune returns a parameter to its default and marks the table
 // for persistence — SETSYSPARM's own "%name" reset convention.
 func (w *World) ResetTune(name string) error {

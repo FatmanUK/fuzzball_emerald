@@ -379,12 +379,10 @@ live rather than latent:
   pins the shape; before it, nothing in the harness looked at
   anything but a room.
 
-Three things `do_look_at` does are still missing, and each is
-recorded rather than hidden: look traps (the `_details` propdir,
-consulted when the match finds nothing), the LOOK propqueue, and
-`@teleport`'s own wording, which reports what moved where instead of
-"Teleported." — that one belongs with `do_teleport`, whose control
-rules diverge structurally anyway.
+Two things `do_look_at` does are still missing, and each is recorded
+rather than hidden: look traps (the `_details` propdir, consulted when
+the match finds nothing) and the LOOK propqueue. The third was
+`@teleport`'s wording, and `do_teleport` is ported now — see below.
 
 ### The permission refusals, half fixed
 
@@ -397,7 +395,7 @@ and the whole `@lock` family really do route through
 `match_controlled` upstream, and now say what it says.
 `matchControlled` in `internal/game/build.go` is that function.
 
-**Four are not, and the reason is behavioural rather than textual.**
+**Four were not, and the reason is behavioural rather than textual.**
 None of them goes through `match_controlled` upstream; each matches
 for itself and applies its own rule:
 
@@ -406,14 +404,36 @@ for itself and applies its own rule:
 - `@link` lets a builder who controls nothing *seize* an unlinked
   exit, paying `link_cost` plus `exit_cost`; Emerald refuses before
   that path can run.
-- `@teleport` defers its control test until the destination is known
-  and varies it by victim type; Emerald tests the victim up front.
 - `@recycle` is **stricter** than `controls`: upstream requires
   actual ownership of a room or thing even of a wizard, so Emerald
   currently lets a wizard recycle objects upstream refuses.
+- `@teleport` — **done.** Its test depends on the destination, so it
+  cannot happen at match time at all, and what it asks differs per
+  victim type. `internal/game/teleport.go` is `do_teleport`, with the
+  three refusals as unit tests because the oracle's player controls
+  everything in the fixture.
 
-Those four stay on `resolveControlled`, which keeps the old message
-rather than pretending to be upstream's. Each needs its own commit.
+The other three stay on `resolveControlled`, which keeps the old
+message rather than pretending to be upstream's. Each needs its own
+commit.
+
+### @tune: two things still collapsed
+
+`do_tune` is ported, and two details of its permission model are not,
+both invisible to the oracle because its player is `#1`:
+
+- **`TUNE_MLEV` gives God 255**, not 4, and `GOD_PRIV` — which
+  upstream `#define`s by default — raises the fourteen `file_*`
+  parameters to that level. The generator collapsed `MLEV_GOD` to
+  `MLEV_WIZARD` and recorded `GodOnly` beside each one; nothing reads
+  that field yet, so a plain wizard here can read and write
+  parameters upstream reserves for God. Closing it means teaching the
+  MUF side `TUNE_MLEV` too, since `SETSYSPARM` and `SYSPARM_ARRAY`
+  share the rule.
+- **`SETSYSPARM` cannot tell bad syntax from a bad value.** Upstream
+  aborts with "Bad parameter syntax. (2)" or "Bad parameter value.
+  (2)" from `tune_setparm`'s two codes; `muf.Host.TuneSet` returns a
+  plain error, so the primitive always says the second.
 
 ---
 

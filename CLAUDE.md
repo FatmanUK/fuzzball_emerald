@@ -520,6 +520,74 @@ because the C has it.
 is a call to it — upstream keeps the two separate with a comment saying the
 rules could diverge, and that separation is kept rather than collapsed.
 
+## @tune
+
+`internal/game/admin.go`'s `cmdTune` is `tune.c:669`'s `do_tune`, and it is
+three commands rather than the two Emerald had.
+
+**A bare `@tune` is the listing.** `@tune <pattern>` narrows it with
+`equalstr`, which is `smatch` — so wildcards work and nothing else does, and
+`@tune penny` shows one parameter where `@tune penn` shows none. Emerald kept
+the listing behind a `#list` subcommand upstream has never had and answered a
+bare `@tune` with a usage message, so a program reading a listing back could
+not have found it. `@tune info [pattern]` is the third form, adding each
+parameter's group and label; its argument is space-separated because it shares
+`arg1` with the pattern.
+
+**A set is recognised by the *line* containing an `=`**, not by the value
+being non-empty — upstream tests `match_args`, the whole typed line. So
+`@tune muckname=` is a set that fails as a bad value, never a request to read
+the parameter back. A name prefixed with `%` is the other set: reset to the
+compiled-in default.
+
+**`tune_setparm` is stricter than `Param.Parse`, and visibly so.** It is
+`tune.Set.SetParm`, kept apart from `SetString` because the loader reads back
+values this server wrote itself:
+
+- A **boolean** reads only its *first character*. `y`, `Y` or `1` is true, `n`,
+  `N` or `0` is false, anything else is a syntax error — so `yes` works,
+  `yellow` also works, and `true` does not.
+- An **integer** is `number()`: optional sign then digits, nothing else.
+- A **timespan** is `tune_timespan_seconds`, which is **not** `ParseTimespan`.
+  It wants `<days>d <h>:<mm>:<ss>` or a run of unit suffixes like `1d12h`, and
+  **refuses a bare count of seconds** — a total of zero is an error, so `3600`
+  and `4:00:00` both fail.
+- A **dbref** is *matched*, through `match_absolute`, `match_registered`,
+  `match_player`, `match_me`, `match_here` and nothing else — so a room cannot
+  be named by standing in it unless `here` is typed. A failed match is bad
+  syntax and a wrong object type is a bad value.
+
+The order of the checks is observable: the write permission first, then the
+reset, then the empty-value test — so resetting a non-nullable string with no
+value succeeds where setting it would not.
+
+**Each reply is upstream's**, and there are six: "Parameter set." or
+"Parameter reset to default." followed by the parameter rendered as a listing
+would render it, or one of "Unknown parameter.", "Bad parameter syntax.", "Bad
+parameter value." and "Permission denied." A listing ends "*done*" always, and
+says "No matching parameters." first when nothing matched — which is how a
+program knows it has the lot.
+
+**`[inactive]` is upstream's marker for a parameter whose feature was compiled
+out**, `MOD_ENABLED` against the `compile_options` string. `tune.Param.Active`
+is that test, and `tune.modules` is Emerald's own list: MCP and nothing else,
+since DISKBASE is replaced by Postgres, MEMPROF is malloc profiling and
+RESOLVER is upstream's separate resolver process. Emerald's **inert**
+parameters — the `dump_*` family and the `file_*` names — are deliberately
+*not* marked, because upstream does not mark its equivalents; `fbemerald tune`
+and the configurator are where that is said.
+
+**A `@tune` cannot be forced**, which is the only permission check `do_tune`
+makes for itself and is not about who is asking.
+
+Two things are not reproduced, both invisible to the oracle because its player
+is `#1`. `TUNE_MLEV` gives God 255 rather than 4, and `GOD_PRIV` — which
+upstream defines by default — puts the fourteen `file_*` parameters beyond a
+plain wizard; the generator collapsed `MLEV_GOD` to `MLEV_WIZARD` and recorded
+`GodOnly` beside it, and nothing reads that field yet. And `SETSYSPARM` reports
+"Bad parameter value." where upstream distinguishes it from "Bad parameter
+syntax."
+
 ## Actions, clones and blessing
 
 `internal/game/action.go` is `@action`, `@attach`, `@clone`, `@relink`, `@bless`

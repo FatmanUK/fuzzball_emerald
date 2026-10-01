@@ -47,6 +47,68 @@ func (t Type) String() string {
 	}
 }
 
+// Tag is the type as @tune prints it, upstream's str_tunetype
+// (tunelist.h:24). It is not Type.String(): that names the type for
+// SYSPARM_ARRAY, which MUF reads, and these are the six-column labels
+// a listing is padded to.
+func (t Type) Tag() string {
+	switch t {
+	case TypeString:
+		return "(str)"
+	case TypeTimespan:
+		return "(time)"
+	case TypeInteger:
+		return "(int)"
+	case TypeDbref:
+		return "(ref)"
+	case TypeBoolean:
+		return "(bool)"
+	default:
+		return "(?)"
+	}
+}
+
+// modules names the optional subsystems this server has, which is
+// upstream's compile_options string (game.c:66). A parameter whose
+// Module is not in it does nothing here, and a listing marks it
+// "[inactive]" — upstream's own word for a parameter that is
+// present because MUF looks parameters up by name, but whose feature
+// was compiled out.
+//
+// Emerald has MCP and nothing else on that list: DISKBASE is replaced
+// by Postgres, MEMPROF is malloc profiling, and RESOLVER is
+// upstream's separate resolver process where Emerald resolves names
+// on its own goroutines.
+var modules = map[string]bool{"MCP": true}
+
+// Active reports whether this server acts on a parameter at all.
+//
+// It is MOD_ENABLED (game.h:30) and nothing more. Emerald's own Inert
+// set — the dump_* family and the file_* names — is deliberately
+// not folded in: upstream prints no marker for those, `fbemerald
+// tune` marks them, and the configurator explains them.
+func (p *Param) Active() bool {
+	return p.Module == "" || modules[p.Module]
+}
+
+// SetResult is tune_setparm's answer (tune.c:402). Every one of the
+// six has its own message, and @tune and SETSYSPARM word them
+// differently, so the code is reported rather than a string.
+type SetResult int
+
+const (
+	SetSuccess SetResult = iota
+	SetSuccessDefault
+	SetUnknown
+	SetSyntax
+	SetBadVal
+	SetDenied
+)
+
+// ResetFlag is upstream's TP_FLAG_DEFAULT: a parameter name prefixed
+// with it is reset to its compiled-in default rather than set.
+const ResetFlag = '%'
+
 // Value holds a parameter value. Only the field matching the
 // parameter's Type is meaningful.
 type Value struct {
@@ -248,6 +310,170 @@ func (s *Set) SetString(name, raw string) error {
 	s.vals[p.Name] = v
 	s.dflt[p.Name] = false
 	return nil
+}
+
+// SetParm is tune_setparm (tune.c:402), which is what @tune and
+// SETSYSPARM both go through and is stricter than Parse in three ways
+// that are visible to anybody typing a value.
+//
+// A boolean reads only its **first character**: y, Y or 1 is true, n,
+// N or 0 is false, and anything else is a syntax error — so "yes"
+// works, "yellow" also works, and "true" does not. An integer is
+// `number()`: optional sign then digits only, no "0x10" and no "3.5".
+// A timespan is tune_timespan_seconds, which wants either "<days>d
+// <h>:<mm>:<ss>" or a run of unit suffixes like "1d12h", and rejects
+// a bare number of seconds outright.
+//
+// A dbref is matched rather than parsed, through resolve — which is
+// upstream's match_absolute, match_registered, match_player,
+// match_me, match_here, in that order, and notably not the room's
+// contents or the player's. A failed match is a syntax error and a
+// wrong object type is a bad value.
+//
+// The order of the checks is upstream's and is observable: the write
+// permission is tested before anything else, the reset-to-default
+// before the empty-value check, so resetting a non-nullable string
+// with no value given succeeds where setting it would not.
+func (s *Set) SetParm(name, val string, mlev int,
+	resolve func(string) (ref.Ref, ref.ObjType, bool)) SetResult {
+
+	reset := false
+	flag := string(ResetFlag)
+	if rest, ok := strings.CutPrefix(name, flag); ok {
+		name, reset = rest, true
+	}
+	p, ok := Lookup(name)
+	if !ok {
+		return SetUnknown
+	}
+	if p.WriteMLev > mlev {
+		return SetDenied
+	}
+	if reset {
+		s.vals[p.Name] = p.Default
+		s.dflt[p.Name] = true
+		return SetSuccessDefault
+	}
+	if !p.Nullable && val == "" {
+		return SetBadVal
+	}
+
+	var v Value
+	switch p.Type {
+	case TypeString:
+		v = Value{Str: val}
+
+	case TypeBoolean:
+		switch val[0] {
+		case 'y', 'Y', '1':
+			v = Value{Bool: true}
+		case 'n', 'N', '0':
+			v = Value{Bool: false}
+		default:
+			return SetSyntax
+		}
+
+	case TypeInteger:
+		if !isNumber(val) {
+			return SetSyntax
+		}
+		n, err := strconv.ParseInt(
+			strings.TrimSpace(val), 10, 64)
+		if err != nil {
+			return SetSyntax
+		}
+		v = Value{Num: n}
+
+	case TypeTimespan:
+		secs, ok := TuneTimespanSeconds(val)
+		if !ok {
+			return SetSyntax
+		}
+		v = Value{Span: time.Duration(secs) * time.Second}
+
+	case TypeDbref:
+		if resolve == nil {
+			return SetSyntax
+		}
+		r, ty, ok := resolve(val)
+		if !ok {
+			return SetSyntax
+		}
+		if p.HasObjType && ty != p.ObjType {
+			return SetBadVal
+		}
+		v = Value{Ref: r}
+
+	default:
+		return SetSyntax
+	}
+
+	s.vals[p.Name] = v
+	s.dflt[p.Name] = false
+	return SetSuccess
+}
+
+// isNumber is fbstrings.c's number(): leading whitespace, an optional
+// sign, then digits and nothing else. An empty run of digits is not a
+// number, so "-" is rejected.
+func isNumber(s string) bool {
+	s = strings.TrimLeft(s, " \t\r\n\v\f")
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		s = s[1:]
+	}
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// TuneTimespanSeconds is tune.c's tune_timespan_seconds, which is not
+// ParseTimespan.
+//
+// It tries "<days>d <hh>:<mm>:<ss>" first — the form a listing
+// prints and a dump stores — and otherwise walks the string
+// accumulating digits and applying each d/h/m/s suffix as it meets
+// it, so "1d12h" and "90m" both work. Anything else is a failure, and
+// so is a total of zero: a bare "3600" has no suffix, accumulates
+// nothing, and is rejected, which is why a timespan cannot be set in
+// plain seconds.
+func TuneTimespanSeconds(value string) (int64, bool) {
+	var days, hrs, mins, secs int64
+	if n, err := fmt.Sscanf(value, "%dd %2d:%2d:%2d",
+		&days, &hrs, &mins, &secs); err == nil && n == 4 {
+		return days*86400 + hrs*3600 + mins*60 + secs, true
+	}
+
+	var total, subtotal int64
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c >= '0' && c <= '9' {
+			subtotal = subtotal*10 + int64(c-'0')
+			continue
+		}
+		switch c | 0x20 {
+		case 'd':
+			total += subtotal * 86400
+		case 'h':
+			total += subtotal * 3600
+		case 'm':
+			total += subtotal * 60
+		case 's':
+			total += subtotal
+		default:
+			return 0, false
+		}
+		subtotal = 0
+	}
+	if total == 0 {
+		return 0, false
+	}
+	return total, true
 }
 
 // Parse converts a textual value into a Value for this parameter.

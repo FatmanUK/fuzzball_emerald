@@ -109,7 +109,7 @@ func (h *mufHost) TuneList(pattern string, mlevel int) []muf.TuneEntry {
 			ReadMLev:  p.ReadMLev,
 			WriteMLev: p.WriteMLev,
 			Nullable:  p.Nullable,
-			Active:    true,
+			Active:    p.Active(),
 			Default:   h.w.Tune.IsDefault(p.Name),
 			ValueStr:  v.Str,
 			ValueNum:  v.Num,
