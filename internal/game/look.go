@@ -314,15 +314,17 @@ func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
 	return o.Owner == owner
 }
 
-// cmdInventory lists what the player is carrying.
+// cmdInventory lists what the player is carrying, and then what they
+// are worth: do_inventory ends with do_score, which is why "You
+// aren't carrying anything." is not the end of the command.
 func (s *Server) cmdInventory(c *ctx) {
-	contents := c.w.Contents(c.who)
-	if len(contents) == 0 {
+	if contents := c.w.Contents(c.who); len(contents) == 0 {
 		c.tell("You aren't carrying anything.")
-		return
+	} else {
+		c.tell("You are carrying:")
+		for _, r := range contents {
+			c.send(unparse(c.w, c.who, r))
+		}
 	}
-	c.tell("You are carrying:")
-	for _, r := range contents {
-		c.send(unparse(c.w, c.who, r))
-	}
+	s.cmdScore(c)
 }
