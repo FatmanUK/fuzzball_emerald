@@ -86,6 +86,13 @@ func (w *World) Fix() (log []string, unfixed []Violation) {
 	if n := w.RepairChains(); n > 0 {
 		note("Rebuilt the contents or exits chains of %d container%s", n, plural(n))
 	}
+
+	// Upstream's cut_bad_recyclable (sanity.c:900) cuts the free
+	// list where it stops making sense and then re-finds the
+	// garbage; rebuilding it outright is the same answer, since
+	// the list is derived from the types and nothing else.
+	w.RebuildRecyclable()
+	w.RecomputeListeners()
 	return log, unfixed
 }
 

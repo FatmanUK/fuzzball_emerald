@@ -34,11 +34,10 @@ that have aged worst in the C:
 - **The configurator is in**: `cmd/fbeconfig`, an optional web interface over
   the same database, read-only while the server runs.
 - **The command surface is essentially complete.** `commandTable` carries
-  every name Fuzzball dispatches: **109 rows, 99 with handlers, 10
-  without**, and five of those ten are declined outright rather than
+  every name Fuzzball dispatches: **109 rows, 100 with handlers, 9
+  without**, and five of those nine are declined outright rather than
   missing. What is left is `@armageddon` and `@restart` (process
-  lifecycle), `@mcpedit` and `@mcpprogram` (the MCP editor drive), and
-  `@sweep` (which needs the LISTENER flag). See
+  lifecycle) and `@mcpedit` and `@mcpprogram` (the MCP editor drive). See
   `docs/upstream-coverage.md`, which is the audit and the authority.
 - **Every compiler directive now works**, including the six conditionals
   that used to be treated as false. They are answered through two
@@ -140,11 +139,27 @@ ahead of tranche 3:
   reads only its first character, a timespan refuses a bare count of seconds,
   an integer is `number()`, and a dbref is *matched* against a short list.
 
-**The next step is tranche 3, the propqueues**, which is the only work left
-that changes how an existing world behaves: props sitting inert in the starter
-world and in every imported `.db` start executing. LISTENER flag maintenance
-first, then `@sweep` on that alone, then `propqueue`/`envpropqueue`, then the
-call sites one commit each.
+**Tranche 3, the propqueues, is under way**, and it is the only work left that
+changes how an existing world behaves: props sitting inert in the starter world
+and in every imported `.db` start executing. Its first half is done and changes
+nothing —
+
+- **The LISTENER flag is maintained**, in `internal/world/listen.go`. Nothing
+  maintained it before, so `@sweep` could not have told the truth. It is set in
+  one place and cleared in none, which is upstream's; `World.IsListener` tests
+  the flag *and* the property, which is what makes the staleness invisible.
+- **`@sweep` has landed**, which takes the table to 100 handlers of 109 names
+  and leaves nine, five of them declined.
+- **A recycled dbref comes back** — not in the plan, found by `@sweep`'s
+  golden case. `World.Create` now hands out a garbage ref before allocating a
+  fresh one, which is `new_object`; Emerald always allocated past its ceiling,
+  so every dbref after a `@recycle` was one higher than upstream's. `@recycle`'s
+  own confirmation and its `@tune` guard came with it.
+
+What is left of the tranche: `propqueue`/`envpropqueue`/`listenqueue`, then the
+call sites one commit each — `_depart`/`_odepart` and `_arrive`/`_oarrive` in
+`enter_room`, `_lookq` in `do_look_at`, `_connect`/`_disconnect` in the login
+path, and `_listen`/`~listen`/`~olisten` wherever text is sent to a room.
 
 Then tranche 4 (ANSI gating), and `choose_thing`'s missing tie-breaks —
 no preferred type, no `check_keys`, no environment distance — which

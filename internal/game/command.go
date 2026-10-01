@@ -111,6 +111,7 @@ func init() {
 	register("@toad", (*Server).cmdToad)
 	register("@boot", (*Server).cmdBoot)
 	register("@stats", (*Server).cmdStats)
+	register("@sweep", (*Server).cmdSweep)
 	register("@version", (*Server).cmdVersion)
 }
 

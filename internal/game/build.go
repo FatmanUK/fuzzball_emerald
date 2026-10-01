@@ -8,6 +8,7 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/password"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
+	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
@@ -705,31 +706,73 @@ func (s *Server) cmdPassword(c *ctx) {
 		"player", c.who.String(), "name", o.Name)
 }
 
+// noRecycleRoot is do_recycle's answer for #0, which nothing reaches
+// in practice: the @tune guard above it catches #0 first, since it is
+// default_room_parent's value.
+const noRecycleRoot = "If you want to do that, why don't you " +
+	"just delete the database instead?  Room #0 contains " +
+	"everything, and is needed for database sanity."
+
+// noRecycleTuned is do_recycle's guard on anything a dbref @tune
+// parameter points at.
+const noRecycleTuned = "That object cannot currently be @recycled."
+
 // cmdRecycle destroys an object.
+//
+// Three of its replies are upstream's and three are not. The
+// confirmation, the global-environment refusal and the guard on an
+// object a @tune parameter points at are do_recycle's own
+// (create.c:841); the per-type ownership rules are still
+// resolveControlled's, which is **stricter** than upstream for a
+// wizard and laxer for an owner — see that function's doc comment,
+// and docs/upstream-coverage.md.
 func (s *Server) cmdRecycle(c *ctx) {
 	target, ok := s.resolveControlled(c, c.arg)
 	if !ok {
 		return
 	}
+	// The @tune guard comes *first*, and that ordering is most of
+	// what anybody sees: #0 is default_room_parent's value and #1
+	// is toad_default_recipient's, so "@recycle here" and
+	// "@recycle me" both answer this rather than the per-type
+	// refusal below them. Recycling a parameter's target would
+	// leave the server pointing at garbage with nothing to say
+	// about it.
+	for _, p := range c.w.Tune.Params() {
+		if p.Type != tune.TypeDbref {
+			continue
+		}
+		if v, _ := c.w.Tune.Get(p.Name); v.Ref == target {
+			c.tell("%s", noRecycleTuned)
+			return
+		}
+	}
+
 	o := c.w.Get(target)
 	switch {
 	case o.Type() == ref.TypePlayer:
-		c.tell("You can't recycle a player; use @toad.")
+		c.tell("You can't recycle a player!")
+		return
+	case o.Type() == ref.TypeGarbage:
+		c.tell("That's already garbage!")
 		return
 	case target == ref.GlobalEnvironment:
-		c.tell("You can't recycle the global environment.")
+		c.tell("%s", noRecycleRoot)
 		return
 	case target == c.who:
 		c.tell("You can't recycle yourself.")
 		return
 	}
+
 	s.evictEditors(c.w, target)
+	// Named before the recycling, because that is what renames
+	// the object to "<garbage>".
 	name := o.Name
 	if err := c.w.Recycle(target); err != nil {
 		c.send(err.Error())
 		return
 	}
-	c.tell("%s recycled.", name)
+	c.tell("Thank you for recycling %s (%s).", name, target)
 }
 
 // evictEditors throws anyone editing a program out of the editor

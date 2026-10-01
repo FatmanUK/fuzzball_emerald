@@ -323,13 +323,29 @@ func TestRecycledObjectsPersistAsGarbage(t *testing.T) {
 	if o.Type() != ref.TypeGarbage {
 		t.Errorf("type = %v, want garbage", o.Type())
 	}
-	if o.Props.Len() != 0 {
-		t.Error("recycled objects should carry no properties")
+	// Garbage keeps the one description upstream gives it and
+	// nothing else.
+	if o.Props.Len() != 1 {
+		t.Errorf("recycled object has %d properties, want 1",
+			o.Props.Len())
 	}
-	// The ceiling must not drop, so the ref is never handed out
-	// again.
+	// The ceiling must not drop, so a ref that was never recycled
+	// is not handed out twice.
 	if reloaded.Top() != w.Top() {
 		t.Errorf("Top() = %v, want %v", reloaded.Top(), w.Top())
+	}
+	// The recycled ref itself *is* handed out again, because Load
+	// rebuilds the free list from the graph — upstream's own
+	// behaviour, and the reason a world's dbrefs do not grow
+	// without bound.
+	if reloaded.RecyclableCount() != 1 {
+		t.Errorf("free list holds %d refs, want 1",
+			reloaded.RecyclableCount())
+	}
+	if got := reloaded.Create("fresh", ref.TypeThing,
+		ref.God).Ref; got != thing {
+		t.Errorf("next build = %v, want recycled %v",
+			got, thing)
 	}
 }
 

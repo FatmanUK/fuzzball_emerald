@@ -711,6 +711,72 @@ like an oversight and is reproduced. Upstream sets the same flag from two
 places Emerald has no equivalent of — a `-wizonly` command-line flag, and a
 sanity violation found at boot.
 
+## Listeners and @sweep
+
+`internal/world/listen.go` maintains the LISTENER flag and
+`internal/game/sweep.go` is `look.c:1961`'s `do_sweep`. They are tranche
+three's first half: the flag has to exist before the propqueues can read it,
+and `@sweep` only *reports*, so it ships on the flag alone.
+
+**The flag is set in one place and cleared in none.** `set_property`
+(`property.c:101`) turns LISTENER on when a property path starts with
+`_listen`, `~listen` or `~olisten`, and nothing in a non-DISKBASE build ever
+turns it off — so deleting the last `_listen` leaves a thing flagged for the
+life of the process. That is reproduced, not improved, because every reader
+tests the flag **and** the property: `World.IsListener` is that pair, and it is
+what makes the staleness invisible.
+
+**The flag is derived, not stored.** It is in `ref.DumpMask`, so a load strips
+it, and `World.RecomputeListeners` puts it back once every property is in —
+from the store, from the importer, and from `@sanfix`. That is upstream's
+DISKBASE `skipproperties` (`diskprop.c:239`), the one place it clears the flag.
+
+**The test that sets it and the test that reads it disagree**, and both are
+upstream's. Setting is `string_prefix`, so `_listenup` makes a listener;
+reading is an exact `get_property`, so `@sweep` will never report that object.
+Only a **root-level** property counts either way: `foo/_listen` is just a
+property.
+
+**`@sweep` is weaker than it sounds**, and upstream's own comment says so: a
+DARK *player* in a lit room is reported like anybody else, only a DARK *room*
+hides a sleeping one, and nothing a level deeper than the room's contents is
+looked at. A sleeping zombie that does not also listen is assembled into a line
+and then thrown away, which is why a puppet whose owner is offline does not
+appear. The "Listening rooms down the environment:" header prints even when the
+walk finds nothing, because upstream's flag is tested at the top of a loop that
+always runs once.
+
+**The four trapped commands are not checked the same way.** `page`, `whisper`
+and `say` are prefix tests — an exit named `p` traps `page` — while `pose` is
+tried exactly as `pose`, then `pos`, then `po`, stopping at the first that
+matches. An **unlinked** exit traps nothing, because `exit_matches_name`
+requires a destination.
+
+## A recycled dbref comes back
+
+`World.Create` hands out a garbage dbref before allocating a fresh one, which
+is `new_object` (`db.c:147`). Emerald always allocated past its ceiling, so
+every dbref in every message after a `@recycle` was one higher than upstream's
+and a long-lived world's numbering drifted from the C's for good.
+
+Three details. The list is **LIFO** — the last thing recycled is the first
+reused — and it is **rebuilt from the graph** on load, by an ascending walk
+that leaves the *highest* garbage ref at the head (`db.c:1222`), so a world's
+first reuse after a restart is not the same ref as its first reuse before one.
+And a **player never takes a recycled ref**: upstream passes `isplayer` and
+skips the list, so a name that was once somebody else's cannot come back
+attached to their old number.
+
+Garbage keeps one property, the description `<recyclable>` (`move.c:1314`),
+which is what `@examine` shows when something still points at it.
+
+**`@recycle`'s `@tune` guard runs before its per-type refusals**, and that
+ordering is most of what anybody sees: `#0` is `default_room_parent`'s value
+and `#1` is `toad_default_recipient`'s, so neither `@recycle here` nor
+`@recycle me` ever reaches "Room #0 contains everything" or "You can't recycle
+a player!" Its *permission* rules are still `resolveControlled`'s and still
+diverge — see that function's doc comment.
+
 ## MCP
 
 `internal/mcp` is MCP 2.1, the out-of-band protocol clients use to exchange

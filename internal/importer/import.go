@@ -65,6 +65,18 @@ func Load(src Source) (*Result, error) {
 		return nil, err
 	}
 
+	// Both of these are derived from the graph rather than read
+	// from the dump, and upstream rebuilds them the same way at
+	// the end of its own load.
+	w.RebuildRecyclable()
+
+	// LISTENER is derived from the properties and never read from
+	// the dump: the flag is in ref.DumpMask, which Parse strips,
+	// and upstream recomputes it as it reads each object's props.
+	// Doing it here rather than per-property is the same answer
+	// and does not need the parser to know about it.
+	w.RecomputeListeners()
+
 	res := &Result{World: w, Report: rep}
 
 	// An imported world has never been written, so everything is

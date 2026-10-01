@@ -63,6 +63,13 @@ type World struct {
 	gripes    []Gripe
 	newGripes []Gripe
 
+	// recyclable is upstream's free list of garbage dbrefs
+	// (db.c:53), which Create hands out before allocating a fresh
+	// one. It is LIFO — the last ref recycled is the first
+	// reused — and it is rebuilt from the graph on load rather
+	// than stored, because garbage is recognisable by its type.
+	recyclable []ref.Ref
+
 	Tune *tune.Set
 	// tuneDirty records that the parameter table changed.
 	tuneDirty bool
@@ -147,9 +154,16 @@ func (w *World) Used(r ref.Ref) {
 
 // Create allocates a new object and marks it dirty. It does not place
 // the object anywhere; use MoveTo for that.
+//
+// A garbage dbref is reused if there is one, which is upstream's
+// new_object (db.c:147) and is visible in every message that names a
+// new object: recycle something and the next thing built takes its
+// number. The one exception is a **player**, who always gets a fresh
+// ref — upstream passes `isplayer` and skips the free list, so a
+// name that was once somebody else's cannot come back attached to
+// their old number.
 func (w *World) Create(name string, t ref.ObjType, owner ref.Ref) *Object {
-	r := w.top
-	w.top++
+	r := w.nextRef(t)
 	o := newObject(r, name, t, owner, w.now())
 	w.objs[r] = o
 	w.dirty[r] = struct{}{}
@@ -158,6 +172,50 @@ func (w *World) Create(name string, t ref.ObjType, owner ref.Ref) *Object {
 	}
 	return o
 }
+
+// nextRef picks the dbref a new object gets: the most recently
+// recycled one, or a fresh one past the ceiling.
+func (w *World) nextRef(t ref.ObjType) ref.Ref {
+	if t != ref.TypePlayer {
+		for i := len(w.recyclable) - 1; i >= 0; i-- {
+			r := w.recyclable[i]
+			w.recyclable = w.recyclable[:i]
+			// A ref that is no longer garbage was taken
+			// by something else — a repair, or a load
+			// — and is skipped rather than handed out
+			// twice.
+			if o := w.objs[r]; o == nil ||
+				o.Type() == ref.TypeGarbage {
+				return r
+			}
+		}
+	}
+	r := w.top
+	w.top++
+	return r
+}
+
+// RebuildRecyclable rebuilds the free list from the graph, which is
+// what upstream does at the end of a load (db.c:1222): it walks every
+// object in ascending order and pushes each garbage one, so the
+// *highest* garbage ref ends up at the head and is reused first.
+//
+// It is also what a sanity repair wants, since the list is the one
+// piece of state a damaged chain can corrupt without the objects
+// themselves being wrong.
+func (w *World) RebuildRecyclable() {
+	w.recyclable = w.recyclable[:0]
+	for r := ref.Ref(0); r < w.top; r++ {
+		if o := w.objs[r]; o != nil &&
+			o.Type() == ref.TypeGarbage {
+			w.recyclable = append(w.recyclable, r)
+		}
+	}
+}
+
+// RecyclableCount reports how many dbrefs are waiting to be reused,
+// which @stats and the sanity report want.
+func (w *World) RecyclableCount() int { return len(w.recyclable) }
 
 // Add inserts an already-built object, as the importer and the store
 // loader do. It does not mark the object dirty, because both callers
@@ -203,6 +261,10 @@ func (w *World) Recycle(r ref.Ref) error {
 	o.Flags = ref.Flags(0).WithType(ref.TypeGarbage)
 	o.Name = "<garbage>"
 	o.Props = props.New()
+	// Upstream gives garbage a description as well as a name
+	// (move.c:1314), which is what @examine and the sanity report
+	// show when something still points at it.
+	o.Props.SetString("_/de", "<recyclable>")
 	o.Dest = nil
 	o.Location = ref.Nothing
 	o.Contents = ref.Nothing
@@ -212,6 +274,10 @@ func (w *World) Recycle(r ref.Ref) error {
 	o.PasswordHash = ""
 	o.Modified = w.now()
 	w.dirty[r] = struct{}{}
+	// The ref goes on the free list, so the next thing built
+	// takes it. Upstream pushes onto the head, so the most recent
+	// recycling is reused first.
+	w.recyclable = append(w.recyclable, r)
 	return nil
 }
 
@@ -271,12 +337,18 @@ func (w *World) recordNameHistory(o *Object, name string) {
 }
 
 // SetProp stores a property and marks the object changed.
+//
+// It also maintains the LISTENER flag, which is upstream's
+// set_property doing the same thing (property.c:101) and the only
+// place a non-DISKBASE build ever sets it. See listen.go for why that
+// is one-way.
 func (w *World) SetProp(r ref.Ref, path string, v props.Value) {
 	o := w.objs[r]
 	if o == nil {
 		return
 	}
 	o.Props.Set(path, v)
+	w.markListener(r, path)
 	w.Modified(r)
 }
 
@@ -324,10 +396,9 @@ func (w *World) SetTune(name, value string) error {
 // persistence. It is what @tune and SETSYSPARM go through, as
 // upstream's two callers of tune_setparm do; SetTune and ResetTune
 // stay the loader's and the repairer's paths, where the value is one
-// this server wrote itself.
-// TuneRefResolver answers a dbref parameter's value the way
-// tune_setparm's own match does, and is passed in because the matcher
-// is a layer above this one.
+// this server wrote itself. TuneRefResolver answers a dbref
+// parameter's value the way tune_setparm's own match does, and is
+// passed in because the matcher is a layer above this one.
 type TuneRefResolver func(string) (ref.Ref, ref.ObjType, bool)
 
 func (w *World) SetParm(name, val string, mlev int,

@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **Nothing missing.** All 140 functions, and the documented limits check out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **10 of 109 dispatched names have no handler**, and five of those are deliberate. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **9 of 109 dispatched names have no handler**, and five of those are deliberate. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -90,19 +90,23 @@ would otherwise compile each other for ever, on the world goroutine.
 
 ---
 
-## `muckhelp.html` — 10 of 109 names have no handler
+## `muckhelp.html` — 9 of 109 names have no handler
 
 `internal/game/dispatch_table.go` is every name Fuzzball 7 dispatches:
-**109 rows, 99 with handlers, 10 without.** The count is exact rather
+**109 rows, 100 with handlers, 9 without.** The count is exact rather
 than estimated, because the table *is* the command surface and a name
 with no handler says so when typed.
 
-The ten, and why:
+The nine, and why:
 
     @memory  @usage  @reconfiguressl  @tops  @teledump   deliberate
     @armageddon  @restart                                lifecycle
     @mcpedit  @mcpprogram                                MCP editor
-    @sweep                                               LISTENER flag
+
+`@sweep` has landed, which took the LISTENER flag with it: nothing
+maintained the flag before, so the command could not have told the
+truth. See CLAUDE.md for why the flag is set in one place, cleared in
+none, and derived from the properties at load.
 
 `@teledump` joins the deliberate list: it base64-encodes the flat-file
 dump over the connection, and this server has no dump file to send.
@@ -154,13 +158,9 @@ property writer, with six types and its own syntax — and it is one of
 only two commands that write a property the *player* names, which is
 why it carries a restriction check the message setters do not need.
 
-### Building and ownership
-
-    @sweep
-
 ### Wizard
 
-    @debug  @examine  @memory  @usage
+    @memory  @usage
 
 `@armageddon`, `@restart` and `@teledump` are also absent. `@reconfiguressl` is **deliberately** absent:
 TLS is configured from the environment, because a TLS-only server

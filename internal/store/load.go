@@ -119,6 +119,19 @@ func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 		s.log.Warn("rebuilt damaged containment chains",
 			"containers", rep.ChainsRepaired)
 	}
+
+	// The free list of recycled dbrefs is derived from the graph
+	// rather than stored, so it only exists once every object is
+	// in. Without it a loaded world allocates past its ceiling
+	// and leaves its garbage unused, where upstream hands it
+	// straight back out.
+	w.RebuildRecyclable()
+
+	// LISTENER is live state rather than stored state — it is
+	// in ref.DumpMask, so the flags above arrived with it cleared
+	// — and the properties it is derived from are only all
+	// present now.
+	w.RecomputeListeners()
 	return rep, nil
 }
 

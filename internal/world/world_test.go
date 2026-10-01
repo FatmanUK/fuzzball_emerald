@@ -237,13 +237,113 @@ func TestRecycle(t *testing.T) {
 	if got := w.Contents(room.Ref); got != nil {
 		t.Errorf("room still holds %v", got)
 	}
-	if p.Props.Len() != 0 {
-		t.Error("recycling should clear properties")
+	// Everything the object held is gone except the description
+	// upstream gives garbage, which is what @examine and the
+	// sanity report show when something still points at it.
+	if p.Props.Len() != 1 {
+		t.Errorf("recycling left %d properties, want 1",
+			p.Props.Len())
+	}
+	v, ok := p.Props.Get("_/de")
+	if !ok || v.Str != "<recyclable>" {
+		t.Errorf("garbage description = %q, want it set",
+			v.Str)
 	}
 	// The ref itself survives, so dangling references resolve to
 	// garbage rather than to some unrelated later object.
 	if w.Get(p.Ref) == nil {
 		t.Error("the ref should still resolve, to garbage")
+	}
+}
+
+// TestRecycledRefComesBack covers upstream's free list: a recycled
+// dbref is handed to the next thing built, and never to a player.
+func TestRecycledRefComesBack(t *testing.T) {
+	w := New()
+	first := w.Create("widget", ref.TypeThing, ref.God)
+	second := w.Create("gadget", ref.TypeThing, ref.God)
+	if err := w.Recycle(first.Ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Recycle(second.Ref); err != nil {
+		t.Fatal(err)
+	}
+
+	// LIFO: the last one recycled comes back first.
+	got := w.Create("a", ref.TypeThing, ref.God).Ref
+	if got != second.Ref {
+		t.Errorf("first reuse = %v, want %v", got, second.Ref)
+	}
+	got = w.Create("b", ref.TypeRoom, ref.God).Ref
+	if got != first.Ref {
+		t.Errorf("second reuse = %v, want %v", got, first.Ref)
+	}
+	// And then fresh refs again.
+	top := w.Top()
+	got = w.Create("c", ref.TypeThing, ref.God).Ref
+	if got != top {
+		t.Errorf("third = %v, want %v", got, top)
+	}
+
+	// A player never takes a recycled ref: upstream passes
+	// isplayer and skips the list.
+	spare := w.Create("spare", ref.TypeThing, ref.God)
+	if err := w.Recycle(spare.Ref); err != nil {
+		t.Fatal(err)
+	}
+	p := w.Create("Somebody", ref.TypePlayer, ref.Nothing)
+	if p.Ref == spare.Ref {
+		t.Error("a player took a recycled dbref")
+	}
+	// ...and the ref is still waiting for the next thing.
+	got = w.Create("d", ref.TypeThing, ref.God).Ref
+	if got != spare.Ref {
+		t.Errorf("reuse after a player = %v, want %v",
+			got, spare.Ref)
+	}
+}
+
+// TestRebuildRecyclableFindsGarbage covers the load path: the free
+// list is derived from the graph, and upstream's walk is ascending so
+// the highest garbage ref is reused first.
+func TestRebuildRecyclableFindsGarbage(t *testing.T) {
+	w := New()
+	var refs []ref.Ref
+	for i := 0; i < 3; i++ {
+		refs = append(refs,
+			w.Create("thing", ref.TypeThing, ref.God).Ref)
+	}
+	for _, r := range refs {
+		if err := w.Recycle(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A fresh world standing in for one just loaded: the objects
+	// are there, the list is not.
+	loaded := New()
+	for r := ref.Ref(0); r < w.Top(); r++ {
+		if o := w.Get(r); o != nil {
+			if err := loaded.Add(o); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if loaded.RecyclableCount() != 0 {
+		t.Fatal("Add should not populate the free list")
+	}
+
+	loaded.RebuildRecyclable()
+	if got := loaded.RecyclableCount(); got != len(refs) {
+		t.Fatalf("found %d recyclable refs, want %d",
+			got, len(refs))
+	}
+	for i := len(refs) - 1; i >= 0; i-- {
+		got := loaded.Create("x", ref.TypeThing, ref.God).Ref
+		if got != refs[i] {
+			t.Errorf("reuse %d = %v, want %v",
+				len(refs)-1-i, got, refs[i])
+		}
 	}
 }
 
