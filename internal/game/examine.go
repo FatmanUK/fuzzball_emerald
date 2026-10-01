@@ -489,9 +489,14 @@ func (s *Server) canLink(w *world.World, who, what ref.Ref) bool {
 	return o != nil && o.Type() == ref.TypeExit && len(o.Dest) == 0
 }
 
-// canSeeFlags reports whether someone may be told where an object is,
-// which upstream ties to whether they could teleport there.
-func (s *Server) canSeeFlags(c *ctx, where ref.Ref) bool {
+// canTeleportTo is predicates.c:89's can_teleport_to: control of the
+// destination, or its link lock passing *and* either LINK_OK or —
+// for anything that is not a thing — ABODE.
+//
+// @teleport is not its only caller: DBREF-level primitives ask it
+// too, and @teleport's room branch uses it where its player branch
+// demands outright control.
+func (s *Server) canTeleportTo(c *ctx, where ref.Ref) bool {
 	if s.controls(c.w, c.who, where) {
 		return true
 	}
@@ -502,6 +507,15 @@ func (s *Server) canSeeFlags(c *ctx, where ref.Ref) bool {
 	}
 	return o.Flags&ref.LinkOK != 0 ||
 		o.Type() != ref.TypeThing && o.Flags&ref.Abode != 0
+}
+
+// canSeeFlags reports whether someone may be told where an object is.
+//
+// Upstream's can_see_flags is a one-line call to can_teleport_to and
+// says in a comment that it is kept separate because the rules could
+// diverge. That separation is reproduced rather than collapsed.
+func (s *Server) canSeeFlags(c *ctx, where ref.Ref) bool {
+	return s.canTeleportTo(c, where)
 }
 
 // passesReadLock reports whether someone may read an object's

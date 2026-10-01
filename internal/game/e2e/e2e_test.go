@@ -368,7 +368,7 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 
 	// One is a wizard, so can bring the newcomer along.
 	a.send("!@teleport Visitor=#0")
-	a.expect("Teleported")
+	a.expect("teleported to")
 	b.drain(300 * time.Millisecond)
 	a.drain(300 * time.Millisecond)
 

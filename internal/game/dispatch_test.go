@@ -233,7 +233,7 @@ func TestDeclinedCommandsSayWhy(t *testing.T) {
 // golden harness cannot reach: its player is #1, who controls
 // everything in the fixture.
 //
-// The four commands still on resolveControlled keep the older, bare
+// The three commands still on resolveControlled keep the older, bare
 // message on purpose — see its doc comment for why each needs its
 // own commit rather than a shared string.
 func TestMatchControlledWording(t *testing.T) {

@@ -69,11 +69,11 @@ func (s *Server) matchControlled(c *ctx,
 	return r, true
 }
 
-// resolveControlled is what @link, @unlink, @teleport and @recycle
-// use, and it is **not** upstream's match_controlled. None of those
-// four go through it: each matches for itself and then applies a
-// check of its own, with its own wording and — more importantly —
-// its own rules.
+// resolveControlled is what @link, @unlink and @recycle use, and it
+// is **not** upstream's match_controlled. None of those three goes
+// through it: each matches for itself and then applies a check of its
+// own, with its own wording and — more importantly — its own
+// rules.
 //
 // The differences are behavioural, not cosmetic, and none is fixed
 // here:
@@ -82,16 +82,17 @@ func (s *Server) matchControlled(c *ctx,
 //     destination's owner unlink an exit and this refuses them.
 //   - @link lets a builder who controls nothing *seize* an unlinked
 //     exit, paying for it; this refuses before that can happen.
-//   - @teleport defers its control test until the destination is
-//     known and varies it by victim type; this tests the victim up
-//     front.
 //   - @recycle is stricter than controls: upstream requires actual
 //     ownership of a room or thing even of a wizard, so this server
 //     currently lets a wizard recycle objects upstream refuses.
 //
-// Each needs its own commit. Until then the four keep the message
-// they have always had, which is at least not pretending to be
-// upstream's.
+// @teleport was the fourth, and is ported: its check depends on the
+// destination, so it cannot happen at match time at all. See
+// teleport.go.
+//
+// Each of the three needs its own commit. Until then they keep the
+// message they have always had, which is at least not pretending to
+// be upstream's.
 func (s *Server) resolveControlled(c *ctx,
 	name string) (ref.Ref, bool) {
 
@@ -702,52 +703,6 @@ func (s *Server) cmdPassword(c *ctx) {
 	c.tell("Password changed.")
 	s.securityLog().Info("password changed",
 		"player", c.who.String(), "name", o.Name)
-}
-
-// cmdTeleport moves an object somewhere else.
-func (s *Server) cmdTeleport(c *ctx) {
-	name, destName, ok := strings.Cut(c.arg, "=")
-	if !ok {
-		// With one argument, teleport the player themselves.
-		name, destName = "me", c.arg
-	}
-	target, ok2 := s.resolveControlled(c, strings.TrimSpace(name))
-	if !ok2 {
-		return
-	}
-	dest := match.New(c.w, c.who, strings.TrimSpace(destName)).
-		Absolute().Here().Home().Possession().Neighbor().Player().Result()
-	switch dest {
-	case ref.Nothing:
-		c.tell("I don't see that destination.")
-		return
-	case ref.Ambiguous:
-		c.tell("I don't know which destination you mean.")
-		return
-	case ref.Home:
-		dest = c.w.Get(target).Home
-	}
-	if !c.w.Valid(dest) {
-		c.tell("That destination doesn't exist.")
-		return
-	}
-	// Only a wizard may drop things into somewhere they do not
-	// control.
-	if !s.controls(c.w, c.who, dest) &&
-		c.w.Get(dest).Flags&ref.JumpOK == 0 {
-		c.tell("You can't teleport there.")
-		return
-	}
-
-	if target == c.who {
-		s.moveTo(c.w, c.d.ID, c.who, dest, ref.Nothing)
-		return
-	}
-	if err := c.w.MoveTo(target, dest); err != nil {
-		c.send(err.Error())
-		return
-	}
-	c.tell("Teleported.")
 }
 
 // cmdRecycle destroys an object.

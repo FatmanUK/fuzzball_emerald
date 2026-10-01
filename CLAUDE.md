@@ -480,6 +480,46 @@ say so differently for each type. `@link`: "Linked to X." for an exit (or
 "Action priority Level reset to 0."; "Dropto removed."; "Thing's home reset to
 owner."; "Player's home reset to default player start room."
 
+## @teleport
+
+`internal/game/teleport.go` is `wiz.c:102`'s `do_teleport`, which is four
+commands wearing one name. A **player** is walked in through `enter_room`, so
+the move announces itself and the autolook runs; a **thing** or a **program**
+is simply put there; a **room** is *reparented*, and says "Parent of X set to
+Y." where everything else says "X teleported to Y." This server used to answer
+"Teleported." for all four.
+
+**Its permission test is not `match_controlled`, and cannot be.** The rule
+depends on the *destination*, so it has to run after both matches, and what it
+asks differs per victim type — a player needs control of the victim, the
+destination, the victim's location and, when the destination is a thing, the
+thing's location; a thing or a program needs the destination controlled **or**
+`can_teleport_to`, and the victim **or** its location controlled; a room needs
+the victim controlled and the destination linkable, and `#0` is refused
+outright. Each refusal names the test it failed, at length, and programs match
+on the whole line.
+
+**The destination match is narrower than the victim match**, and neither is
+`match_everything`. The victim search has no exits and takes `match_player`
+unconditionally; the destination search drops `match_neighbor` as well, and
+adds both back only for a wizard. So a mortal cannot name something lying in
+the room as a destination, which reads like an oversight and is reproduced —
+and a room made by `@dig` can be named by nothing but its dbref or a
+registration, because `@dig` leaves it detached.
+
+**A non-STICKY room with a drop-to swallows a thing teleported into it**, and
+the confirmation names the drop-to rather than the room that was asked for.
+
+**`HOME` is resolved per victim type**, by `teleportHome` — not by
+`fallbackHome`, which is `moveto`'s ladder. They differ for a player, whom
+upstream sends to their *owner's* home when their own would make a loop; a
+player owns themselves, so it is the same place, and the rung is reproduced
+because the C has it.
+
+`can_teleport_to` (`predicates.c:89`) is `canTeleportTo`, and `can_see_flags`
+is a call to it — upstream keeps the two separate with a comment saying the
+rules could diverge, and that separation is kept rather than collapsed.
+
 ## Actions, clones and blessing
 
 `internal/game/action.go` is `@action`, `@attach`, `@clone`, `@relink`, `@bless`
@@ -807,6 +847,11 @@ also not `controls`: a program shows only to whoever controls it or if it is
 a VEHICLE, exits and rooms are never listed, and a STICKY player sees nothing
 extra in the dark. Look traps — the `_details` propdir — are not ported.
 
+**`inventory` ends with `score`.** `do_inventory` finishes by calling
+`do_score`, so the money line is part of the command — including when there
+is nothing to list, which is why "You aren't carrying anything." is not the
+end of it. Emerald returned early there and printed no money line at all.
+
 **Command resolution is upstream's dispatcher, ported.**
 `internal/game/dispatch_table.go` is every command Fuzzball 7 dispatches, in
 the order its nested switch visits them; `dispatch.go` resolves by taking the
@@ -858,6 +903,15 @@ wizard, so a wizard can name somebody elsewhere. But **`look` is deliberately
 narrower**: `do_look_at` builds its own list without `match_registered`, so
 `look $thing` really does fail, and a failed look says `match_msg_nomatch`'s
 "I don't understand 'X'." rather than "I don't see that here."
+
+**`Matcher.Absolute` has no permission test**, and an invented one used to make
+`look #5` fail for anybody who did not own `#5`. `absolute_name`
+(`match.c:333`) checks that the reference parses and that the object exists,
+and nothing else: **anybody may name any object by number**, and what stops
+them acting on it is the command's own check — `matchControlled`'s refusal,
+`examine`'s limited view for a non-owner, `@teleport`'s per-type tests. The
+guard in the matcher duplicated some of those and contradicted the rest, and
+hid which rule had actually refused.
 
 **Command precedence is load-bearing.** `QUIT` and `WHO` are compared
 case-sensitively before anything else, and exits are matched before built-in
