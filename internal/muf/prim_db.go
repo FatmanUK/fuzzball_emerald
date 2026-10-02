@@ -3,6 +3,7 @@ package muf
 import (
 	"strings"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ansi"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -187,6 +188,14 @@ func init() {
 		return nil, f.Push(Bool(controls(h, who, obj)))
 	})
 
+	// The three matching primitives strip ANSI from the name
+	// before matching (p_db.c:765, :812, :886) and are the only
+	// primitives that do. A program that has been handed a
+	// coloured name — one built by another program, or read out
+	// of a property — can still resolve it, which is the point:
+	// the escape sequences are not part of what anything is
+	// called. Note it is strip_ansi and not ANSI_STRIP's narrower
+	// pattern; see internal/ansi.
 	register("MATCH", func(f *Frame) (*Result, error) {
 		name, err := f.popStr()
 		if err != nil {
@@ -196,7 +205,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, f.Push(Obj(h.Match(f.Caller, name)))
+		return nil, f.Push(Obj(h.Match(f.Caller,
+			ansi.Strip(name))))
 	})
 	register("PMATCH", func(f *Frame) (*Result, error) {
 		name, err := f.popStr()
@@ -207,6 +217,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		name = ansi.Strip(name)
 		return nil, f.Push(Obj(h.MatchPlayer(name)))
 	})
 
@@ -906,7 +917,9 @@ func init() {
 			return nil, err
 		}
 		// A remote match looks only at what the given object
-		// holds.
+		// holds, and strips ANSI from the name first as the
+		// other two matching primitives do.
+		name = ansi.Strip(name)
 		for _, r := range append(h.Contents(around), h.Exits(around)...) {
 			if ascii.EqualFold(h.Name(r), name) {
 				return nil, f.Push(Obj(r))

@@ -901,7 +901,7 @@ func (f *Frame) Push(v Value) error {
 // Pop takes the top value.
 func (f *Frame) Pop() (Value, error) {
 	if len(f.Stack) == 0 {
-		return Value{}, errf("stack underflow")
+		return Value{}, errf("Stack underflow.")
 	}
 	v := f.Stack[len(f.Stack)-1]
 	f.Stack = f.Stack[:len(f.Stack)-1]
@@ -911,7 +911,7 @@ func (f *Frame) Pop() (Value, error) {
 // PopN takes the top n values, leftmost first.
 func (f *Frame) PopN(n int) ([]Value, error) {
 	if len(f.Stack) < n {
-		return nil, errf("stack underflow")
+		return nil, errf("Stack underflow.")
 	}
 	out := make([]Value, n)
 	copy(out, f.Stack[len(f.Stack)-n:])
@@ -922,7 +922,7 @@ func (f *Frame) PopN(n int) ([]Value, error) {
 // Peek returns the value n places from the top without removing it.
 func (f *Frame) Peek(n int) (Value, error) {
 	if n < 0 || n >= len(f.Stack) {
-		return Value{}, errf("stack underflow")
+		return Value{}, errf("Stack underflow.")
 	}
 	return f.Stack[len(f.Stack)-1-n], nil
 }

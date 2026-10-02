@@ -438,6 +438,26 @@ the `{FORCE}` error and then `{NULL} (arg 1)`; Emerald prints the
 first line and stops. That is the error *reporting*, not the
 evaluation, and it affects every nested MPI failure.
 
+### Three MUF error messages are still not upstream's
+
+Found by probing four deliberate program failures through both
+servers while writing the ANSI case. Programs match on these strings,
+so each is a real divergence rather than a cosmetic one:
+
+- **`+` reports itself as `+` and says "Invalid argument type."**
+  Upstream names the instruction `++` and says "Invalid datatype."
+  The doubled name is upstream's own and is not a typo in this
+  document.
+- **`SETNAME` checks permission before the argument type.** Given a
+  non-string name by a mortal, upstream answers "Non-string argument
+  (2)" and Emerald answers "Permission denied.  Requires Wizbit." The
+  order is what differs, not either message.
+- A fourth has been fixed: the stack underflow aborts said "stack
+  underflow" where upstream says "Stack underflow."
+
+`STRCAT`'s "Non-string argument." agrees exactly, which is why the
+ANSI case uses it to produce an error report.
+
 ### @tune: two things still collapsed
 
 `do_tune` is ported, and two details of its permission model are not,

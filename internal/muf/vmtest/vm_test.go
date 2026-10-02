@@ -614,8 +614,8 @@ func TestReservedVariables(t *testing.T) {
 
 func TestStackUnderflowIsReported(t *testing.T) {
 	// Two pops, because one value is already there: the argument.
-	runFails(t, ": main pop pop ;", "stack underflow")
-	runFails(t, ": main pop 1 + ;", "stack underflow")
+	runFails(t, ": main pop pop ;", "Stack underflow.")
+	runFails(t, ": main pop 1 + ;", "Stack underflow.")
 }
 
 // TestProgramStartsWithItsArgument pins a detail that is easy to miss

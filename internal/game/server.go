@@ -166,6 +166,14 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 	err := s.engine.Go(func(w *world.World) {
 		d = s.hub.Add(tr, host, w.Now())
 		d.Quota.Set(int(w.Tune.Int("command_burst_size")))
+		// The world pointer is captured rather than looked
+		// up: an Engine owns exactly one for its lifetime and
+		// never swaps it, so this is the same *World every
+		// handler sees — and the alternative would be an
+		// accessor that handed the world out to whoever
+		// asked, which is the one thing the engine exists to
+		// prevent.
+		d.AllowANSI = func() bool { return s.allowANSI(w, d) }
 		close(done)
 
 		// MCP is offered before the banner, so a client that
@@ -295,6 +303,36 @@ func (s *Server) OnTick() func(*world.World) {
 // Hub exposes the connection hub. Only the world goroutine may use
 // it.
 func (s *Server) Hub() *session.Hub { return s.hub }
+
+// allowANSI is queue_ansi's gate (interface.c:673): whether this
+// connection keeps colour or has it stripped.
+//
+// Logged in, it is the player's own COLOR flag — upstream's
+// CHOWN_OK, which means something else entirely on anything but a
+// player, and is why `examine` prints it as COLOR for one and
+// CHOWN_OK for the rest.
+//
+// *Before* login it is neither a flag nor a setting of the client's
+// but two @tune parameters, both of which have to be on: a world that
+// has turned MPI off, or turned it off for the welcome screen, gets
+// no colour on its banner either. That reads like an accident of
+// implementation — the banner is the only pre-login text a world
+// writes, so the parameters that decide whether MPI runs over it also
+// decide whether its colour survives — and it is upstream's.
+//
+// It is read live rather than cached, so "@set me=C" takes effect on
+// the next line. The descriptor holds it as a callback for that
+// reason; internal/session cannot see a world.
+func (s *Server) allowANSI(w *world.World,
+	d *session.Descriptor) bool {
+
+	if d.Connected {
+		o := w.Get(d.Player)
+		return o != nil && o.Flags&ref.ChownOK != 0
+	}
+	return w.Tune.Bool("do_mpi_parsing") &&
+		w.Tune.Bool("do_welcome_parsing")
+}
 
 // notify sends a formatted line to every descriptor a player is
 // connected on.

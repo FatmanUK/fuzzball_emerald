@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ansi"
 	"github.com/FatmanUK/fuzzball_emerald/internal/mcp"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 )
@@ -76,6 +77,20 @@ type Descriptor struct {
 	// before it has to wait, upstream's spam limiter. It is never
 	// nil.
 	Quota *Quota
+
+	// AllowANSI reports whether this connection keeps colour.
+	//
+	// It is a callback rather than a flag because the answer is
+	// the world's — a player's COLOR flag and, before login,
+	// two @tune parameters — and because it has to be read
+	// *live*: a pushed copy would go stale the moment somebody
+	// typed "@set me=!C". Every Send runs on the world goroutine,
+	// so reading it here is safe.
+	//
+	// Nil means strip, which is the right answer for a descriptor
+	// the game has not adopted yet and the safe one for a client
+	// that has asked for nothing.
+	AllowANSI func() bool
 }
 
 // defaultBurst stands in for command_burst_size until the world
@@ -132,6 +147,19 @@ func (d *Descriptor) Drain() []string {
 // has stopped reading is marked for disconnection rather than allowed
 // to stall the world goroutine.
 func (d *Descriptor) Send(text string) {
+	// ANSI is filtered before the MCP quoting and not after,
+	// which is queue_ansi's own order (interface.c:673): a
+	// sequence stripped out of a line cannot then be what makes
+	// the line look like a message.
+	//
+	// The two filters are different functions. A player who has
+	// asked for colour gets it made well-formed; everybody else
+	// gets it removed. See internal/ansi.
+	if d.AllowANSI != nil && d.AllowANSI() {
+		text = ansi.Sanitize(text)
+	} else {
+		text = ansi.Strip(text)
+	}
 	// Text that would look like an out-of-band message is quoted,
 	// so a player cannot make everyone else's client obey a line
 	// they typed.

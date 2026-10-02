@@ -301,7 +301,7 @@ func init() {
 			count = -count
 		}
 		if int(count) > f.Depth() {
-			return nil, errf("stack underflow")
+			return nil, errf("Stack underflow.")
 		}
 		vals, err := f.PopN(int(count))
 		if err != nil {
@@ -384,7 +384,7 @@ func init() {
 			return nil, err
 		}
 		if n < 0 || int(n) > f.Depth() {
-			return nil, errf("stack underflow")
+			return nil, errf("Stack underflow.")
 		}
 		base := f.Depth() - int(n)
 		for i := 0; i < int(n); i++ {
@@ -405,7 +405,7 @@ func init() {
 		}
 		n := int(top.Num)
 		if n < 0 || n+1 > f.Depth() {
-			return nil, errf("stack underflow")
+			return nil, errf("Stack underflow.")
 		}
 		base := f.Depth() - n - 1
 		for i := 0; i <= n; i++ {

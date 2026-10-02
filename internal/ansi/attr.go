@@ -1,5 +1,11 @@
-// Package ansi holds the terminal attribute tags MUF's TEXTATTR and
-// MPI's {attr} both accept, and the escape sequences they stand for.
+// Package ansi is both halves of this server's colour handling: the
+// attribute tags that produce it, and the two filters that decide how
+// much of it reaches a client.
+//
+// attr.go holds the tags MUF's TEXTATTR and MPI's {attr} both accept
+// and the escape sequences they stand for. ansi.go holds Strip and
+// Sanitize, which are queue_ansi's two filters — see its own
+// comment for why they are two functions and not one.
 package ansi
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ascii"

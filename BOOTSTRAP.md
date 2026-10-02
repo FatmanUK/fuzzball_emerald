@@ -176,18 +176,37 @@ Two findings from writing its golden case, each wider than the step:
   itself crashed the server on the Go stack — as it does upstream on the C
   stack. Bounded, which is the one deliberate divergence in the tranche.
 
-**The next step is tranche 4, ANSI gating** — upstream strips ANSI unless
-the player has `CHOWN_OK`, whose user-facing name is COLOR. Every
-`Descriptor.Send` caller runs on the world goroutine, so the gate takes an
-`AllowANSI func() bool` the game installs and reads live: no pushed flag and
-no staleness window. Two things to get right there: `strip_bad_ansi` and
-`strip_ansi` are *different functions* rather than one with a flag, and
-`ansiPattern` (`internal/muf/prim_string2.go`) is narrower than either and is
-`ANSI_STRIP`'s golden-tested contract, so a second, wider stripper belongs in
-its own package.
+**Tranche 4, ANSI gating, is executed.** Upstream runs one of two filters over
+every line on its way to a client and Emerald ran neither, so a world that sent
+colour sent it to every client including those that had asked for none, and a
+malformed sequence went out as written.
 
-Then `choose_thing`'s missing tie-breaks — no preferred type, no
-`check_keys`, no environment distance — which matter for `get` and `drop`.
+- **`internal/ansi` grew the two filters.** `Strip` is `strip_ansi` and
+  `Sanitize` is `strip_bad_ansi`; they are *different functions*, not one with
+  a flag, and they disagree about four of the twelve shapes the tests cover.
+  Those expectations were produced by **compiling the two C functions and
+  running them** rather than by reading them, which is the only reason three of
+  the four are right.
+- **The gate is `Descriptor.AllowANSI`**, a callback the game installs and
+  reads live, so `@set me=C` takes effect on the next line with no staleness
+  window. Nil means strip, which is the safe default. Before login the answer
+  is two `@tune` parameters rather than a flag, and both have to be on.
+- **Almost every line of a MUF error report is coloured**, which is the half of
+  the work that was hiding. Emerald emitted all of it plain and matched every
+  golden transcript anyway, because the harness's player has no COLOR: the
+  oracle was stripping colour Emerald was not producing, two wrongs that
+  cancelled until one was fixed.
+- **`MATCH`, `PMATCH` and `RMATCH` strip ANSI from a name** before matching,
+  and are the only primitives that do.
+
+Probing four deliberate program failures through both servers to find an error
+message they word identically turned up **three that they do not** — `+`
+reporting itself as `++`, `SETNAME`'s check order, and a stack underflow whose
+wording is now fixed. Recorded in `docs/upstream-coverage.md`.
+
+**The next step is `choose_thing`'s missing tie-breaks** — no preferred type,
+no `check_keys`, no environment distance — which matter for `get` and `drop`,
+and whose last resort upstream is a coin toss no golden case can pin.
 
 Smaller things still open, each self-contained:
 
@@ -393,7 +412,8 @@ cmd/fbeconfig/          — the optional web configurator
 internal/ref/           — dbrefs (Ref), object types, the flag word
 internal/props/         — per-object property trees (case-insensitive, blessed)
 internal/ascii/         — ASCII-only case folding, SMatch, AlphanumCompare
-internal/ansi/          — the attribute tags TEXTATTR and {attr} share
+internal/ansi/          — the attribute tags TEXTATTR and {attr} share,
+                          plus queue_ansi's two output filters
 internal/timefmt/       — strftime and strptime
 internal/world/         — Object, World, Engine, Snapshot, RepairChains,
                             help corpora, sanity checking (Check/Fix)

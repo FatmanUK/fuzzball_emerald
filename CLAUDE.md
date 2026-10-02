@@ -859,6 +859,67 @@ and `#1` is `toad_default_recipient`'s, so neither `@recycle here` nor
 a player!" Its *permission* rules are still `resolveControlled`'s and still
 diverge — see that function's doc comment.
 
+## ANSI
+
+`internal/ansi` is `queue_ansi`'s two filters (`interface.c:673`) and
+`Descriptor.Send` is where they run. Emerald ran neither: a world that sent
+colour sent it to every client including those that had asked for none, and a
+malformed sequence went out as written.
+
+**There are two filters and they are different functions, not one with a
+flag.** `Strip` is `strip_ansi` and removes colour outright. `Sanitize` is
+`strip_bad_ansi` and keeps it, passing only SGR sequences, completing one left
+unterminated, and appending a reset so a line cannot leak colour into the next.
+They disagree about four of the twelve shapes `internal/ansi`'s tests cover,
+and those expectations were produced by **compiling the two C functions and
+running them**, not by reading them — several are not what the code looks like
+it does. The reset is appended *unconditionally*, so text already ending in one
+gets two; a sequence truncated at the end of the input gets its `m` and then
+**loses** the reset, because upstream writes the input's own NUL into the middle
+of its buffer; and `ESC[31X` keeps the `X` in both filters.
+
+**Neither is `internal/muf`'s `ansiPattern`.** That regexp is `ANSI_STRIP`'s
+golden-tested contract and is narrower than either: it insists on a `[` and a
+terminating letter, so it leaves `ESC[31` and `ESCX` alone where `Strip` removes
+both, and it swallows the `X` of `ESC[31X` where `Strip` keeps it. Sharing one
+implementation would make one of them wrong.
+
+**The gate is a callback the game installs, read live.** `Descriptor.AllowANSI`
+is nil by default, which means strip — the safe answer for a connection the
+game has not adopted. `Server.allowANSI` is what fills it in, and it reads the
+world on every line rather than caching, so `@set me=C` takes effect on the
+next one. The world pointer is *captured* rather than looked up, because an
+Engine owns exactly one for its lifetime and the alternative would be an
+accessor handing the world to whoever asked.
+
+**Before login the answer is not a flag but two `@tune` parameters**, and both
+have to be on: `do_mpi_parsing` and `do_welcome_parsing`. A world that has
+turned MPI off gets no colour on its banner either. That reads like an accident
+— the banner is the only pre-login text a world writes, so the parameters
+deciding whether MPI runs over it also decide whether its colour survives — and
+it is upstream's.
+
+**Filtering happens before the MCP quoting, not after**, which is `queue_ansi`'s
+own order: a sequence stripped out of a line cannot then be what makes the line
+look like an out-of-band message. `sendRaw` is unfiltered, and so is upstream's
+`queue_immediate_raw` — MCP messages are not text.
+
+**Almost every line of a MUF error report is coloured**, and this is the half
+of the work that was hiding. The header is bold red on black
+(`interp.c:1427`), the program-and-message line is bold (`:1436`), and the
+backtrace's three lines are bold yellow on black with the program, line,
+procedure name and each argument *name* picked out in bold (`debugger.c:406`,
+`:320`, `:483`, `:495`). Only the source line under each level carries none.
+Emerald emitted all of it plain, which matched every golden transcript because
+the harness's player has no COLOR — the oracle was stripping colour Emerald was
+not producing, two wrongs that cancelled until one was fixed.
+
+**Three primitives strip ANSI from a name before matching** — `MATCH`,
+`PMATCH` and `RMATCH` (`p_db.c:765`, `:812`, `:886`) — and they are the only
+primitives that do. A program handed a coloured name can still resolve it,
+because the escapes are not part of what anything is called. It is `strip_ansi`
+there, not `ANSI_STRIP`'s narrower pattern.
+
 ## MCP
 
 `internal/mcp` is MCP 2.1, the out-of-band protocol clients use to exchange
@@ -992,7 +1053,11 @@ that is reproduced, because transcripts are compared against it.
 
 **Error messages are upstream's wording**, not descriptions: "Invalid argument
 type.", "Non-string argument.", "Variable number out of range." Programs match
-on them.
+on them. Three are still wrong and are recorded in
+`docs/upstream-coverage.md`: `+` reports itself as `++` with "Invalid
+datatype.", `SETNAME` checks its argument's type before the permission rather
+than after, and a fourth was "stack underflow" against upstream's "Stack
+underflow." — that one is fixed.
 
 **MUF does not abort on integer division by zero.** The result is `0` and an
 error flag the program reads with `is_set?`. Aborting ends programs that
@@ -1342,6 +1407,9 @@ Worth knowing before "fixing" something that looks wrong:
 - **New code says TLS, never SSL** — but do not apply that rename to `@tune`
   names or primitive names. `DESCRSECURE?`, `NOTIFY_SECURE` and
   `ARRAY_NOTIFY_SECURE` keep their names and change meaning instead.
+- **A self-linked exit is refused rather than fatal.** Upstream recurses
+  through a metalink with nothing to stop it and exhausts its stack; see
+  "Exit traversal".
 
 ## Upstream coverage
 

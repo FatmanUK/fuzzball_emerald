@@ -19,8 +19,16 @@ type BacktraceFrame struct {
 	// Func is the procedure's name, or "???" when the address is
 	// not inside one.
 	Func string
-	// Args renders the procedure's arguments as "name=value".
-	Args []string
+	// Args are the procedure's arguments. Name and value are kept
+	// apart because the backtrace colours them differently: the
+	// name and its "=" are bold and the value is not.
+	Args []BacktraceArg
+}
+
+// BacktraceArg is one argument in a backtrace frame.
+type BacktraceArg struct {
+	Name  string
+	Value string
 }
 
 // Report describes a failure fully enough to print what upstream
@@ -89,7 +97,7 @@ func (f *Frame) procAt(pc int) *Proc {
 }
 
 // argText renders a procedure's arguments at one call level.
-func (f *Frame) argText(level int, proc *Proc) []string {
+func (f *Frame) argText(level int, proc *Proc) []BacktraceArg {
 	if proc.Args == 0 {
 		return nil
 	}
@@ -101,13 +109,15 @@ func (f *Frame) argText(level int, proc *Proc) []string {
 	}
 	scope := f.scopes[idx]
 
-	out := make([]string, 0, proc.Args)
+	out := make([]BacktraceArg, 0, proc.Args)
 	for i := 0; i < proc.Args && i < len(proc.VarNames); i++ {
 		val := "?"
 		if i < len(scope) {
 			val = truncateText(scope[i].Display(), maxArgText)
 		}
-		out = append(out, proc.VarNames[i]+"="+val)
+		out = append(out, BacktraceArg{
+			Name: proc.VarNames[i], Value: val,
+		})
 	}
 	return out
 }
@@ -156,6 +166,16 @@ func (f *Frame) Report(err error) *Report {
 // message, then the backtrace with the failing source line under each
 // level.
 //
+// **Almost every line of it is coloured**, which is invisible to a
+// player without COLOR because queue_ansi strips it on the way out
+// — and is why Emerald could emit none of it and still match every
+// golden transcript. The header is bold red on black (interp.c:1427),
+// the program-and-message line is bold (:1436), and the backtrace's
+// own three lines are bold yellow on black with the program, line,
+// procedure name and each argument name picked out in bold
+// (debugger.c:406, :320, :483, :495). The source line under each
+// level is the one part that carries none.
+//
 // progName resolves a program's name, and source its text; both come
 // from the server. sourceLine is one-based.
 func (r *Report) Render(owned bool, ownerName string,
@@ -163,37 +183,72 @@ func (r *Report) Render(owned bool, ownerName string,
 
 	var out []string
 	if owned {
-		out = append(out, "Program Error.  Your program just got the following error.")
+		out = append(out, errRed+
+			"Program Error.  Your program just got the "+
+			"following error."+ansiOff)
 	} else {
-		out = append(out,
+		out = append(out, errRed+
 			"Programmer Error.  Please tell "+ownerName+
-				" what you typed, and the following message.")
+			" what you typed, and the following message."+
+			ansiOff)
 	}
 
-	out = append(out, progName(r.Program)+"("+r.Program.String()+"), line "+
-		strconv.Itoa(r.Line)+"; "+r.Inst+": "+r.Msg)
+	// The one line of the report that carries colour: upstream
+	// wraps it in bold (interp.c:1435), which a player without
+	// COLOR never sees because queue_ansi strips it on the way
+	// out. That is why every golden transcript agrees with a
+	// server that was not emitting it.
+	out = append(out, ansiBold+progName(r.Program)+"("+
+		r.Program.String()+"), line "+strconv.Itoa(r.Line)+
+		"; "+r.Inst+": "+r.Msg+ansiOff)
 
 	if len(r.Frames) == 0 {
 		return out
 	}
 
-	out = append(out, "System stack backtrace:")
+	out = append(out, errYellow+"System stack backtrace:"+ansiOff)
 	for _, bf := range r.Frames {
 		// The opening parenthesis is never closed. That is
 		// how upstream prints it, and reproducing it keeps
-		// transcripts comparable.
-		head := pad3(bf.Level) + ") " + progName(bf.Program) + "(" +
-			bf.Program.String() + ") line " + strconv.Itoa(bf.Line) +
-			", in " + bf.Func + "(" + strings.Join(bf.Args, ", ") + ":"
-		out = append(out, head)
+		// transcripts comparable. It is also bold on its own,
+		// separately from the procedure name before it.
+		var b strings.Builder
+		b.WriteString(errYellow + pad3(bf.Level) + ")" +
+			ansiOff)
+		b.WriteString(" " + ansiBold + progName(bf.Program) +
+			"(" + bf.Program.String() + ")" + ansiOff)
+		b.WriteString(" line " + ansiBold +
+			strconv.Itoa(bf.Line) + ansiOff +
+			", in " + ansiBold + bf.Func + ansiOff)
+		b.WriteString(ansiBold + "(" + ansiOff)
+		for i, a := range bf.Args {
+			sep := ""
+			if i > 0 {
+				sep = ", "
+			}
+			b.WriteString(ansiBold + sep + a.Name + "=" +
+				ansiOff + a.Value)
+		}
+		b.WriteString(":")
+		out = append(out, b.String())
 
 		if line, ok := sourceLine(bf.Program, bf.Line); ok {
 			out = append(out, pad3(bf.Line)+": "+line)
 		}
 	}
-	out = append(out, "*done*")
+	out = append(out, errYellow+"*done*"+ansiOff)
 	return out
 }
+
+// The sequences the error report is built from. They are written out
+// here rather than taken from internal/ansi, because these are the
+// *source* of colour and that package only filters it.
+const (
+	ansiBold  = "\x1b[1m"
+	ansiOff   = "\x1b[0m"
+	errRed    = "\x1b[1;31;40m"
+	errYellow = "\x1b[1;33;40m"
+)
 
 // pad3 right-aligns a number in three columns, as "%3d" does.
 func pad3(n int) string {
