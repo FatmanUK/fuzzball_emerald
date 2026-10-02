@@ -86,7 +86,7 @@ func (s *Server) cmdSweep(c *ctx) {
 				unparse(c.w, c.who, loc))
 		}
 		s.sweepTraps(c, loc)
-		loc = getParent(c.w, loc)
+		loc = c.w.Parent(loc)
 	}
 
 	c.tell("**End of list**")

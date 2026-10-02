@@ -273,7 +273,13 @@ func (s *Server) cmdGo(c *ctx) {
 		s.cmdHome(c)
 		return
 	}
-	r := match.New(c.w, c.who, c.arg).Exits().Result()
+	// init_match_check_keys(descr, player, direction, TYPE_EXIT)
+	// — so of two same-named exits at the same priority, the
+	// one that will actually open wins.
+	r := match.New(c.w, c.who, c.arg).
+		PreferType(ref.TypeExit).
+		Usable(s.usableBy(c.w, c.d.ID, c.who)).
+		Exits().Result()
 	switch r {
 	case ref.Nothing:
 		c.tell("You can't go that way.")

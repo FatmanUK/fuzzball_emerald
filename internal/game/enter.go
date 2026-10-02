@@ -20,71 +20,12 @@ import (
 // a program to its owner. Nothing in upstream's movement path can
 // fail, which is why none of its callers check.
 
-// maxParentDepth is MAX_PARENT_DEPTH (config.h:118).
-const maxParentDepth = 256
-
-// getParentLogic is db.c's getparent_logic: the environment parent,
-// which for a VEHICLE thing is its home rather than its location —
-// and a step further when that home is a player, since a vehicle
-// parented to somebody means parented to where they live.
-func getParentLogic(w *world.World, obj ref.Ref) ref.Ref {
-	o := w.Get(obj)
-	if obj == ref.Nothing || o == nil {
-		return ref.Nothing
-	}
-	if o.Type() == ref.TypeThing && o.Flags&ref.Vehicle != 0 {
-		home := o.Home
-		if h := w.Get(home); h != nil &&
-			h.Type() == ref.TypePlayer {
-			return h.Home
-		}
-		return home
-	}
-	return o.Location
-}
-
-// getParent is db.c's getparent.
-//
-// With secure_thing_movement set it is simply the location. Without
-// it, upstream walks the parent chain with a tortoise and a hare and
-// collapses a detected cycle to the global environment, because a
-// vehicle inside a vehicle inside itself would otherwise loop for
-// ever. Reproduced rather than simplified: which answer it gives
-// decides whether a move is refused.
-func getParent(w *world.World, obj ref.Ref) ref.Ref {
-	if w.Tune.Bool("secure_thing_movement") {
-		if o := w.Get(obj); o != nil {
-			return o.Location
-		}
-		return ref.Nothing
-	}
-
-	ptr := getParentLogic(w, obj)
-	var oldptr ref.Ref
-	for {
-		obj = getParentLogic(w, obj)
-		oldptr = getParentLogic(w, ptr)
-		ptr = oldptr
-		if obj == oldptr {
-			break
-		}
-		ptr = getParentLogic(w, ptr)
-		if obj == ptr {
-			break
-		}
-		if obj == ref.Nothing {
-			break
-		}
-		if o := w.Get(obj); o == nil ||
-			o.Type() != ref.TypeThing {
-			break
-		}
-	}
-	if obj != ref.Nothing && (obj == oldptr || obj == ptr) {
-		return ref.GlobalEnvironment
-	}
-	return obj
-}
+// getparent is World.Parent, in internal/world. It was ported twice
+// — once there for the property walk and once here for the loop
+// checks — and the two were equivalent, which is luck rather than
+// design. The duplicate is gone; internal/match needs the environment
+// distance built on it anyway, and a property of the object graph
+// does not belong to the game.
 
 // locationLoopCheck is predicates.c:342: whether dest is inside
 // source, walking locations.
@@ -93,7 +34,7 @@ func locationLoopCheck(w *world.World, source, dest ref.Ref) bool {
 		return true
 	}
 	seen := []ref.Ref{source, dest}
-	for level := 0; level < maxParentDepth; level++ {
+	for level := 0; level < world.MaxParentDepth; level++ {
 		o := w.Get(dest)
 		if o == nil {
 			return false
@@ -147,8 +88,8 @@ func parentLoopCheck(w *world.World, source, dest ref.Ref) bool {
 	}
 
 	seen := []ref.Ref{source, dest}
-	for level := 0; level < maxParentDepth; level++ {
-		dest = getParent(w, dest)
+	for level := 0; level < world.MaxParentDepth; level++ {
+		dest = w.Parent(dest)
 		switch dest {
 		case ref.Nothing:
 			return false
@@ -243,9 +184,10 @@ func moveObject(w *world.World, what, where ref.Ref) {
 // and the autolook happens before the penny check, which is why
 // finding one reads as a remark on the room you have just seen.
 //
-// The six propqueue calls are named and not made. They are tranche
-// three, and they are the only thing here that would change how an
-// existing world behaves.
+// The six propqueue calls are made: _depart and _odepart before the
+// move is announced, _arrive and _oarrive after the autolook, each as
+// a pair and each in a different shape. See departQueues and
+// arriveQueues below, and propqueue.go for why.
 func (s *Server) enterRoom(w *world.World, descr int,
 	who, loc, exit ref.Ref) {
 
@@ -477,7 +419,8 @@ func (s *Server) autolook(w *world.World, descr int, who ref.Ref) {
 		// can_move then do_move: the autolook command is an
 		// *exit* if the world defines one, and only otherwise
 		// the built-in.
-		if r := match.New(w, who, cmd).Exits().Result(); r !=
+		m := match.New(w, who, cmd).PreferType(ref.TypeExit)
+		if r := m.Exits().Result(); r !=
 			ref.Nothing && r != ref.Ambiguous {
 			d := s.hub.Get(descr)
 			if d != nil {

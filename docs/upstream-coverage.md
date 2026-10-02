@@ -121,15 +121,16 @@ than a free one, and restart needs a supervisor to restart into. They
 say "not yet", which is accurate.
 
 This is a different shape of gap from the one this document opened
-with. It used to be **verbs, not engine** — about forty commands whose
-properties, locks and primitives already worked. Those have all landed.
+with, twice over. It began as **verbs, not engine** — about forty
+commands whose properties, locks and primitives already worked. Those
+all landed, and the characterisation flipped: what remained needed
+machinery the server did not have, `enter_room` and the containment
+rules, program registration, the compiler conditionals, the
+propqueues.
 
-That characterisation has now flipped. It used to be **commands, not
-engine** — the properties, locks and primitives behind most of the
-gap already worked and only the verb was missing. Those verbs have
-landed. What remains needs machinery this server does not have:
-`enter_room` and the containment rules, program registration, the
-compiler conditionals, and the propqueues.
+**That machinery is built now.** What is left is not a shape at all
+but four names and a handful of recorded divergences, each listed
+below.
 
 The count is now exact rather than estimated, because
 `internal/game/dispatch_table.go` is every name upstream dispatches
@@ -240,12 +241,13 @@ no golden case can pin them:
   movement suite sets that parameter to zero and the payout is a unit
   test.
 
-`choose_thing` itself is only partly ported: Emerald's tie-break is an
-exit's priority level and the longest matching alias, where upstream
-also weighs a preferred type, whether an object is locked against the
-searcher (`check_keys`), and environment distance. That matters for
-`get` and `drop`, which pass `check_keys` so that a locked container
-loses to an unlocked one.
+`choose_thing` itself is ported now, all four tie-breaks and the coin
+toss. Two things this document used to say about it were wrong. It
+decides an **exact**-match tie and nothing else — a partial match
+overwrites `last_match` and is reported as ambiguous instead — and
+`check_keys` is passed by `do_move` and `do_get`, **not** by
+`do_drop`: all three of its call sites are `move.c:747`, `:835` and
+`:850`, and the last two are both inside `do_get`.
 
 ### The four checkflags searches
 
@@ -336,7 +338,7 @@ The divergences that made the case:
 | `i` | `inventory` | `inventory` (agreed by luck) |
 
 Two things settled the question. Adjusting the resolver could not
-reach a trie with four different tie-breaks; and adding the ~40
+reach a trie with four different tie-breaks; and adding the forty
 missing verbs to the old resolver would have *lost* seven working
 abbreviations — `@a @b @e @re @pr @co @ow` — by making them
 ambiguous. So the trie was ported instead, as
@@ -437,6 +439,36 @@ function**. Upstream walks back out, so `{null:{force:...}}` prints
 the `{FORCE}` error and then `{NULL} (arg 1)`; Emerald prints the
 first line and stops. That is the error *reporting*, not the
 evaluation, and it affects every nested MPI failure.
+
+### Two preferred types are still unset
+
+`choose_thing`'s type preference is wired at the thirteen call sites
+that can reach it. Two of upstream's cannot be wired as things stand:
+
+- **`RMATCH`** (`p_db.c:888`, `TYPE_THING`) is not a `Matcher` in
+  Emerald at all — `internal/muf/prim_db.go` walks the container's
+  contents and exits itself with a case-folded name comparison, so
+  there is no tie to break and no preference to express. Worth
+  rebuilding on `Matcher.Inside`, which is already `match_rmatch`.
+- **The `connect` action** (`interface.c:1084`, `TYPE_EXIT`) is looked
+  up at login, and Emerald reaches it through `can_move` rather than
+  its own match.
+
+Neither is observable without two exact matches of one name in one
+container, which is why they are recorded rather than chased.
+
+### Boarding a vehicle is reachable and uncovered
+
+`trigger()` boards a thing when the exit is *inside* it and it is a
+VEHICLE — `dest == LOCATION(exit)` — so making one needs `@action`,
+which attaches an exit to a named object. `@open` always attaches to
+the room, so while `@action` was its alias no boarding exit could
+exist at all and the code path was unreachable.
+
+`@action` is ported, so it is reachable now and simply has no test:
+`@action board=<vehicle>` then `@link board=<vehicle>`. Worth a golden
+case, which would also exercise `leave`'s three remaining refusals
+from the inside rather than as unit tests.
 
 ### Three MUF error messages are still not upstream's
 

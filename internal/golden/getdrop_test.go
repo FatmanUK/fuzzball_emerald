@@ -106,9 +106,11 @@ var getdropScript = Script{
 	"disembark",
 	//
 	// Actually boarding a vehicle needs an exit *inside* it —
-	// trigger() requires dest == LOCATION(exit) — which no
-	// implemented command can make, since @action still aliases
-	// @open. The other three refusals are unit tests.
+	// trigger() requires dest == LOCATION(exit) — which only
+	// @action can make, since @open always attaches to the room.
+	// @action is ported now, so the path is reachable and simply
+	// uncovered; see docs/upstream-coverage.md. The other three
+	// refusals are unit tests.
 
 	// The abbreviations. "g" is not get — "goto" comes first
 	// — and "t" is not take.

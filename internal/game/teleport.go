@@ -82,7 +82,10 @@ func (s *Server) cmdTeleport(c *ctx) {
 		return
 	}
 
+	// The destination search asks for a player (wiz.c:117), where
+	// the victim search above asks for nothing.
 	m := match.New(c.w, c.who, to).
+		PreferType(ref.TypePlayer).
 		Possession().Me().Here().Home().
 		Absolute().Registered()
 	if isWizard(c.w, ownerOf(c.w, c.who)) {

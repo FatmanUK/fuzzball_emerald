@@ -10,8 +10,13 @@ and `.db` worlds should work unchanged — with four deliberate departures: Go
 instead of C, TLS-only networking, Postgres instead of flat-file dumps, and a
 rootless Podman container instead of autotools.
 
-The implementation plan, including the milestone breakdown, is at
-`~/.claude/plans/i-want-to-create-hashed-moore.md`.
+**There is no current plan file.** The three that got the project here are all
+executed — `~/.claude/plans/i-want-to-create-hashed-moore.md` (M0–M8),
+`rippling-roaming-backus.md` (the dispatcher and the command gap) and
+`movement-containment-registration.md` (movement through the propqueues) — and
+each carries a STATUS header saying so. The live record of what is done and
+what is next is **`BOOTSTRAP.md` §2**; write a new plan file only when the next
+piece of work is big enough to need one.
 
 ## The C reference is a submodule
 
@@ -408,8 +413,10 @@ as a plain move.
   that way.": a non-wizard THING may not enter a ZOMBIE room, a VEHICLE may not
   enter a VEHICLE, and a guest may not pass a GUEST room or exit.
 - **A thing** is *boarded* when the exit is inside it and it is a VEHICLE —
-  `dest == LOCATION(exit)`, which is why no boarding exit can be made while
-  `@action` aliases `@open`. Otherwise the thing is **fetched**: to the exit's
+  `dest == LOCATION(exit)`, which is what `@action` makes reachable: it
+  attaches an exit to a named object, so `@action board=<vehicle>` followed by
+  `@link board=<vehicle>` is a boarding exit, where `@open` could only ever put
+  one on the room. Otherwise the thing is **fetched**: to the exit's
   own location, or to its location's location when the exit hangs on a thing,
   so an exit on a bag brings something to the room rather than into the bag.
   A non-STICKY exit that fetched something then sends the exit's home object
@@ -478,8 +485,9 @@ things until everybody leaves, which is `maybe_dropto`'s job.
 
 **`leave` and `disembark` are one command**, and each of its refusals is its
 own sentence. Boarding a vehicle needs an exit **inside** it — `trigger()`
-requires `dest == LOCATION(exit)` — which no implemented command can make while
-`@action` still aliases `@open`.
+requires `dest == LOCATION(exit)` — which only `@action` can make, since
+`@open` always attaches to the room. Nothing exercises the boarding path yet;
+see `docs/upstream-coverage.md`.
 
 **`@link` and `@unlink` are each several operations wearing one name**, and
 say so differently for each type. `@link`: "Linked to X." for an exit (or
@@ -1076,10 +1084,6 @@ generated from `include/tunelist.h` — edit
 generated file. Reading an unknown parameter panics by design, so a typo in a
 name is a runtime failure.
 
-**`@action` is an alias for `@open`, and upstream's is not.** `do_action`
-attaches an exit to a named object rather than to the room, and says so in its
-own words. Until it is ported the alias differs in where the exit lands.
-
 **Case-insensitive comparison is `strcasecmp`, not Unicode.** Use
 `internal/ascii`, never `strings.EqualFold` or `strings.ToLower`. Upstream folds
 only A–Z, so `Ä` and `ä` are distinct property and player names.
@@ -1170,12 +1174,41 @@ inside a THING is in a vehicle, so the walk continues from that vehicle's
 *home*; the walk is bounded at 88 levels; and a YIELD room blocks everything
 behind it but an OVERT one.
 
-**`choose_thing` is only partly ported, and its last resort is a coin toss.**
-Emerald's tie-break is an exit's priority and the longest matching alias;
-upstream also weighs a preferred type, whether an object is locked against the
-searcher (`check_keys`, which `get` and `drop` pass), and environment distance
-— and then tosses a coin (`match.c:175`). **No golden case can pin a name that
-matches two objects**, which is why the clone suite clones each thing once.
+**`choose_thing` decides an *exact*-match tie and nothing else**, which is the
+thing to know before reading `internal/match/choose.go`. Upstream calls it from
+two places — `match_contents` (`match.c:471`), for two objects in one
+container with the same name, and `match_exits` (`:636`), for two exits at the
+same priority with the same longest alias — and both are resolving
+`exact_match`. A **partial** match never arrives: it overwrites `last_match`
+and bumps the count, so two half-matching names are reported as ambiguous
+rather than chosen between. Emerald used to take the later of two exact
+matches, which is a fifth answer upstream never gives.
+
+Its four tie-breaks run in order: either being NOTHING; a **preferred type**,
+which is whatever the command's own `init_match` asked for; **`check_keys`**,
+which prefers an object the searcher can actually use and is set at exactly
+three call sites — `do_move`'s direction and *both* of `do_get`'s matches, not
+`drop`'s; and **environment distance**. Then it **tosses a coin**
+(`match.c:175`), which is reproduced rather than settled: a stable answer here
+would invent a behaviour programs could come to rely on. **No golden case can
+pin a name that matches two objects**, which is why the clone suite clones each
+thing once and why all five tie-breaks are unit-tested instead.
+
+**The preferred type is narrower than it sounds.** An exit above the current
+match level overwrites `exact_match` outright (`match.c:632`) without
+consulting `choose_thing`, so a thing and an exit of one name are decided by
+the exit's priority whatever type was asked for. What the preference really
+decides is two objects *in one container* — a thing and a program both called
+"wand" in your hands.
+
+**`env_distance` (`db.c:2327`) is not what its name suggests**, and the numbers
+in its test came from compiling the C and running it rather than from reading
+it. It measures to the target's **parent**, so a thing in the room you are
+standing in is at distance zero. And when the searcher is not under that parent
+at all, the walk runs off the top of the world and counts hops to `#0` — so
+from a sibling branch the answer grows with how deep the *searcher* is, and
+from `#0` itself it is 1 because the first hop reaches nothing. Two unrelated
+objects therefore compare by where the searcher stands.
 
 **`Matcher.Everything` is `match_everything`, and two searches were missing
 from it.** `Registered` means a `$name` resolves for every command that takes
@@ -1414,12 +1447,13 @@ Worth knowing before "fixing" something that looks wrong:
 ## Upstream coverage
 
 `docs/upstream-coverage.md` audits this against Fuzzball 7's three manuals and
-answers the crash-only and 12-factor questions. MPI and MUF are complete; about
-40 player commands are not, mostly the verbs that set message and lock
-properties whose engine already works. Regenerate the command diff by listing
-the keys of `commands` and `atCommands` against `Matched(...)`,
-`strcasecmp(command, ...)` and `string_prefix(..., command)` in
-`fuzzball/src/game.c`.
+answers the crash-only and 12-factor questions. MPI and MUF are complete, and
+the command surface very nearly is: **109 dispatched names, 100 with handlers,
+9 without**, five of those nine declined rather than missing. The count is
+exact rather than estimated, because `internal/game/dispatch_table.go` *is* the
+command surface — it carries every name upstream dispatches, and a name with no
+handler says so when typed. To re-derive it, iterate `commandTable` against
+`handlers` and `declined`.
 
 **A missing command is not always a silent gap.** `@chown` was absent while
 being a *prefix* of `@chown_lock`, so `lookupAtCommand` resolved it there and a
@@ -1428,11 +1462,14 @@ command, check what its name is currently a prefix of.
 
 ## Status
 
-M0–M8 are done.
+M0–M8 are done, and so are the four tranches that followed them: the
+dispatcher and the command gap, movement and containment and registration, the
+propqueues, and ANSI gating. `BOOTSTRAP.md` §2 is the record.
 
 The server imports the starter world, accepts real MUCK clients over TLS and
 WebSocket, runs MUF and evaluates MPI, and supports look, movement, speech,
-building and admin commands. Programs can suspend themselves on `READ`, `SLEEP`
+building and admin commands. A property is a hook: `_arrive`, `_depart`,
+`_connect`, `_disconnect`, `_lookq` and the three listen propqueues all fire. Programs can suspend themselves on `READ`, `SLEEP`
 and `EVENT_WAITFOR`, the MUF editor works, so programs can be written on the
 server rather than only imported, and MCP 2.1 and MCP-GUI are negotiated with
 clients that speak them.

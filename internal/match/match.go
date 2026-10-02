@@ -72,6 +72,16 @@ type Matcher struct {
 	level   int
 	longest int
 
+	// preferred is choose_thing's preferred type, set by
+	// PreferType; hasPreferred stands in for upstream's NOTYPE,
+	// which ref.ObjType has no spare value for.
+	preferred    ref.ObjType
+	hasPreferred bool
+	// couldDoit is choose_thing's check_keys test, set by Usable.
+	// Nil means the tie-break is skipped, which is upstream's
+	// default.
+	couldDoit func(ref.Ref) bool
+
 	// arg is what followed the matched exit alias, for an exit
 	// that runs a program and so matches a prefix of the line.
 	arg string
@@ -134,8 +144,12 @@ func (m *Matcher) Result() ref.Ref {
 	}
 }
 
-// addExact records an unambiguous hit.
-func (m *Matcher) addExact(r ref.Ref) { m.exact = r }
+// addExact records an unambiguous hit, resolving a tie against any
+// exact match already found. That resolution is choose_thing; see
+// choose.go.
+func (m *Matcher) addExact(r ref.Ref) {
+	m.exact = m.chooseThing(m.exact, r)
+}
 
 // add records an inexact hit.
 func (m *Matcher) add(r ref.Ref) {

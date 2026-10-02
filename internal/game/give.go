@@ -34,7 +34,8 @@ func (s *Server) cmdGive(c *ctx) {
 		return
 	}
 
-	m := match.New(c.w, c.who, name).Neighbor().Me()
+	m := match.New(c.w, c.who, name).
+		PreferType(ref.TypePlayer).Neighbor().Me()
 	if wizard {
 		m = m.Player().Absolute()
 	}

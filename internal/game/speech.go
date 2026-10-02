@@ -58,7 +58,8 @@ func (s *Server) cmdWhisper(c *ctx) {
 	}
 	name, text = strings.TrimSpace(name), strings.TrimSpace(text)
 
-	target := match.New(c.w, c.who, name).Thing().Result()
+	target := match.New(c.w, c.who, name).
+		PreferType(ref.TypePlayer).Thing().Result()
 	switch target {
 	case ref.Nothing:
 		c.tell("I don't see that person here.")

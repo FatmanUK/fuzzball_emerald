@@ -10,9 +10,11 @@ import (
 // environment is anywhere near this deep.
 const envDepth = 128
 
-// Parent returns the object one step out in the environment tree,
-// which is what a property search walks. This is upstream's
-// getparent.
+// Parent returns the object one step out in the environment tree.
+// This is upstream's getparent (db.c:1781), and it is the only port
+// of it: the property walk, the two loop checks, every propqueue's
+// environment pass and choose_thing's distance tie-break all come
+// here.
 //
 // Ordinarily that is simply the object's location, but a THING set
 // VEHICLE parents to its home instead — and to its home's home when

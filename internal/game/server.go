@@ -505,7 +505,7 @@ func (s *Server) envListeners(w *world.World, from, room,
 	for srch != ref.Nothing {
 		s.notifyListeners(w, from, ref.Nothing, srch, where,
 			text)
-		srch = getParent(w, srch)
+		srch = w.Parent(srch)
 	}
 }
 

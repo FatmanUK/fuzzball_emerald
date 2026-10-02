@@ -46,7 +46,14 @@ func (s *Server) cmdGet(c *ctx) {
 
 	wizard := isWizard(c.w, ownerOf(c.w, c.who))
 
-	m := match.New(c.w, c.who, name).Neighbor().Possession()
+	// Both of do_get's matches are init_match_check_keys with
+	// TYPE_THING, which is two of upstream's three call sites for
+	// it: of two same-named things, the one not locked against
+	// whoever is reaching for it wins.
+	usable := s.usableBy(c.w, c.d.ID, c.who)
+	m := match.New(c.w, c.who, name).
+		PreferType(ref.TypeThing).Usable(usable).
+		Neighbor().Possession()
 	if wizard {
 		// The wizard has long fingers, as upstream puts it.
 		m = m.Absolute()
@@ -58,7 +65,9 @@ func (s *Server) cmdGet(c *ctx) {
 
 	cont := thing
 	if hasInner {
-		m := match.New(c.w, c.who, inner).Inside(cont)
+		m := match.New(c.w, c.who, inner).
+			PreferType(ref.TypeThing).Usable(usable).
+			Inside(cont)
 		if wizard {
 			m = m.Absolute()
 		}
@@ -295,10 +304,10 @@ func (s *Server) moveThing(w *world.World, descr int,
 // seen on arrival — which is upstream's own comment and the reason
 // the order matters.
 //
-// The THING branch tests LISTENER as well as ZOMBIE, and Emerald does
-// not maintain the LISTENER flag yet: it is derived on property write
-// and belongs with the propqueues. So a listening thing that is not a
-// zombie goes home quietly here where upstream announces it.
+// The THING branch tests LISTENER as well as ZOMBIE, so a listening
+// thing announces itself going home exactly as a puppet does. The
+// flag is maintained now — internal/world/listen.go — so this
+// reads it rather than standing in for it.
 func (s *Server) sendHome(w *world.World, descr int,
 	thing ref.Ref, puppetHome bool) {
 
@@ -315,7 +324,7 @@ func (s *Server) sendHome(w *world.World, descr int,
 			s.sendContents(w, descr, thing, ref.Home)
 		}
 		if w.Tune.Bool("secure_thing_movement") ||
-			o.Flags&ref.Zombie != 0 {
+			o.Flags&(ref.Zombie|ref.Listener) != 0 {
 			s.enterRoom(w, descr, thing, o.Home,
 				o.Location)
 			return

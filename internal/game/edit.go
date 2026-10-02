@@ -843,6 +843,7 @@ func (s *Server) cmdEdit(c *ctx) {
 // name, or a dbref.
 func matchProgram(c *ctx, name string) ref.Ref {
 	return match.New(c.w, c.who, name).
+		PreferType(ref.TypeProgram).
 		Possession().Neighbor().Registered().Absolute().Result()
 }
 

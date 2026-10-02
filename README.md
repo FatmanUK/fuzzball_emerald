@@ -24,9 +24,11 @@ git submodule update --init fuzzball
 
 ## Status
 
-All nine milestones are done. The server imports a legacy world, accepts real
-MUCK clients over TLS and WebSocket, runs MUF and evaluates MPI, and supports
-look, movement, speech, building and admin commands.
+All nine milestones are done, and so is the command surface: of the 109 names
+Fuzzball 7 dispatches, 100 have handlers and five of the nine without are
+declined by choice rather than missing. The server imports a legacy world,
+accepts real MUCK clients over TLS and WebSocket, runs MUF and evaluates MPI,
+and supports look, movement, speech, building and admin commands.
 
 Programs can suspend themselves on `READ`, `SLEEP`, `EVENT_WAITFOR` and
 timers, and `@ps` and `@kill` manage what is waiting. The MUF editor works, so
@@ -41,6 +43,11 @@ in the same shape, including the property-listing form.
 Every MUF primitive and every MPI function is implemented: 412 of the 417
 primitive names, the other five being compiler internals no program can name,
 and all 140 MPI functions.
+
+A property is a hook, as it is upstream: `_arrive`, `_depart`, `_connect`,
+`_disconnect`, `_lookq` and the three `_listen` propqueues all run whatever
+they name, as MPI or as a MUF program. Colour reaches a client only if that
+player has asked for it with COLOR, and is made well-formed on the way.
 
 One thing is deliberately not ported: `DEBUGGER_BREAK`'s interactive prompt.
 The instruction tracer behind it is — a program flagged `DARK` prints a line
@@ -400,9 +407,10 @@ writing to a real database.
 
 [`docs/upstream-coverage.md`](docs/upstream-coverage.md) audits Emerald against
 Fuzzball 7's three manuals. In short: **MPI is complete**, **MUF is complete**
-— every primitive and every compiler directive — and **40 of about 112
-player commands are missing**, mostly the verbs that set message and lock
-properties whose engine already works.
+— every primitive and every compiler directive — and **100 of the 109
+dispatched command names have handlers**, with five of the nine remaining
+declined rather than missing: `@memory`, `@usage`, `@tops`, `@teledump` and
+`@reconfiguressl`. The audit lists what is left and every recorded divergence.
 
 It also answers two architecture questions: Emerald is partly crash-only by
 design, and deliberately does not conform to 12-factor.

@@ -27,6 +27,7 @@ var _ boolexp.Host = (*lockHost)(nil)
 
 func (h *lockHost) Match(player ref.Ref, name string) ref.Ref {
 	return match.New(h.w, player, name).
+		PreferType(ref.TypeThing).
 		Neighbor().Possession().Me().Here().Absolute().Registered().Player().
 		Result()
 }
@@ -303,7 +304,19 @@ func (h *mufHost) PrettyLock(matchPlayer ref.Ref, lock *boolexp.Expr) string {
 // (JUMP_OK, GUEST rooms, BUILDER-restricted sources,
 // secure_teleport); then, exit or not, thing's own @lock must pass.
 // This is what LOCKED? negates, and — once exit traversal starts
-// checking locks — what a "go" command will also need.
+// checking locks — what a "go" command will also need. usableBy is
+// the callback Matcher.Usable takes: choose_thing's check_keys test,
+// which is could_doit with the searcher as the player. Three call
+// sites set it — do_move's direction and both of do_get's matches
+// — and it only ever decides a tie between two exact matches.
+func (s *Server) usableBy(w *world.World, descr int,
+	who ref.Ref) func(ref.Ref) bool {
+
+	return func(thing ref.Ref) bool {
+		return couldDoit(s, w, descr, 1, who, thing)
+	}
+}
+
 func couldDoit(s *Server, w *world.World, descr, level int, player, thing ref.Ref) bool {
 	o := w.Get(thing)
 	if o != nil && o.Type() == ref.TypeExit {

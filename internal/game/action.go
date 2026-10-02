@@ -111,7 +111,8 @@ func (s *Server) cmdAttach(c *ctx) {
 		return
 	}
 
-	action := match.New(c.w, c.who, name).Exits().Registered().
+	action := match.New(c.w, c.who, name).
+		PreferType(ref.TypeExit).Exits().Registered().
 		Absolute().Result()
 	if !noisyMatch(c, name, action) {
 		return
@@ -160,7 +161,8 @@ func (s *Server) cmdClone(c *ctx) {
 		return
 	}
 
-	thing := match.New(c.w, c.who, name).Possession().Neighbor().
+	thing := match.New(c.w, c.who, name).
+		PreferType(ref.TypeThing).Possession().Neighbor().
 		Registered().Absolute().Result()
 	if !noisyMatch(c, name, thing) {
 		return
@@ -276,7 +278,8 @@ func (s *Server) cmdRelink(c *ctx) {
 			return
 		}
 	case ref.TypeThing, ref.TypePlayer:
-		m := match.New(c.w, c.who, destName).Neighbor().
+		m := match.New(c.w, c.who, destName).
+			PreferType(ref.TypeRoom).Neighbor().
 			Absolute().Registered().Me().Here()
 		if o.Type() == ref.TypeThing {
 			m = m.Possession()
@@ -296,7 +299,8 @@ func (s *Server) cmdRelink(c *ctx) {
 			return
 		}
 	case ref.TypeRoom:
-		dest := match.New(c.w, c.who, destName).Neighbor().
+		dest := match.New(c.w, c.who, destName).
+			PreferType(ref.TypeRoom).Neighbor().
 			Possession().Registered().Absolute().Home().
 			Result()
 		if !noisyMatch(c, destName, dest) {

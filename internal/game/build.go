@@ -91,14 +91,19 @@ func (s *Server) matchControlled(c *ctx,
 // destination, so it cannot happen at match time at all. See
 // teleport.go.
 //
+// prefer is choose_thing's preferred type, which differs per caller:
+// @link and @unlink want an exit and @recycle a thing. It only
+// decides a tie between two *exact* matches, so it is invisible until
+// a room holds two objects of the same name.
+//
 // Each of the three needs its own commit. Until then they keep the
 // message they have always had, which is at least not pretending to
 // be upstream's.
-func (s *Server) resolveControlled(c *ctx,
-	name string) (ref.Ref, bool) {
+func (s *Server) resolveControlled(c *ctx, name string,
+	prefer ref.ObjType) (ref.Ref, bool) {
 
 	r := match.New(c.w, c.who, name).
-		Everything().Player().Result()
+		PreferType(prefer).Everything().Player().Result()
 	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
 	}
@@ -190,7 +195,9 @@ func (s *Server) cmdDig(c *ctx) {
 	// way rather than failing the whole command.
 	if p := strings.TrimSpace(parentName); p != "" {
 		c.tell("Trying to set parent...")
-		r := match.New(c.w, c.who, p).Absolute().Registered().Here().Result()
+		r := match.New(c.w, c.who, p).
+			PreferType(ref.TypeRoom).
+			Absolute().Registered().Here().Result()
 		switch {
 		case !noisyMatch(c, p, r):
 			// The matcher has already said what went
@@ -313,7 +320,9 @@ func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
 		c.tell("Link it to what?")
 		return ref.Nothing, false
 	}
-	r := match.New(c.w, c.who, name).Absolute().Me().Here().Home().Nil().
+	r := match.New(c.w, c.who, name).
+		PreferType(ref.TypeRoom).
+		Absolute().Me().Here().Home().Nil().
 		Possession().Neighbor().Player().Result()
 	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
@@ -351,7 +360,9 @@ func (s *Server) cmdLink(c *ctx) {
 		c.tell("Usage: @link <object>=<destination>")
 		return
 	}
-	target, ok := s.resolveControlled(c, strings.TrimSpace(name))
+	// do_link's own init_match asks for an exit (create.c:147).
+	target, ok := s.resolveControlled(c, strings.TrimSpace(name),
+		ref.TypeExit)
 	if !ok {
 		return
 	}
@@ -404,7 +415,8 @@ func linkedTo(c *ctx, dest ref.Ref) string {
 
 // cmdUnlink removes an exit's destination or a room's drop-to.
 func (s *Server) cmdUnlink(c *ctx) {
-	target, ok := s.resolveControlled(c, c.arg)
+	// _do_unlink asks for an exit too (set.c:142).
+	target, ok := s.resolveControlled(c, c.arg, ref.TypeExit)
 	if !ok {
 		return
 	}
@@ -727,7 +739,8 @@ const noRecycleTuned = "That object cannot currently be @recycled."
 // wizard and laxer for an owner — see that function's doc comment,
 // and docs/upstream-coverage.md.
 func (s *Server) cmdRecycle(c *ctx) {
-	target, ok := s.resolveControlled(c, c.arg)
+	// do_recycle asks for a thing (create.c:848).
+	target, ok := s.resolveControlled(c, c.arg, ref.TypeThing)
 	if !ok {
 		return
 	}

@@ -204,9 +204,31 @@ message they word identically turned up **three that they do not** — `+`
 reporting itself as `++`, `SETNAME`'s check order, and a stack underflow whose
 wording is now fixed. Recorded in `docs/upstream-coverage.md`.
 
-**The next step is `choose_thing`'s missing tie-breaks** — no preferred type,
-no `check_keys`, no environment distance — which matter for `get` and `drop`,
-and whose last resort upstream is a coin toss no golden case can pin.
+**`choose_thing` is ported**, all four tie-breaks and the coin toss. It
+decides an *exact*-match tie and nothing else, which is narrower than it
+sounds: a partial match never reaches it, and an exit above the current match
+level overwrites `exact_match` without consulting it. `check_keys` is set at
+the three sites upstream sets it — `do_move`'s direction and both of
+`do_get`'s matches, not `drop`'s, where `CLAUDE.md` used to claim otherwise —
+and the type preference at thirteen more. Two of upstream's are recorded
+rather than wired; see the audit.
+
+Collapsing `getparent` came with it: it had been ported **twice**, once in
+`internal/world/env.go` for the property walk and once in
+`internal/game/enter.go` for the loop checks. The two were equivalent, which
+was luck; there is one now, and `World.EnvDistance` is built on it.
+
+**The next step is one of these, in no forced order:**
+
+1. **The three structurally divergent permission refusals** — `@link`'s
+   seizing of an unlinked exit, `@unlink`'s `controls_link`, and `@recycle`
+   being *stricter* than `controls`. Each is its own commit and each changes
+   who may do what.
+2. **MPI's `{force}`**, which has none of its unblessed path: seven refusals
+   and a blessed gate that reads `!allow_zombies && !blessed` upstream.
+3. **The smaller recorded gaps**, listed below — `@bless` on directories,
+   `home` as a direction, the four `_sys/` properties, look traps, boarding a
+   vehicle, and the two MUF error messages.
 
 Smaller things still open, each self-contained:
 

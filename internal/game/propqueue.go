@@ -334,9 +334,10 @@ func (s *Server) propqProgram(w *world.World, r propqRun,
 func (s *Server) envpropqueue(w *world.World, r propqRun,
 	propname string) {
 
-	for what := r.what; what != ref.Nothing; what = getParent(w, what) {
+	for what := r.what; what != ref.Nothing; {
 		r.what = what
 		s.propqueue(w, r, propname)
+		what = w.Parent(what)
 	}
 }
 
