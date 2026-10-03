@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 )
 
 // impl is one MPI function's implementation.
@@ -158,10 +160,10 @@ func init() {
 	// false, which is what MPI treats as a boolean.
 	register("EQ", compare(func(c int) bool { return c == 0 }))
 	register("NE", compare(func(c int) bool { return c != 0 }))
-	register("GT", compareNum(func(a, b int) bool { return a > b }))
-	register("LT", compareNum(func(a, b int) bool { return a < b }))
-	register("GE", compareNum(func(a, b int) bool { return a >= b }))
-	register("LE", compareNum(func(a, b int) bool { return a <= b }))
+	register("GT", compare(func(c int) bool { return c > 0 }))
+	register("LT", compare(func(c int) bool { return c < 0 }))
+	register("GE", compare(func(c int) bool { return c >= 0 }))
+	register("LE", compare(func(c int) bool { return c <= 0 }))
 	register("NOT", func(_ *Env, _ *Func, args []string) (string, error) {
 		return boolOf(!truthy(args[0])), nil
 	})
@@ -364,45 +366,99 @@ func stepBy(sign int) impl {
 	}
 }
 
-// extreme builds {max} and {min}.
+// extreme builds {max} and {min}. extreme builds {max} and {min},
+// which are mfn_max (mfuns.c:2176) and mfn_min (:2146) and are not
+// arithmetic at all.
+//
+// Both take exactly two arguments, decide with msgCompare, and return
+// the chosen argument's **text** rather than a number — so
+// "{max:abc,2}" is "abc". This used to read both as integers and fold
+// over every argument, which got three things wrong at once: the
+// comparison, the returned value, and the arity.
 func extreme(wantMax bool) impl {
-	return func(_ *Env, fn *Func, args []string) (string, error) {
-		best := atoiArg(args[0])
-		for _, a := range args[1:] {
-			n := atoiArg(a)
-			if (wantMax && n > best) ||
-				(!wantMax && n < best) {
-				best = n
+	return func(_ *Env, _ *Func, args []string) (string, error) {
+		// Written as upstream's two tests rather than one
+		// expression, because they agree on a **tie**: max
+		// asks `>= 0` and min asks `<= 0`, so when the two
+		// arguments compare equal both return the *first*. A
+		// single symmetric formula gets min wrong there,
+		// which is what "{min:ABC,abc}" caught — strcasecmp
+		// makes those equal, and upstream answers "ABC".
+		c := msgCompare(args[0], args[1])
+		if wantMax {
+			if c >= 0 {
+				return args[0], nil
 			}
+			return args[1], nil
 		}
-		return itoa(best), nil
+		if c <= 0 {
+			return args[0], nil
+		}
+		return args[1], nil
 	}
 }
 
-// compare builds the equality tests, which compare as text when
-// either side is not a number.
+// isNumber is fbstrings.c's number(): leading whitespace, an optional
+// sign, then digits and nothing else. So "12abc" is not a number even
+// though atoi reads 12 from it, and neither is " 7 ", because the
+// trailing space is not a digit.
+//
+// internal/tune has the same function for the same reason. It is
+// duplicated rather than shared because the alternative is a
+// dependency from internal/mpi on internal/tune for nine lines.
+func isNumber(s string) bool {
+	s = strings.TrimLeft(s, " \t\r\n\v\f")
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		s = s[1:]
+	}
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// msgCompare is mfuns.c:1810's msg_compare, which is how **all
+// eight** of MPI's comparisons decide: {eq}, {ne}, {gt}, {lt}, {ge},
+// {le}, {max} and {min}.
+//
+// Two numbers compare as numbers; anything else compares as text,
+// **case-insensitively** — it is strcasecmp, so "ABC" and "abc" are
+// equal. Both arguments must be non-empty for the numeric path, so an
+// empty string always compares as text.
+//
+// The numeric path returns a sign rather than upstream's `atoi(s1) -
+// atoi(s2)`. Every caller tests only the sign, and the subtraction
+// overflows for large values — which is undefined in C and would
+// wrap here.
+func msgCompare(a, b string) int {
+	if a != "" && b != "" && isNumber(a) && isNumber(b) {
+		x, y := atoiArg(a), atoiArg(b)
+		switch {
+		case x < y:
+			return -1
+		case x > y:
+			return 1
+		}
+		return 0
+	}
+	return ascii.Compare(a, b)
+}
+
+// compare builds the eight comparisons on msgCompare, which decides
+// numerically only when both arguments are numbers.
+//
+// The old version read both with strconv.Atoi over a TrimSpace'd
+// argument and fell back to strings.Compare. Both halves diverged:
+// the trim made " 7 " numeric where number() rejects it, and
+// strings.Compare is case-sensitive where strcasecmp is not.
 func compare(ok func(int) bool) impl {
 	return func(_ *Env, _ *Func, args []string) (string, error) {
-		a, aerr := strconv.Atoi(strings.TrimSpace(args[0]))
-		b, berr := strconv.Atoi(strings.TrimSpace(args[1]))
-		if aerr == nil && berr == nil {
-			switch {
-			case a < b:
-				return boolOf(ok(-1)), nil
-			case a > b:
-				return boolOf(ok(1)), nil
-			}
-			return boolOf(ok(0)), nil
-		}
-		return boolOf(ok(strings.Compare(args[0], args[1]))), nil
-	}
-}
-
-// compareNum builds the ordering tests, which are numeric.
-func compareNum(ok func(a, b int) bool) impl {
-	return func(_ *Env, fn *Func, args []string) (string, error) {
-		return boolOf(ok(atoiArg(args[0]),
-			atoiArg(args[1]))), nil
+		return boolOf(ok(msgCompare(args[0], args[1]))), nil
 	}
 }
 
