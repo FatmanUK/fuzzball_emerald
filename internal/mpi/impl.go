@@ -354,15 +354,42 @@ func foldDiv(mod bool) impl {
 	}
 }
 
-// stepBy builds {inc} and {dec}, which take an optional amount.
+// stepBy builds {inc} and {dec}, which are mfn_inc (mfuns.c:2279) and
+// mfn_dec (:2318) — and are **variable** operations, not
+// arithmetic.
+//
+// The first argument is a variable *name*. Upstream looks it up with
+// get_mvar, refuses "No such variable currently defined." when there
+// is none, adds or subtracts an optional amount, **writes the result
+// back into the variable**, and returns it. So
+// "{with:n,5,{inc:n}{inc:n}{&n}}" counts up: each call changes n.
+//
+// Emerald read the first argument as a number instead, so "{inc:abc}"
+// answered 1 and "{inc:5}" answered 6 — neither of which upstream
+// can produce, since the only way to reach the arithmetic at all is
+// to name a bound variable.
+//
+// Upstream's doc comment for mfn_dec says "The variable is not
+// updated." The code does update it (strcpyn into get_mvar's pointer,
+// :2329), and the code is what the oracle agrees with.
 func stepBy(sign int) impl {
-	return func(_ *Env, fn *Func, args []string) (string, error) {
-		n := atoiArg(args[0])
+	return func(env *Env, fn *Func,
+		args []string) (string, error) {
+
+		cur, ok := env.Var(args[0])
+		if !ok {
+			return "", errf(fn.Name,
+				"No such variable currently defined.")
+		}
 		by := 1
 		if len(args) > 1 {
 			by = atoiArg(args[1])
 		}
-		return itoa(n + sign*by), nil
+		out := itoa(atoiArg(cur) + sign*by)
+		if err := env.SetVar(args[0], out); err != nil {
+			return "", err
+		}
+		return out, nil
 	}
 }
 

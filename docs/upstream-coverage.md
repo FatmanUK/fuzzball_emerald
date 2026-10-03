@@ -671,12 +671,45 @@ many. Measured against the oracle: `{max:abc,2}` is `abc`,
 Emerald answers `2`, `0`, `0` and `1`. `{eq}` and `{ne}` already
 have the string-fallback shape and are right; the other six need it.
 
-**4. `{inc}` and `{dec}` are variable operations — not fixed.**
+**4. `{inc}` and `{dec}` are variable operations — fixed.**
 `mfn_inc` (`mfuns.c:2279`) reads a **variable name**, aborts "No
 such variable currently defined." when there is none, adds an
 optional amount, and **writes the result back** to the variable.
-Emerald implements both as arithmetic on the argument, so
-`{inc:abc}` answers `1` where upstream refuses.
+Emerald implemented both as arithmetic on the argument, so
+`{inc:abc}` answered `1` and `{inc:5}` answered `6` — neither of
+which upstream can produce, since naming a bound variable is the
+only way to reach the arithmetic at all. Upstream's doc comment for
+`mfn_dec` says "The variable is not updated."; the code updates it
+(`:2329`) and the oracle agrees with the code.
+
+**6. A rebinding shadows upstream and overwrites here — not
+fixed.** Found by a probe written for item 4 and kept because it
+measured something real.
+
+Upstream's `{with}` pushes a new variable with `new_mvar` and pops it
+with `free_top_mvar`, so binding a name that is already bound
+**shadows** it and the outer value comes back afterwards. Emerald's
+`Env.SetVar` searches for an existing name and *overwrites* it
+instead of appending, and `PopVar` then removes whatever is last —
+so the outer binding is destroyed rather than restored.
+
+Measured against the oracle: `{with:n,1,{with:n,2,{&n}}{&n}}` is
+`21` upstream, and here the inner `{with}`'s pop leaves `n` undefined
+so the outer `{&n}` is an "Unrecognized variable." error.
+`{with:n,1,{with:n,2,{inc:n}}{&n}}` is `31` upstream and empty here.
+
+The fix is to separate the two operations upstream keeps apart:
+`{with}` and the looping functions **bind** (push), while `{set}`,
+`{inc}` and `{dec}` **assign** to an existing binding in place.
+`Env.SetVar` currently does both and so can do neither correctly. It
+affects every binding construct — `{with}`, `{for}`, `{foreach}`,
+`{parse}`, `{filter}`, `{fold}` and `{lsort}` — and needs its own
+commit. `internal/golden/varscope_test.go` holds the measurement.
+
+Also worth noting: `Env.Var` searches newest-first (as `get_mvar`
+does) while `SetVar` searches oldest-first, so the two disagree the
+moment a duplicate name exists. That is the same defect seen from
+the other side.
 
 **5. `{midstr}` takes two positions, not a position and a length —
 not fixed.** `mfn_midstr` (`mfuns2.c:2897`) clamps both arguments as
@@ -687,7 +720,7 @@ oracle: `{midstr:hello,2,4}` is `ell`, `{midstr:hello,4,2}` is
 `lle`, and `{midstr:hello,-2,-1}` is `lo`. Emerald answers `ello`,
 `lo` and the empty string.
 
-Items 3, 4 and 5 each need their own commit. The golden case
+Items 5 and 6 each need their own commit. The golden case
 (`internal/golden/atoi_test.go`) deliberately omits them and says so,
 so that it tests the fix it belongs to rather than passing over a
 different bug.
