@@ -43,3 +43,6 @@ jobs:
 
     - name: Tag and push image to GHCR
       run: make pod-push
+
+    - name: Tag and push fbeconfig image to GHCR
+      run: make pod-config-push

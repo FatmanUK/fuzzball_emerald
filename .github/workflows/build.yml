@@ -33,3 +33,6 @@ jobs:
 
     - name: Build container image
       run: make pod-build
+
+    - name: Build fbeconfig container image
+      run: make pod-config-build

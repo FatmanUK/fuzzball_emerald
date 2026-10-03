@@ -343,6 +343,7 @@ golden-clean: ## Remove the oracle image
 
 PUBLISH_DATE  := $(shell date +%Y%m%d)
 PUBLISH_IMAGE ?= ghcr.io/fatmanuk/fuzzball_emerald
+CFG_PUBLISH_IMAGE ?= ghcr.io/fatmanuk/fbe_config
 
 .PHONY: pod-build
 pod-build: ## Build the container image
@@ -364,6 +365,17 @@ pod-push: pod-build ## Push the container image
 	podman push $(PUBLISH_IMAGE):$(PUBLISH_DATE)
 	podman tag $(IMAGE):$(TAG) $(PUBLISH_IMAGE):$(TAG)
 	podman push $(PUBLISH_IMAGE):$(TAG)
+
+.PHONY: pod-config-push
+pod-config-push: pod-config-build ## Push the config container image
+	podman tag $(CONFIG_IMAGE):$(TAG) $(CFG_PUBLISH_IMAGE):latest
+	podman push $(CFG_PUBLISH_IMAGE):latest
+	podman tag $(CONFIG_IMAGE):$(TAG) $(CFG_PUBLISH_IMAGE):$(VERSION)
+	podman push $(CFG_PUBLISH_IMAGE):$(VERSION)
+	podman tag $(CONFIG_IMAGE):$(TAG) $(CFG_PUBLISH_IMAGE):$(PUBLISH_DATE)
+	podman push $(CFG_PUBLISH_IMAGE):$(PUBLISH_DATE)
+	podman tag $(CONFIG_IMAGE):$(TAG) $(CFG_PUBLISH_IMAGE):$(TAG)
+	podman push $(CFG_PUBLISH_IMAGE):$(TAG)
 
 .PHONY: pod-run
 pod-run: pod-build certs db-up ## Run the server in a container
