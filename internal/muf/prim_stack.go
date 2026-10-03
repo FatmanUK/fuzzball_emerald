@@ -466,15 +466,6 @@ func init() {
 // The remaining stack primitives.
 
 func init() {
-	register("CHECKARGS", func(f *Frame) (*Result, error) {
-		// CHECKARGS validates the stack against a type
-		// signature. The signature language is not
-		// implemented; accepting the string and checking
-		// nothing is wrong in a way that would hide a
-		// program's own bugs, so it reports itself instead.
-		return nil, errf("CHECKARGS is not implemented yet")
-	})
-
 	register("SHALLOW_COPY", func(f *Frame) (*Result, error) {
 		v, err := f.Pop()
 		if err != nil {

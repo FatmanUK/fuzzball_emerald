@@ -49,11 +49,33 @@ documentation being wrong, not a divergence, and it should not be
 ## `mufman.html` — the primitives and the directives are complete
 
 **Two caveats, both found by auditing the claim rather than trusting
-it.** `NEWPROGRAM` was a registered stub that aborted when a program
-reached it, and `CHECKARGS` still is. A stub is *registered*, so the
-412-of-417 count never moved and nothing contradicted the claim. See
-"The primitive count is now self-maintaining" below for the fix;
-`NEWPROGRAM` is done and `CHECKARGS` is the one left.
+it.** `NEWPROGRAM` and `CHECKARGS` were both registered stubs that
+aborted when a program reached them. A stub is *registered*, so the
+412-of-417 count never moved and nothing contradicted the claim. Both
+are now implemented and no stub is left; see "The primitive count is
+now self-maintaining" below for what stops the next one hiding.
+
+`CHECKARGS` is worth a note of its own, because the reason it stayed
+a stub longest was wrong. It was thought not to be golden-reachable;
+it is. Its aborts are *catchable* — `do_abort_interp`
+(`interp.c:2844`) puts the message in `fr->errorstr` when a try frame
+is open rather than ending the program — so one program can put a
+hundred signatures through `0 try ... catch ... endcatch` and print
+what each said, which makes the compiled C the arbiter for every
+message. `internal/golden/checkargs_test.go` is 240-odd comparisons
+on that route.
+
+Two things it turned up that a reading of the C had missed. **Every
+per-argument refusal carries a position suffix**, `ABORT_CHECKARGS`
+(`p_stack.c:1124`) appending " (top)" or " (top-N)", which is the
+most visible thing about the primitive. And **the lowercase dbref
+characters are far wider than they look**: the outer test is `ref >=
+db_top || ref < HOME`, so `#-1` and `#-2` survive it, and each
+lowercase case then asks its type question only of a *non-negative*
+ref — so `p` accepts `#-1` and `#-2` as readily as a real player.
+`r` and `R` are wider still, because `Typeof(HOME)` is `TYPE_ROOM`
+(`db.h:423`) and the explicit HOME refusal the other five carry is
+simply missing from the room case.
 
 Two golden suites turned out to be testing nothing, for the same
 reason in both cases: `force_test.go` and `connects_test.go` raised

@@ -121,16 +121,14 @@ README, so it is a fixture rather than a secret.
 
 ## Committing
 
-**Commit only when asked.** Finish a step, verify it, report it, and wait. The
-exception is a step the current plan explicitly says to commit on its own.
+**Commit when ready.** Be aware that all commits are signed. The GPG keychain
+is locked and must be unlocked by the user. Therefore the commit might fail
+if the user can't unlock the keychain in time. This is intended behaviour.
+When a signature fails, report this and stop work. Leave the work staged. The next
+prompt is likely to request a commit and then continue work.
 
 **Every commit is signed. Never `--no-gpg-sign`** — not to get past a failure,
 not "just this once", not for a doc-only change.
-
-**GPG pinentry times out regularly here, and a failed signature is not
-something to retry.** On the first failure: stop, leave the work staged, and
-say so. The author signs and says to go again, and the identical `git commit`
-then succeeds. Retrying unprompted just burns another pinentry timeout.
 
 **Check the added lines' width against the staged diff, not with
 `make width-check`.** That target defaults to `RANGE=HEAD`, which is the
@@ -242,6 +240,16 @@ The C server writes into its game directory — a dump, and the macro table — 
 it is given a copy of the fixture. Without that, a case defining a macro leaves
 it behind for this server to import, and the two servers stop running the same
 world.
+
+**A MUF abort is catchable, so a primitive's error messages can be
+golden-compared.** `do_abort_interp` (`interp.c:2844`) puts the message in
+`fr->errorstr` when a try frame is open rather than ending the program, so
+`0 try <the call> catch <print it> endcatch` turns every refusal a primitive
+can make into one transcript line. One program can then put a hundred inputs
+through it and the compiled C decides every message.
+`internal/golden/checkargs_test.go` is 240-odd comparisons on that route, and
+CHECKARGS was thought to need a standalone harness until this was noticed.
+Reach for it before building a rig around a function.
 
 **A fixture's program is `test.muf`; `test` is the exit in front of it.** A
 case that needs mucker 4 — the fixture compiles at 3 — has to raise the

@@ -689,12 +689,6 @@ func TestDivisionByZeroYieldsZeroAndAFlag(t *testing.T) {
 	wantStack(t, ": main 4 2 / pop 0 is_set? ;", "0")
 }
 
-func TestUnimplementedPrimitiveIsReported(t *testing.T) {
-	// A primitive the compiler knows but the interpreter does not
-	// must say so, rather than silently doing nothing.
-	runFails(t, ": main CHECKARGS ;", "not implemented yet")
-}
-
 // TestRunawayProgramIsStopped checks the instruction ceiling.
 func TestRunawayProgramIsStopped(t *testing.T) {
 	p, err := compiler.Compile(": main begin 1 pop 0 until ;", compiler.Options{MLevel: 3})
