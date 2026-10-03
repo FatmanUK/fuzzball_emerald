@@ -515,18 +515,36 @@ for itself and applies its own rule:
   exit already points somewhere (`create.c:161`). See "What `@link`
   still diverges on" below for two things in it that are not
   permission refusals and are not fixed.
-- `@recycle` is **stricter** than `controls`: upstream requires
-  actual ownership of a room or thing even of a wizard, so Emerald
-  currently lets a wizard recycle objects upstream refuses.
+- `@recycle` — **done.** It is **stricter** than `controls`:
+  upstream demands actual ownership per type, even of a wizard, with
+  a different sentence for each of room, thing, exit and program. So
+  this server used to recycle objects upstream refuses — the one
+  place it did *more* than upstream rather than less.
 - `@teleport` — **done.** Its test depends on the destination, so it
   cannot happen at match time at all, and what it asks differs per
   victim type. `internal/game/teleport.go` is `do_teleport`, with the
   three refusals as unit tests because the oracle's player controls
   everything in the fixture.
 
-The other three stay on `resolveControlled`, which keeps the old
-message rather than pretending to be upstream's. Each needs its own
-commit.
+All four are now ported, and `resolveControlled` is gone with them.
+
+### `ObjExists` is not `OkObj`, and one word hid two branches
+
+`absolute_name` (`match.c:333`) guards on **`ObjExists`**
+(`db.h:440`), which is only `d >= 0 && d < db_top` — so a dbref may
+name a **garbage** object. `World.Valid` is **`OkObj`**
+(`db.h:462`), which is `ObjExists` *and* not garbage, and
+`Matcher.Absolute` was using it.
+
+So no recycled object could be named by number, and two branches
+written to handle exactly that were unreachable: `do_recycle`'s
+"That's already garbage!", and the `<recyclable>` description
+`@examine` shows for something still pointed at. Found because
+`@recycle`'s own garbage branch could not be tested after its
+permission rules were ported.
+
+`internal/match/garbage_test.go` pins it, including that a ref past
+the end of the database still matches nothing.
 
 ### The unconditional `match_player`
 

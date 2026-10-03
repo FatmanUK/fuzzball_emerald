@@ -211,9 +211,18 @@ func (m *Matcher) Nil() *Matcher {
 // "you don't control what was matched", @examine's limited view for a
 // non-owner, @teleport's per-type tests. Putting the test here
 // duplicated some of those and contradicted the rest.
+//
+// The existence test is `ObjExists` (db.h:440), which is only `d >= 0
+// && d < db_top` — so it **includes garbage**. `World.Valid` is
+// `OkObj` (db.h:462), which is `ObjExists` *and* not garbage, and
+// using it here made every recycled object unnameable. That hid two
+// branches written to handle one: do_recycle's "That's already
+// garbage!" could not be reached, and neither could the
+// `<recyclable>` description @examine shows for something still
+// pointed at.
 func (m *Matcher) Absolute() *Matcher {
 	r, ok := parseAbsolute(m.name)
-	if !ok || !m.w.Valid(r) {
+	if !ok || m.w.Get(r) == nil {
 		return m
 	}
 	m.addExact(r)

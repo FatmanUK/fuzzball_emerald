@@ -51,7 +51,10 @@ func (s *Server) requireWizard(c *ctx) bool {
 //
 // Only the commands upstream really routes through match_controlled
 // may use this: @name, @describe, @set, @unlock and the @lock family.
-// The others are resolveControlled, below.
+// @link, @unlink, @recycle and @teleport each match for themselves
+// and apply a rule of their own, which is why resolveControlled —
+// the shared stand-in they used to share — is gone rather than
+// reworded.
 func (s *Server) matchControlled(c *ctx,
 	name string) (ref.Ref, bool) {
 
@@ -70,55 +73,6 @@ func (s *Server) matchControlled(c *ctx,
 	if !s.controls(c.w, c.who, r) {
 		c.tell("Permission denied. " +
 			"(You don't control what was matched)")
-		return ref.Nothing, false
-	}
-	return r, true
-}
-
-// resolveControlled is what @link, @unlink and @recycle use, and it
-// is **not** upstream's match_controlled. None of those three goes
-// through it: each matches for itself and then applies a check of its
-// own, with its own wording and — more importantly — its own
-// rules.
-//
-// The differences are behavioural, not cosmetic, and none is fixed
-// here:
-//
-//   - @unlink also accepts controls_link, so upstream lets the
-//     destination's owner unlink an exit and this refuses them.
-//   - @link lets a builder who controls nothing *seize* an unlinked
-//     exit, paying for it; this refuses before that can happen.
-//   - @recycle is stricter than controls: upstream requires actual
-//     ownership of a room or thing even of a wizard, so this server
-//     currently lets a wizard recycle objects upstream refuses.
-//
-// @teleport was the fourth, and is ported: its check depends on the
-// destination, so it cannot happen at match time at all. See
-// teleport.go.
-//
-// prefer is choose_thing's preferred type, which differs per caller:
-// @link and @unlink want an exit and @recycle a thing. It only
-// decides a tie between two *exact* matches, so it is invisible until
-// a room holds two objects of the same name.
-//
-// Each of the three needs its own commit. Until then they keep the
-// message they have always had, which is at least not pretending to
-// be upstream's.
-//
-// What *is* fixed is the matcher: this used to add Player()
-// unconditionally, where match_everything adds match_player only for
-// a wizard, so a mortal could name any player in the game and be
-// refused on permission instead of on the match. See matcher_test.go.
-func (s *Server) resolveControlled(c *ctx, name string,
-	prefer ref.ObjType) (ref.Ref, bool) {
-
-	r := match.New(c.w, c.who, name).
-		PreferType(prefer).Everything().Result()
-	if !noisyMatch(c, name, r) {
-		return ref.Nothing, false
-	}
-	if !s.controls(c.w, c.who, r) {
-		c.tell("Permission denied.")
 		return ref.Nothing, false
 	}
 	return r, true
@@ -914,6 +868,30 @@ func (s *Server) cmdPassword(c *ctx) {
 		"player", c.who.String(), "name", o.Name)
 }
 
+// poofPuppet is do_recycle's TYPE_THING special case (create.c:897):
+// a puppet told by its owner to recycle itself says so to the room
+// and twice to the owner, and is then recycled like anything else.
+// Reachable only through @force, since otherwise the command's actor
+// is a player and the player branch has already refused.
+func (s *Server) poofPuppet(c *ctx, target ref.Ref) {
+	o := c.w.Get(target)
+	msg := o.Name + "'s owner commands it to kill " +
+		"itself.  It blinks a few times in shock, and " +
+		"says, \"But.. but.. WHY?\"  It suddenly " +
+		"clutches it's heart, grimacing with pain..  " +
+		"Staggers a few steps before falling to it's " +
+		"knees, then plops down on it's face.  *thud*  " +
+		"It kicks its legs a few times, with weakening " +
+		"force, as it suffers a seizure.  It's color " +
+		"slowly starts changing to purple, before it " +
+		"explodes with a fatal *POOF*!"
+	s.notifyRoomFrom(c.w, target, o.Location,
+		[]ref.Ref{target}, "%s", msg)
+	owner := ownerOf(c.w, c.who)
+	s.send(c.w, owner, msg)
+	s.send(c.w, owner, "Now don't you feel guilty?")
+}
+
 // noRecycleRoot is do_recycle's answer for #0, which nothing reaches
 // in practice: the @tune guard above it catches #0 first, since it is
 // default_room_parent's value.
@@ -925,19 +903,37 @@ const noRecycleRoot = "If you want to do that, why don't you " +
 // parameter points at.
 const noRecycleTuned = "That object cannot currently be @recycled."
 
-// cmdRecycle destroys an object.
+// cmdRecycle destroys an object, and is do_recycle (create.c:842).
 //
-// Three of its replies are upstream's and three are not. The
-// confirmation, the global-environment refusal and the guard on an
-// object a @tune parameter points at are do_recycle's own
-// (create.c:841); the per-type ownership rules are still
-// resolveControlled's, which is **stricter** than upstream for a
-// wizard and laxer for an owner — see that function's doc comment,
-// and docs/upstream-coverage.md.
+// **Its per-type rules are stricter than controls(), which is the one
+// place this server used to do more than upstream rather than less.**
+// controls() is only the outer gate; each type then demands
+// `OWNER(thing) == OWNER(player)` as well, so a wizard who does not
+// own a room, thing, exit or program may not recycle it however
+// freely controls() lets them touch it. Each of the four says so in
+// wording of its own.
+//
+// The @tune guard still runs before all of that, which is most of
+// what anybody sees — see noRecycleTuned.
 func (s *Server) cmdRecycle(c *ctx) {
-	// do_recycle asks for a thing (create.c:848).
-	target, ok := s.resolveControlled(c, c.arg, ref.TypeThing)
-	if !ok {
+	// init_match(..., TYPE_THING, ...) then match_everything
+	// (create.c:848).
+	target := match.New(c.w, c.who, c.arg).
+		PreferType(ref.TypeThing).Everything().Result()
+	if !noisyMatch(c, c.arg, target) {
+		return
+	}
+	// controls() is the outer gate, and its refusal has two
+	// forms: a wizard looking at garbage is told what it is
+	// rather than that they may not touch it.
+	if !s.controls(c.w, c.who, target) {
+		if isWizard(c.w, ownerOf(c.w, c.who)) &&
+			c.w.Get(target).Type() == ref.TypeGarbage {
+			c.tell("That's already garbage!")
+		} else {
+			c.tell("Permission denied. (You don't " +
+				"control what you want to recycle)")
+		}
 		return
 	}
 	// The @tune guard comes *first*, and that ordering is most of
@@ -957,20 +953,58 @@ func (s *Server) cmdRecycle(c *ctx) {
 		}
 	}
 
+	// **Each type then demands actual ownership, and that is
+	// stricter than controls().** `OWNER(thing) != OWNER(player)`
+	// refuses a wizard who does not own the object, even though
+	// controls() has just let them through — so this server
+	// used to recycle things upstream will not. Every one of the
+	// four has wording of its own, and programs match on it.
 	o := c.w.Get(target)
-	switch {
-	case o.Type() == ref.TypePlayer:
+	mine := ownerOf(c.w, target) == ownerOf(c.w, c.who)
+	switch o.Type() {
+	case ref.TypePlayer:
 		c.tell("You can't recycle a player!")
 		return
-	case o.Type() == ref.TypeGarbage:
+	case ref.TypeGarbage:
 		c.tell("That's already garbage!")
 		return
-	case target == ref.GlobalEnvironment:
-		c.tell("%s", noRecycleRoot)
-		return
-	case target == c.who:
-		c.tell("You can't recycle yourself.")
-		return
+	case ref.TypeRoom:
+		if !mine {
+			c.tell("Permission denied. (You don't " +
+				"control the room you want to " +
+				"recycle)")
+			return
+		}
+		if target == ref.GlobalEnvironment {
+			c.tell("%s", noRecycleRoot)
+			return
+		}
+	case ref.TypeThing:
+		if !mine {
+			c.tell("Permission denied. (You can't " +
+				"recycle a thing you don't control)")
+			return
+		}
+		// A puppet recycling itself, which is reachable only
+		// through @force: upstream announces it at length and
+		// then goes ahead. This server refused with an
+		// invented "You can't recycle yourself.", so the
+		// refusal is gone and the announcement is here.
+		if target == c.who {
+			s.poofPuppet(c, target)
+		}
+	case ref.TypeExit:
+		if !mine {
+			c.tell("Permission denied. (You may not " +
+				"recycle an exit you don't own)")
+			return
+		}
+	case ref.TypeProgram:
+		if !mine {
+			c.tell("Permission denied. (You can't " +
+				"recycle a program you don't own)")
+			return
+		}
 	}
 
 	s.evictEditors(c.w, target)
