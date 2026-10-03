@@ -29,7 +29,10 @@ func (s *Server) cmdChown(c *ctx) {
 			"ownership of.")
 		return
 	}
-	thing := match.New(c.w, c.who, name).Everything().Player().Result()
+	// do_chown is init_match(NOTYPE) plus match_everything and
+	// nothing else; match_everything adds match_player itself for
+	// a wizard.
+	thing := match.New(c.w, c.who, name).Everything().Result()
 	if !noisyMatch(c, name, thing) {
 		return
 	}

@@ -526,6 +526,53 @@ The other three stay on `resolveControlled`, which keeps the old
 message rather than pretending to be upstream's. Each needs its own
 commit.
 
+### The unconditional `match_player`
+
+Found while porting the three above, and it is a *matching* fault
+rather than a permission one, so it is recorded separately.
+
+`match_everything` (`match.c:712`) ends with
+
+```c
+if (Wizard(OWNER(md->match_from)) || Wizard(md->match_who))
+    match_player(md);
+```
+
+so a player search happens only for a wizard. Four of Emerald's
+matches added it outright: `matchControlled`, `resolveControlled`,
+`@chown`'s own and `examine`'s own. A **mortal** could therefore name
+any player in the game as a target, and the control test refused them
+— so the symptom was the wrong *message*, "Permission denied. (You
+don't control what was matched)" where upstream, having matched
+nothing at all, says "I don't understand 'X'." Programs match on both.
+It reached `@name`, `@describe`, `@set`, `@unlock`, the whole `@lock`
+family, `@link`, `@unlink`, `@recycle`, `@chown` and `examine`.
+
+**No golden case can see it.** The oracle drives `#1`, a wizard, for
+whom `match_everything` adds `match_player` anyway, so both servers
+agree whichever way it is written. `internal/game/matcher_test.go`
+covers it, including the half that must keep working: a wizard still
+reaches a remote player.
+
+**Two more call sites are wrong and are not fixed here**, because
+their matchers are structurally different rather than merely too
+wide, and each needs its own work:
+
+- **MUF `MATCH`** (`internal/game/muf.go`'s `mufHost.Match`).
+  `prim_match` (`p_db.c:765`) does not call `match_everything` at
+  all: it is `match_all_exits`, `match_neighbor`, `match_possession`,
+  `match_me`, `match_here`, `match_home` and `match_nil` — or
+  `match_registered` alone when the name begins with `$` — and adds
+  `match_absolute` *and* `match_player` only when
+  `Wizard(ProgUID) || mlev >= 4`. So Emerald's version both includes
+  searches upstream excludes (registered and absolute, always) and
+  omits two it has (home and nil). This belongs with the recorded
+  `RMATCH`-on-`Matcher.Inside` work, which is the same kind of
+  rebuild.
+- **MPI's matcher** (`internal/game/mpi.go`'s `mpiHost.Match`), which
+  has the same unconditional `Player()` and several callers whose own
+  C was not checked.
+
 ### MPI's {force} is half implemented
 
 Found by the propqueue golden case, which tried to use it to drive the

@@ -29,7 +29,11 @@ func (s *Server) cmdExamine(c *ctx) {
 
 	target := c.w.Get(c.who).Location
 	if name != "" && !ascii.EqualFold(name, "here") {
-		target = match.New(c.w, c.who, name).Everything().Player().Result()
+		// do_examine is init_match(NOTYPE) plus
+		// match_everything, which adds match_player itself
+		// for a wizard.
+		target = match.New(c.w, c.who, name).
+			Everything().Result()
 		if !noisyMatch(c, name, target) {
 			return
 		}

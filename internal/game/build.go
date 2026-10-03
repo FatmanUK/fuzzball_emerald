@@ -55,10 +55,15 @@ func (s *Server) requireWizard(c *ctx) bool {
 func (s *Server) matchControlled(c *ctx,
 	name string) (ref.Ref, bool) {
 
-	// Player() is included so a wizard can name someone who is
-	// elsewhere in the game, which @set needs.
-	r := match.New(c.w, c.who, name).
-		Everything().Player().Result()
+	// match_everything already adds match_player when the
+	// searcher or its owner is a wizard (match.c:712), which is
+	// the case @set needs. Adding it unconditionally here let a
+	// *mortal* name any player in the game: the control test then
+	// refused them, so the refusal was "Permission denied. (You
+	// don't control what was matched)" where upstream, having
+	// matched nothing, says "I don't understand 'X'." Programs
+	// match on both.
+	r := match.New(c.w, c.who, name).Everything().Result()
 	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
 	}
@@ -99,11 +104,16 @@ func (s *Server) matchControlled(c *ctx,
 // Each of the three needs its own commit. Until then they keep the
 // message they have always had, which is at least not pretending to
 // be upstream's.
+//
+// What *is* fixed is the matcher: this used to add Player()
+// unconditionally, where match_everything adds match_player only for
+// a wizard, so a mortal could name any player in the game and be
+// refused on permission instead of on the match. See matcher_test.go.
 func (s *Server) resolveControlled(c *ctx, name string,
 	prefer ref.ObjType) (ref.Ref, bool) {
 
 	r := match.New(c.w, c.who, name).
-		PreferType(prefer).Everything().Player().Result()
+		PreferType(prefer).Everything().Result()
 	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
 	}
