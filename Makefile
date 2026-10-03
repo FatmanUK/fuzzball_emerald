@@ -202,19 +202,56 @@ $(KEY_FILE):
 
 # --- database ---------------------------------------------------------------
 
+# A transient host-port collision can happen while another process/container
+# is releasing the port. Only that specific class of podman-run failure is
+# retried; other startup errors fail immediately.
+#
+# The pattern deliberately does not match a bare `bind:'. Podman 5 reports the
+# collision as "rootlessport listen tcp 0.0.0.0:55432: bind: address already in
+# use", so `address already in use' — the kernel's own EADDRINUSE wording, and
+# the stable half of that line — already catches it. What `bind:' would add is
+# the bind failures that never clear by waiting, `bind: permission denied' and
+# `bind: cannot assign requested address', each of which would then stall for
+# the whole retry budget before failing anyway.
+#
+# The delay is short and the retries many on purpose. What is being waited for
+# is a *listening* socket released by a dying rootlessport helper, and a
+# listening socket does not go through TIME_WAIT — so the window is seconds,
+# and a long first delay turns a two-second hiccup into a long stall. `make
+# check' starts Postgres, so this sits under the command run most often.
+# DB_BIND_RETRIES=1 is "do not retry"; 0 would start nothing at all.
+DB_BIND_RETRIES      ?= 10
+DB_BIND_RETRY_DELAY  ?= 3
+
 .PHONY: db-up
 db-up: ## Start Postgres and wait for it
 	@if [ -z "$$(podman ps -q -f name=^$(PG_CONTAINER)$$)" ]; then \
 		podman network exists $(NETWORK) || podman network create $(NETWORK) >/dev/null; \
 		podman rm -f $(PG_CONTAINER) >/dev/null 2>&1 || true; \
-		echo "starting Postgres..."; \
-		podman run -d --name $(PG_CONTAINER) --network $(NETWORK) \
-			-e POSTGRES_USER=$(DB_USER) \
-			-e POSTGRES_PASSWORD=$(DB_PASSWORD) \
-			-e POSTGRES_DB=$(DB_NAME) \
-			-p $(DB_PORT):5432 \
-			-v fbemerald-pgdata:/var/lib/postgresql/data \
-			$(DB_IMAGE) >/dev/null; \
+		for attempt in $$(seq 1 $(DB_BIND_RETRIES)); do \
+			echo "starting Postgres..."; \
+			if output=$$(podman run -d --name $(PG_CONTAINER) --network $(NETWORK) \
+				-e POSTGRES_USER=$(DB_USER) \
+				-e POSTGRES_PASSWORD=$(DB_PASSWORD) \
+				-e POSTGRES_DB=$(DB_NAME) \
+				-p $(DB_PORT):5432 \
+				-v fbemerald-pgdata:/var/lib/postgresql/data \
+				$(DB_IMAGE) 2>&1); then \
+				break; \
+			fi; \
+			echo "Postgres failed to start:"; \
+			echo "$$output"; \
+			if ! echo "$$output" | grep -Eqi 'address already in use|unable to bind|cannot bind|cannot listen on.*port'; then \
+				exit 1; \
+			fi; \
+			if [ "$$attempt" -eq "$(DB_BIND_RETRIES)" ]; then \
+				echo "Postgres port binding failed after $(DB_BIND_RETRIES) attempts"; \
+				exit 1; \
+			fi; \
+			echo "Postgres port binding failed; retrying in $(DB_BIND_RETRY_DELAY)s..."; \
+			podman rm -f $(PG_CONTAINER) >/dev/null 2>&1 || true; \
+			sleep $(DB_BIND_RETRY_DELAY); \
+		done; \
 		for i in $$(seq 1 60); do \
 			podman exec $(PG_CONTAINER) pg_isready -U $(DB_USER) >/dev/null 2>&1 && break; \
 			sleep 1; \
