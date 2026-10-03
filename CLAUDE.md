@@ -10,13 +10,13 @@ and `.db` worlds should work unchanged — with four deliberate departures: Go
 instead of C, TLS-only networking, Postgres instead of flat-file dumps, and a
 rootless Podman container instead of autotools.
 
-**There is no current plan file.** The three that got the project here are all
-executed — `~/.claude/plans/i-want-to-create-hashed-moore.md` (M0–M8),
-`rippling-roaming-backus.md` (the dispatcher and the command gap) and
-`movement-containment-registration.md` (movement through the propqueues) — and
-each carries a STATUS header saying so. The live record of what is done and
-what is next is **`BOOTSTRAP.md` §2**; write a new plan file only when the next
-piece of work is big enough to need one.
+**There is exactly one plan file**, in `~/.claude/plans/`, and it is the live
+one. The three that got the project here — M0–M8, the dispatcher and the
+command gap, and movement through the propqueues — are all executed and have
+been **deleted**, because three completed plans sitting beside a live one are
+three things to mistake for current work. What they established is in this
+file and in `docs/upstream-coverage.md`; `BOOTSTRAP.md` §2 is the narrative of
+what has landed, and the plan file is what is next.
 
 ## The C reference is a submodule
 
@@ -1443,6 +1443,14 @@ Worth knowing before "fixing" something that looks wrong:
 - **A self-linked exit is refused rather than fatal.** Upstream recurses
   through a metalink with nothing to stop it and exhausts its stack; see
   "Exit traversal".
+- **A regexp using a backreference or lookaround fails to compile.** Go's
+  `regexp` is RE2, which has neither, and `compileRegex`
+  (`internal/muf/prim_string2.go:319`) lets the compile fail rather than
+  quietly matching something else — the safer of the two, since a pattern
+  that silently means something different is worse than one that refuses.
+  The MUF `REG*` primitives are the whole surface. A world using `\1` inside
+  a pattern is the one thing this breaks, and vendoring a PCRE engine is the
+  fix if one ever does.
 
 ## Upstream coverage
 

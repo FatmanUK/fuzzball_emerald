@@ -91,6 +91,18 @@ Three things were settled by doing it:
 gained a **recursion guard**: two libraries that each check the other
 would otherwise compile each other for ever, on the world goroutine.
 
+**One divergence inside the primitives is deliberate and was not
+recorded here until now.** Go's `regexp` is RE2, which has no
+backreferences and no lookaround, so a pattern using either **fails to
+compile** rather than matching something else — `compileRegex`,
+`internal/muf/prim_string2.go:319`. Letting it fail is the safer of
+the two: a pattern that silently means something different is worse
+than one that refuses. A world using `\1` inside a `REG*` pattern is
+what this breaks, and vendoring a PCRE-compatible engine is the fix if
+one ever does. The question was raised in the original milestone plan
+as a risk, settled in that code comment, and never made it into this
+audit; it is here now because that plan file has been deleted.
+
 ---
 
 ## `muckhelp.html` — 9 of 109 names have no handler

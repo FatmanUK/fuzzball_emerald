@@ -49,11 +49,15 @@ taking over a connection's input, which nothing else in this server does.
 
 ## 2. Next Three Steps
 
-The M0–M8 plan, the help-system/configurator/audit plan, and **tranche 1 of
-`~/.claude/plans/rippling-roaming-backus.md` (S1–S12) are all fully
-executed**. That plan's recommended stopping point has been reached: the
-dispatcher is upstream's, the shared machinery exists, and every command that
-needed no new engine has landed.
+The M0–M8 plan, the help-system/configurator/audit plan and **tranche 1 of the
+command-gap plan (S1–S12) are all fully executed**. Its recommended stopping
+point was reached: the dispatcher is upstream's, the shared machinery exists,
+and every command that needed no new engine has landed.
+
+This section is the record of what has *landed*. What is **next** lives in the
+single plan file in `~/.claude/plans/`, which is kept up to date as each step
+goes in — the three completed plan files that used to sit beside it have been
+deleted, so whatever is in that directory is current by construction.
 
 What tranche 1 actually delivered, in the order it was committed:
 
@@ -87,8 +91,8 @@ What tranche 1 actually delivered, in the order it was committed:
   the pattern wrapped in `*…*`, `lookup_cost` charged, and an invented
   200-result cap removed.
 
-**Tranche 2 is executed too** — groups A through E of
-`~/.claude/plans/movement-containment-registration.md`, plus two of F:
+**Tranche 2 is executed too** — groups A through E of the movement,
+containment and registration plan, plus two of F:
 
 - **A** — `ctx.rest` is upstream's `full_command`, and COMMAND is the verb.
   One typed line is three strings (`game.c:677-696`) and Emerald carried
