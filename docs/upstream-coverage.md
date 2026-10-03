@@ -510,9 +510,11 @@ for itself and applies its own rule:
 
 - `@unlink` also accepts `controls_link`, so upstream lets the
   destination's owner unlink an exit where Emerald refuses them.
-- `@link` lets a builder who controls nothing *seize* an unlinked
-  exit, paying `link_cost` plus `exit_cost`; Emerald refuses before
-  that path can run.
+- `@link` — **done.** It lets a builder who controls nothing *seize*
+  an unlinked exit, because `do_link` tests `controls` only when the
+  exit already points somewhere (`create.c:161`). See "What `@link`
+  still diverges on" below for two things in it that are not
+  permission refusals and are not fixed.
 - `@recycle` is **stricter** than `controls`: upstream requires
   actual ownership of a room or thing even of a wizard, so Emerald
   currently lets a wizard recycle objects upstream refuses.
@@ -572,6 +574,37 @@ wide, and each needs its own work:
 - **MPI's matcher** (`internal/game/mpi.go`'s `mpiHost.Match`), which
   has the same unconditional `Player()` and several callers whose own
   C was not checked.
+
+### What `@link` still diverges on
+
+Two things, both found while porting its permission rules and
+neither of them a permission refusal, so neither was folded into that
+commit:
+
+- **`resolveLinkTarget`'s matcher is not `parse_linkable_dest`'s.**
+  Upstream is `init_match(NOTYPE)` plus `match_everything`,
+  `match_home` and `match_nil` (`db.c:1975`). Emerald hand-rolls a
+  list that omits `Exits()` and `Registered()`, asks for
+  `PreferType(TypeRoom)` where upstream passes `NOTYPE`, and carries
+  another unconditional `Player()` of the kind recorded above. It is
+  also missing `parse_linkable_dest`'s own `can_link(player, exit)`
+  refusal, "You can't link that."
+- **`@link` cannot build a multi-destination exit.** `_link_exit`
+  (`db.c:2040`) splits the destination string on `;` up to
+  `MAX_LINKS`, validates each, and returns how many were linked.
+  Emerald resolves one destination and writes a one-element list.
+  `trigger()` already *traverses* a list — that landed with exit
+  traversal — so the gap is only in creating one, and the symptom is
+  that `@link exit=roomA;roomB` silently links the first alone. A
+  world with metalink fan-out cannot be built from inside the game.
+
+One invented message was removed rather than recorded: `@link` with
+an empty destination said "Link it to what?", which appears nowhere
+in upstream. It shadowed two real answers — an exit is charged for,
+transferred, and told "No destinations linked.", because
+`_link_exit`'s loop never runs and so never matches anything, while
+every other type reaches the matcher and gets
+`noisy_match_result`'s.
 
 ### MPI's {force} is half implemented
 

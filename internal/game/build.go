@@ -326,10 +326,12 @@ func defaultRoomParent(w *world.World, who ref.Ref) ref.Ref {
 // — "I don't understand 'X'." An earlier version said "I don't see
 // that here." and refused without naming anything.
 func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
-	if name == "" {
-		c.tell("Link it to what?")
-		return ref.Nothing, false
-	}
+	// There is no empty-name guard upstream. "Link it to what?"
+	// was invented here, and it shadowed two different real
+	// answers: for an exit, _link_exit's loop never runs on an
+	// empty string, so nothing is matched at all and do_link says
+	// "No destinations linked."; for everything else the empty
+	// name reaches the matcher and noisy_match_result answers.
 	r := match.New(c.w, c.who, name).
 		PreferType(ref.TypeRoom).
 		Absolute().Me().Here().Home().Nil().
@@ -363,21 +365,47 @@ func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
 	return r, true
 }
 
+// exitDelimiter is EXIT_DELIMITER (game.h:57), which separates an
+// exit's destinations from each other.
+const exitDelimiter = ';'
+
 // cmdLink points an exit at a destination, or sets a home.
+//
+// Its permission rule is **not** match_controlled's, and there is no
+// control test up front at all. do_link (create.c:138) matches,
+// switches on the type, and each branch applies its own rule — so
+// this cannot go through resolveControlled, which refused before any
+// of that could run.
+//
+// The exit branch is the surprising one and is ported in linkExit
+// below: an **unlinked** exit is linkable by anybody. The other two
+// test controls() themselves, and each names what it failed.
+//
+// Two things about @link are still divergent and are recorded in
+// docs/upstream-coverage.md rather than fixed here, because neither
+// is a permission refusal: resolveLinkTarget's matcher is not
+// parse_linkable_dest's, and @link cannot build a multi-destination
+// exit even though trigger() traverses one.
 func (s *Server) cmdLink(c *ctx) {
-	name, destName, ok := strings.Cut(c.arg, "=")
-	if !ok {
-		c.tell("Usage: @link <object>=<destination>")
+	name, destName, _ := strings.Cut(c.arg, "=")
+	name = strings.TrimSpace(name)
+	destName = strings.TrimSpace(destName)
+
+	// init_match(..., TYPE_EXIT, ...) then match_everything.
+	// There is no usage guard upstream: @link with no "=" reaches
+	// link_exit with an empty destination, which links nothing
+	// and says so — after charging for it.
+	target := match.New(c.w, c.who, name).
+		PreferType(ref.TypeExit).Everything().Result()
+	if !noisyMatch(c, name, target) {
 		return
 	}
-	// do_link's own init_match asks for an exit (create.c:147).
-	target, ok := s.resolveControlled(c, strings.TrimSpace(name),
-		ref.TypeExit)
-	if !ok {
-		return
-	}
-	dest, ok := s.resolveLinkTarget(c, strings.TrimSpace(destName))
-	if !ok {
+
+	o := c.w.Get(target)
+	if o.Type() != ref.TypeExit &&
+		strings.ContainsRune(destName, exitDelimiter) {
+		c.tell("Only actions and exits can be linked to " +
+			"multiple destinations.")
 		return
 	}
 
@@ -386,28 +414,163 @@ func (s *Server) cmdLink(c *ctx) {
 	// destination, a thing or a player gets a home, and a room
 	// gets a drop-to. Only the first is "linked" in upstream's
 	// own words.
-	o := c.w.Get(target)
 	switch o.Type() {
 	case ref.TypeExit:
-		o.Dest = []ref.Ref{dest}
-		c.w.Modified(target)
-		c.tell("%s", linkedTo(c, dest))
-		return
+		s.linkExit(c, target, destName)
 	case ref.TypeThing, ref.TypePlayer:
-		o.Home = dest
-		c.w.Modified(target)
-		c.tell("Home set.")
-		return
+		s.linkHome(c, target, destName)
 	case ref.TypeRoom:
-		o.Dropto = dest
-		c.w.Modified(target)
-		c.tell("Dropto set.")
-		return
+		s.linkDropto(c, target, destName)
 	case ref.TypeProgram:
 		c.tell("You can't link programs to things!")
+	default:
+		// Upstream logs a PANIC here and carries on.
+		c.tell("Internal error: weird object type.")
+	}
+}
+
+// linkExit is do_link's TYPE_EXIT branch (create.c:159), and the
+// order of its four steps is observable.
+//
+// **The permission test runs only when the exit already points
+// somewhere.** An exit with no destinations is linkable by anybody,
+// which is the "seizing" path: a builder who controls nothing may
+// claim somebody else's unlinked exit by paying for it. Emerald
+// refused before that could happen, so an abandoned exit could only
+// ever be relinked by its owner.
+//
+// A **NIL** destination is not "already linked". Upstream tests
+// dest[0] != NIL inside the controls() branch, so an exit parked at
+// NIL may be relinked by whoever controls it while one pointing at a
+// real room may not.
+//
+// Then the costs, which differ by who owns the exit; then the
+// ownership transfer, which happens **before** the destination is
+// resolved — so a failed destination leaves the exit transferred
+// and the money spent, less the one refund below.
+func (s *Server) linkExit(c *ctx, target ref.Ref, destName string) {
+	o := c.w.Get(target)
+	if len(o.Dest) != 0 {
+		if !s.controls(c.w, c.who, target) {
+			c.tell("Permission denied. (you don't " +
+				"control the exit to relink)")
+			return
+		}
+		if o.Dest[0] != ref.Nil {
+			c.tell("That exit is already linked.")
+			return
+		}
+	}
+
+	linkCost := int(c.w.Tune.Int("link_cost"))
+	exitCost := int(c.w.Tune.Int("exit_cost"))
+	if ownerOf(c.w, target) == ownerOf(c.w, c.who) {
+		if !s.payFor(c.w, c.who, linkCost) {
+			c.tell("It costs %d %s to link this exit.",
+				linkCost, s.pennies(c, linkCost))
+			return
+		}
+	} else {
+		if !c.w.Get(c.who).Flags.CanBuild() {
+			c.tell("Only authorized builders may seize " +
+				"exits.")
+			return
+		}
+		total := linkCost + exitCost
+		if !s.payFor(c.w, c.who, total) {
+			c.tell("It costs %d %s to link this exit.",
+				total, s.pennies(c, total))
+			return
+		}
+		// The old owner is paid for the loss, so seizing an
+		// exit moves value rather than destroying it.
+		s.refund(c.w, ownerOf(c.w, target), exitCost)
+		c.tell("Claiming unlinked exits: This feature will " +
+			"be removed in the next version of Fuzzball.")
+	}
+
+	// Validated and paid for, so the exit changes hands whatever
+	// the destination turns out to be.
+	o.Owner = ownerOf(c.w, c.who)
+	c.w.Modified(target)
+
+	// _link_exit iterates over the destination string, so an
+	// empty one matches nothing without ever calling the matcher.
+	noneLinked := func() {
+		// The refund is link_cost only — a seized exit's
+		// exit_cost is not returned — and upstream skips it
+		// when the exit's *new* owner is a wizard, who paid
+		// nothing anyway.
+		c.tell("No destinations linked.")
+		if !isWizard(c.w, o.Owner) {
+			s.refund(c.w, c.who, linkCost)
+		}
+	}
+	if destName == "" {
+		noneLinked()
 		return
 	}
-	c.tell("You can't link that.")
+	dest, ok := s.resolveLinkTarget(c, destName)
+	if !ok {
+		noneLinked()
+		return
+	}
+	o.Dest = []ref.Ref{dest}
+	c.w.Modified(target)
+	c.tell("%s", linkedTo(c, dest))
+}
+
+// linkHome is do_link's TYPE_THING and TYPE_PLAYER branch
+// (create.c:219), which sets a home rather than a destination.
+//
+// Its refusal names both halves of what it tested, and the parent
+// loop check is its own separate answer.
+func (s *Server) linkHome(c *ctx, target ref.Ref, destName string) {
+	dest, ok := s.resolveLinkTarget(c, destName)
+	if !ok {
+		return
+	}
+	if !s.controls(c.w, c.who, target) ||
+		!s.canLinkTo(c.w, c.who, dest) {
+		c.tell("Permission denied. (you don't control the " +
+			"thing, or you can't link to dest)")
+		return
+	}
+	if parentLoopCheck(c.w, target, dest) {
+		c.tell("That would cause a parent paradox.")
+		return
+	}
+	c.w.Get(target).Home = dest
+	c.w.Modified(target)
+	c.tell("Home set.")
+}
+
+// linkDropto is do_link's TYPE_ROOM branch (create.c:261): a room's
+// drop-to, with a third wording again and a self-link refused as part
+// of the same condition.
+func (s *Server) linkDropto(c *ctx, target ref.Ref, destName string) {
+	dest, ok := s.resolveLinkTarget(c, destName)
+	if !ok {
+		return
+	}
+	if !s.controls(c.w, c.who, target) ||
+		!s.canLinkTo(c.w, c.who, dest) || target == dest {
+		c.tell("Permission denied. (you don't control the " +
+			"room, or can't link to the dropto)")
+		return
+	}
+	c.w.Get(target).Dropto = dest
+	c.w.Modified(target)
+	c.tell("Dropto set.")
+}
+
+// pennies is upstream's (cost == 1) ? tp_penny : tp_pennies, which
+// every priced refusal spells out inline.
+func (s *Server) pennies(c *ctx, cost int) string {
+	if cost == 1 {
+		return c.w.Tune.String("penny")
+	}
+	return c.w.Tune.String("pennies")
 }
 
 // linkedTo is what @link says it did to an *exit*. HOME is named
