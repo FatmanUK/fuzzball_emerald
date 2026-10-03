@@ -42,7 +42,10 @@ in the same shape, including the property-listing form.
 
 Every MUF primitive and every MPI function is implemented: 412 of the 417
 primitive names, the other five being compiler internals no program can name,
-and all 140 MPI functions.
+and all 140 MPI functions. Those figures are asserted by a test rather than
+counted by hand — a primitive with no implementation, or one that is only a
+stub, fails `TestPrimitiveCoverage`; MPI has the same check. They were
+typed-and-repeated claims until recently, and two of them were wrong.
 
 A property is a hook, as it is upstream: `_arrive`, `_depart`, `_connect`,
 `_disconnect`, `_lookq` and the three `_listen` propqueues all run whatever

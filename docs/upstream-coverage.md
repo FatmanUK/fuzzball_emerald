@@ -26,10 +26,12 @@ correctly**.
 
 ## `mpihelp.html` — all 140 functions, two gaps inside them
 
-All 140 `mfn_*` functions are implemented and golden-verified. Two
-things inside them are not, both found later by golden cases written
-for something else and both recorded below under "MPI's {force} is
-half implemented". The
+All 140 `mfn_*` functions are implemented and golden-verified, and
+that count is asserted by `TestFunctionCoverage` rather than typed
+here — see "The primitive count is now self-maintaining" below, which
+covers MPI as well. Two things inside them are not implemented, both
+found later by golden cases written for something else and both
+recorded below under "MPI's {force} is half implemented". The
 documented limits were checked against both servers:
 
 | Limit | The page says | Upstream's source says | Emerald |
@@ -96,6 +98,56 @@ map, because the compiler emits them as instructions — `JMP`, `READ`,
 `SLEEP`, `CALL`, `EXECUTE`, `EXIT`, `EVENT_WAITFOR`, `CATCH`,
 `CATCH_DETAILED` — and `registry.go`'s `dispatched` table names them
 so a survey counts them.
+
+### The primitive count is now self-maintaining
+
+The figures above are asserted by a test rather than typed here, and
+until recently they were not — which is how two of them came to be
+wrong while every document repeated them.
+
+**A stub was invisible to every count.** A stub is *registered* like
+anything else, so `len(prims)` counted it; `NEWPROGRAM` and
+`CHECKARGS` both sat in the table aborting "not implemented yet"
+while this file, the README and `CLAUDE.md` all said every primitive
+was implemented. **And the test that should have caught it asserted
+nothing** — `TestPrimitiveCoverage` reported the numbers with
+`t.Logf` and passed whatever they were. The same was true of
+`internal/mpi`'s `TestFunctionCoverage`. A claim nobody could check
+is worse than a known gap, because it stops anyone looking.
+
+Three changes close it:
+
+- **`registerStub(name, reason)`** is the only way to add a stub. It
+  records the name and the reason in a `stubs` map *and* installs the
+  abort in the same call, so the two cannot come apart. It exists in
+  both `internal/muf` and `internal/mpi`.
+- **`Implemented()` subtracts the stubs** and **`Stubs()` lists them
+  with their reasons**, so a stub is counted as the gap it is. The
+  map `Stubs()` returns is a copy, so a caller cannot quietly empty
+  the real one.
+- **Both coverage tests assert.** `TestPrimitiveCoverage` fails if
+  anything is missing, if anything is a stub — naming it and its
+  reason — or if `Implemented()` is not the number of nameable
+  primitives. `TestFunctionCoverage` does the same against
+  `Count()`. Each checks the *arithmetic* rather than a typed
+  number, so implementing a primitive that a submodule bump
+  introduced needs no edit to the test.
+
+This is the primitives' equivalent of what has always made the
+command count trustworthy: `dispatch_table.go` *is* the command
+surface, and a name with no handler says so when typed.
+
+**A submodule bump is expected to break these tests**, and should.
+Moving to a new upstream release can add names to the generated
+table, and a new name with no implementation is exactly what should
+not pass quietly.
+
+`registerStub` is currently unused in both packages, because there
+are no stubs left — so the bookkeeping is covered by tests that add
+a stub to the map and take it away again, rather than by a real one.
+The four failure paths were each confirmed by mutation: making a
+primitive a stub, deleting its registration, and the same two for an
+MPI function.
 
 **Every compiler directive** now works. `$PRAGMA`, `$ENTRYPOINT` and
 `$LANGUAGE` were missing until recently, and their absence was not a

@@ -32,9 +32,58 @@ func register(name string, fn primFunc) {
 	prims[n] = fn
 }
 
-// Implemented reports how many primitives have implementations, which
-// the server logs at startup so the gap is visible.
-func Implemented() int { return len(prims) + len(dispatched) }
+// stubs records the primitives that are *registered* but not
+// implemented, keyed by name with the reason each is still a stub.
+//
+// It exists because a stub was invisible to every count. A stub is
+// registered like anything else, so `len(prims)` counted it and the
+// 412-of-417 figure never moved; NEWPROGRAM and CHECKARGS both sat in
+// the table for months while the README, CLAUDE.md and
+// docs/upstream-coverage.md all said every primitive was implemented.
+// Nothing contradicted the claim, which is worse than a known gap: it
+// stops anyone looking.
+var stubs = map[string]string{}
+
+// registerStub installs a primitive that aborts, and counts it as a
+// stub in the same call so the two cannot come apart. Use it instead
+// of register for anything not actually implemented.
+//
+// It is currently unused: NEWPROGRAM and CHECKARGS were the last two
+// stubs and both are done, so Stubs() is empty and the coverage test
+// asserts as much. That is the point of it — the next stub is
+// counted the moment it is written, rather than after somebody audits
+// a claim nobody could check.
+func registerStub(name, reason string) {
+	register(name, stubFunc(name))
+	stubs[name] = reason
+}
+
+// stubFunc is the abort a stub answers with. The reason is
+// deliberately not in the message: it is for whoever is auditing the
+// gap, and Stubs() is where they will read it.
+func stubFunc(name string) primFunc {
+	return func(*Frame) (*Result, error) {
+		return nil, errf("%s is not implemented yet", name)
+	}
+}
+
+// Stubs lists the primitives registered but not implemented, with the
+// reason each is still a stub. The map is a copy, so a caller cannot
+// quietly empty the real one.
+func Stubs() map[string]string {
+	out := make(map[string]string, len(stubs))
+	for name, why := range stubs {
+		out[name] = why
+	}
+	return out
+}
+
+// Implemented reports how many primitives actually have
+// implementations: the registered ones plus the nine the compiler
+// emits as instructions, less any that are only stubs.
+func Implemented() int {
+	return len(prims) + len(dispatched) - len(stubs)
+}
 
 // Dispatched reports whether a primitive is one the compiler emits as
 // an instruction rather than registering — see registry.go's own

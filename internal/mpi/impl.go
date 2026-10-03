@@ -35,8 +35,52 @@ func register(name string, fn impl) {
 	impls[name] = fn
 }
 
-// Implemented is how many functions have implementations.
-func Implemented() int { return len(impls) }
+// stubs records the functions that are *registered* but not
+// implemented, keyed by name with the reason each is still a stub.
+//
+// It exists for the reason internal/muf's own does: a stub is
+// registered like anything else, so len(impls) counted it and the
+// 140-of-140 figure never moved. MPI's SUBLIST stub was dead code
+// that happened to be shadowed by the real implementation, and
+// nothing about the count would have changed had it not been.
+var stubs = map[string]string{}
+
+// registerStub attaches an implementation that aborts, and counts it
+// as a stub in the same call so the two cannot come apart. Use it
+// instead of register for anything not actually implemented.
+//
+// Currently unused — Stubs() is empty and the coverage test asserts
+// as much — which is the point: the next stub is counted when it is
+// written rather than when somebody audits a claim nobody could
+// check.
+func registerStub(name, reason string) {
+	register(name, stubImpl(name))
+	stubs[name] = reason
+}
+
+// stubImpl is the abort a stub answers with. The reason stays out of
+// the message, because MPI errors are shown to players; Stubs() is
+// where a maintainer reads it.
+func stubImpl(name string) impl {
+	return func(*Env, *Func, []string) (string, error) {
+		return "", errf(name, "Not implemented yet.")
+	}
+}
+
+// Stubs lists the functions registered but not implemented, with the
+// reason each is still a stub. The map is a copy, so a caller cannot
+// quietly empty the real one.
+func Stubs() map[string]string {
+	out := make(map[string]string, len(stubs))
+	for name, why := range stubs {
+		out[name] = why
+	}
+	return out
+}
+
+// Implemented is how many functions actually have implementations:
+// the registered ones, less any that are only stubs.
+func Implemented() int { return len(impls) - len(stubs) }
 
 func init() {
 	// Text.

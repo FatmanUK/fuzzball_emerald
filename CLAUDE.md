@@ -1561,6 +1561,23 @@ clients that speak them.
 names, the other five being compiler internals (`" FOR"`, `" FOREACH"` and
 the rest) that no program can name, and all 140 `mfn_*` functions.
 
+**Those counts are asserted, not typed.** `TestPrimitiveCoverage` and
+`internal/mpi`'s `TestFunctionCoverage` fail if anything is missing, if
+anything is a stub, or if `Implemented()` is not the number of nameable
+names — checking the arithmetic rather than a literal, so implementing a
+primitive a submodule bump introduced needs no edit to the test. Both used
+to report with `t.Logf` and assert nothing, which is how 412-of-417 came to
+be repeated everywhere while `NEWPROGRAM` and `CHECKARGS` were stubs.
+
+**A stub must go through `registerStub(name, reason)`**, in both packages.
+Plain `register` installs an abort that `len(prims)` happily counts as an
+implementation, which is exactly how the last two hid; `registerStub` records
+the name and reason in a `stubs` map *and* installs the abort in one call, so
+`Implemented()` subtracts it and `Stubs()` names it. It is unused today
+because there are no stubs left — do not delete it, and do not hand-write an
+abort in its place. **Expect a submodule bump to break those tests**: a new
+name with no implementation is what they exist to refuse.
+
 Nine primitives are dispatched by `Frame.primitive` rather than registered in
 the `prims` map, because the compiler emits them as instructions — `JMP`,
 `READ`, `SLEEP`, `CALL`, `EXECUTE`, `EXIT`, `EVENT_WAITFOR`, `CATCH`,
