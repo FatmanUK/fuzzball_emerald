@@ -253,16 +253,26 @@ db-up: ## Start Postgres and wait for it
 			sleep $(DB_BIND_RETRY_DELAY); \
 		done; \
 		for i in $$(seq 1 60); do \
-			podman exec $(PG_CONTAINER) pg_isready -U $(DB_USER) >/dev/null 2>&1 && break; \
+			podman exec $(PG_CONTAINER) psql \
+				-h 127.0.0.1 -p 5432 \
+				-U $(DB_USER) -d postgres -tAc "SELECT 1" \
+				>/dev/null 2>&1 && break; \
 			sleep 1; \
 		done; \
-		podman exec $(PG_CONTAINER) pg_isready -U $(DB_USER) >/dev/null 2>&1 \
-			|| { echo "Postgres did not become ready"; exit 1; }; \
+		podman exec $(PG_CONTAINER) psql \
+			-h 127.0.0.1 -p 5432 \
+			-U $(DB_USER) -d postgres -tAc "SELECT 1" \
+			>/dev/null 2>&1 \
+			|| { echo "Postgres did not become ready"; podman logs $(PG_CONTAINER) 2>&1 | tail -50; exit 1; }; \
 		echo "Postgres is ready on port $(DB_PORT)"; \
 	fi
-	@podman exec $(PG_CONTAINER) psql -U $(DB_USER) -d postgres -tAc \
+	@podman exec $(PG_CONTAINER) psql \
+		-h 127.0.0.1 -p 5432 \
+		-U $(DB_USER) -d postgres -tAc \
 		"SELECT 1 FROM pg_database WHERE datname='$(TEST_DB_NAME)'" | grep -q 1 \
-		|| podman exec $(PG_CONTAINER) createdb -U $(DB_USER) $(TEST_DB_NAME)
+		|| podman exec $(PG_CONTAINER) createdb \
+			-h 127.0.0.1 -p 5432 \
+			-U $(DB_USER) $(TEST_DB_NAME)
 
 .PHONY: db-down
 db-down: ## Stop Postgres, keeping its data
