@@ -712,15 +712,28 @@ moment a duplicate name exists. That is the same defect seen from
 the other side.
 
 **5. `{midstr}` takes two positions, not a position and a length —
-not fixed.** `mfn_midstr` (`mfuns2.c:2897`) clamps both arguments as
+fixed.** `mfn_midstr` (`mfuns2.c:2897`) clamps both arguments as
 1-based positions, lets a negative one index from the end
 (`pos += len + 1`), and **walks backwards when the second is lower
-than the first**, returning the span reversed. Measured against the
-oracle: `{midstr:hello,2,4}` is `ell`, `{midstr:hello,4,2}` is
-`lle`, and `{midstr:hello,-2,-1}` is `lo`. Emerald answers `ello`,
-`lo` and the empty string.
+than the first**, returning the span reversed. So
+`{midstr:hello,2,4}` is `ell`, `{midstr:hello,4,2}` is `lle`, and
+`{midstr:hello,-2,-1}` is `lo`; this server answered `ello`, `lo`
+and the empty string. Reading the second number as a length made
+every three-argument call wrong, and neither the negative form nor
+the reversal existed at all.
 
-Items 5 and 6 each need their own commit. The golden case
+The clamping order is upstream's and is load-bearing: a position of
+zero returns the empty string **before** any clamping, and only then
+is a position above the length pulled down, a negative one wrapped,
+and anything still below one raised to 1.
+
+One thing needed a guard the C does not have. With an empty subject
+both positions clamp to 1, and upstream then copies the string's own
+NUL terminator — which reads back as the empty string. Indexing
+`s[0]` in Go would panic, so `midstr` returns early; the oracle
+confirms the answer.
+
+Item 6 needs its own commit. The golden case
 (`internal/golden/atoi_test.go`) deliberately omits them and says so,
 so that it tests the fix it belongs to rather than passing over a
 different bug.

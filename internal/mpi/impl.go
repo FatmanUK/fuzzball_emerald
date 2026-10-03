@@ -104,23 +104,7 @@ func init() {
 		// "{subst:string,old,new}"
 		return strings.ReplaceAll(args[0], args[1], args[2]), nil
 	})
-	register("MIDSTR", func(_ *Env, _ *Func, args []string) (string, error) {
-		s := args[0]
-		start := atoiArg(args[1])
-		length := len(s)
-		if len(args) > 2 {
-			length = atoiArg(args[2])
-		}
-		// MPI indexes strings from one.
-		if start < 1 || length < 0 || start > len(s) {
-			return "", nil
-		}
-		end := start - 1 + length
-		if end > len(s) {
-			end = len(s)
-		}
-		return s[start-1 : end], nil
-	})
+	register("MIDSTR", midstr)
 	register("INSTR", func(_ *Env, _ *Func, args []string) (string, error) {
 		return itoa(strings.Index(args[0], args[1]) + 1), nil
 	})
@@ -314,6 +298,81 @@ func init() {
 	register("VERSION", func(*Env, *Func, []string) (string, error) {
 		return "Muck2.2fb7.21", nil
 	})
+}
+
+// midstr is mfn_midstr (mfuns2.c:2897), and its second number is a
+// **position**, not a length.
+//
+// This server read it as a length, which made every three-argument
+// call wrong: "{midstr:hello,2,4}" is "ell" upstream and was "ello"
+// here. Two more behaviours were missing with it.
+//
+// A **negative** position counts from the end, by adding len + 1 —
+// so "{midstr:hello,-2,-1}" is "lo".
+//
+// And when the second position is **lower** than the first, upstream
+// walks backwards and returns the span **reversed**:
+// "{midstr:hello,4,2}" is "lle". That reads like a bug and is not —
+// the C has two explicit loops for it — so it is reproduced.
+//
+// The clamping order is load-bearing and is upstream's: a position of
+// zero returns the empty string before any clamping happens, and only
+// then is a position above the length pulled down, a negative one
+// wrapped, and anything still below one raised.
+func midstr(_ *Env, _ *Func, args []string) (string, error) {
+	s := args[0]
+	n := len(s)
+	pos1 := atoiArg(args[1])
+	pos2 := pos1
+	if len(args) > 2 {
+		pos2 = atoiArg(args[2])
+	}
+
+	// clamp is each position's four tests, in upstream's order.
+	// The zero case is reported separately because it returns
+	// from the function rather than settling on a position.
+	clamp := func(p int) (int, bool) {
+		if p == 0 {
+			return 0, false
+		}
+		if p > n {
+			p = n
+		}
+		if p < 0 {
+			p += n + 1
+		}
+		if p < 1 {
+			p = 1
+		}
+		return p, true
+	}
+	var ok bool
+	if pos1, ok = clamp(pos1); !ok {
+		return "", nil
+	}
+	if pos2, ok = clamp(pos2); !ok {
+		return "", nil
+	}
+
+	// An empty input leaves both positions clamped to 1, and
+	// upstream then copies the string's own NUL terminator —
+	// which reads back as the empty string. Indexing s[0] here
+	// would panic instead.
+	if n == 0 {
+		return "", nil
+	}
+
+	var b strings.Builder
+	if pos2 >= pos1 {
+		for i := pos1; i <= pos2; i++ {
+			b.WriteByte(s[i-1])
+		}
+	} else {
+		for i := pos1; i >= pos2; i-- {
+			b.WriteByte(s[i-1])
+		}
+	}
+	return b.String(), nil
 }
 
 // one builds a single-argument text function.
