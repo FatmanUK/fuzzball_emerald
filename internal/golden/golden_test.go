@@ -854,6 +854,17 @@ public foo
   "{sublist:{mklist:a,b,c},0}" show
   "{sublist:{mklist:a,b,c}}" show
 
+  ( an empty list, which Emerald used to index out of range and
+    panic: the clamp drops 1 to 0 and must raise it back to 1 )
+  "{sublist:,1}" show
+  "{sublist:,1,2}" show
+  "{sublist:,-1}" show
+  "{count:{sublist:,1}}" show
+
+  ( and an explicit separator, whose null form is the one
+    thing sublist refuses outright )
+  "{sublist:{mklist:a,b,c},1,2,|}" show
+
   ( set operations, and the case-sensitivity split between them )
   "{count:{lunique:{mklist:a,b,a,A}}}" show
   "{count:{lcommon:{mklist:a,b,c},{mklist:b,c,d}}}" show

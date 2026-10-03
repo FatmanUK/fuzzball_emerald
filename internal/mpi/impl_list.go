@@ -294,15 +294,26 @@ func countItems(list, sep string) int {
 // clampIndex folds a one-based index into range, counting from the
 // end when negative, which is how the slicing functions read their
 // bounds.
+//
+// The three steps are sequential and the last one is a **floor**, not
+// an alternative — which is the whole point, and what an earlier
+// version got wrong by returning early from the first. Upstream
+// assigns and falls through (mfn_sublist, mfuns2.c:873-889), so an
+// index clamped down to 0 by the first step is raised back to 1 by
+// the third. Returning `count` straight out agrees for every
+// non-empty list and answers 0 for an empty one, where a caller then
+// indexes [-1:0] and panics. Verified by compiling countlitems and
+// the clamp and running them: upstream yields 1 and 1 there, and
+// prints the empty string.
 func clampIndex(i, count int) int {
 	if i > count {
-		return count
+		i = count
 	}
 	if i < 0 {
 		i += count + 1
 	}
 	if i < 1 {
-		return 1
+		i = 1
 	}
 	return i
 }

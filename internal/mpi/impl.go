@@ -14,9 +14,23 @@ type impl func(env *Env, fn *Func, args []string) (string, error)
 // unimplemented rather than silently producing nothing.
 var impls = map[string]impl{}
 
+// register attaches an implementation to a name from the generated
+// table.
+//
+// It panics on a **duplicate** as well as on an unknown name, and the
+// duplicate check is the one that earned its place: SUBLIST was
+// registered twice, a stub here and the real thing in impl_list.go,
+// and the real one won only because Go runs a package's init
+// functions in filename order and "." sorts before "_". Renaming
+// either file would have broken {sublist:...} silently. A panic at
+// init is the right severity for a programming error that no test
+// could otherwise see.
 func register(name string, fn impl) {
 	if _, ok := functions[name]; !ok {
 		panic("mpi: registering an unknown function " + name)
+	}
+	if _, dup := impls[name]; dup {
+		panic("mpi: " + name + " registered twice")
 	}
 	impls[name] = fn
 }
@@ -215,18 +229,6 @@ func init() {
 		}
 		return out.String(), nil
 	})
-	// A "{&name}" reference compiles to a SUBLIST call whose
-	// first argument is the variable's value. With nothing
-	// further to slice, that value is the answer; the
-	// list-slicing form needs the list functions, which are not
-	// implemented yet.
-	register("SUBLIST", func(_ *Env, _ *Func, args []string) (string, error) {
-		if len(args) == 1 {
-			return args[0], nil
-		}
-		return "", errf("SUBLIST", "Not implemented yet.")
-	})
-
 	register("SET", func(env *Env, _ *Func, args []string) (string, error) {
 		// Only an already-bound variable may be set, and the
 		// new value is also what the call produces — so

@@ -118,13 +118,6 @@ func init() {
 		// zero when there is none, as C's does.
 		return nil, f.Push(Int(leadingInt(s)))
 	})
-	register("INTOSTR", func(f *Frame) (*Result, error) {
-		n, err := f.popInt()
-		if err != nil {
-			return nil, err
-		}
-		return nil, f.Push(Str(strconv.FormatInt(n, 10)))
-	})
 	register("NUMBER?", func(f *Frame) (*Result, error) {
 		s, err := f.popStr()
 		if err != nil {

@@ -283,3 +283,54 @@ func (h *stubHost) RunMUF(int, Ref, Ref, Ref, string,
 	return "", nil
 }
 func (h *stubHost) Delay(int, Ref, Ref, Ref, int, string, bool) {}
+
+// TestSublistOnAnEmptyList is a regression test for a panic, and for
+// the reason it was there.
+//
+// clampIndex's last step is a *floor*, not an alternative to the
+// first. An earlier version returned `count` straight out of the
+// upper clamp, which agrees with upstream for every non-empty list
+// and answers 0 for an empty one — and SUBLIST then indexed
+// items[-1:0]. commandAs's recover turned that into a logged crash
+// and a wrong answer rather than a dead server, from one character of
+// MPI.
+//
+// Upstream clamps 1 down to 0 and back up to 1, reaches its loop once
+// and prints the empty string; checked by compiling countlitems and
+// the clamp out of mfuns2.c and running them.
+func TestSublistOnAnEmptyList(t *testing.T) {
+	for _, in := range []string{
+		"{sublist:,1}",
+		"{sublist:,1,2}",
+		"{sublist:,-1}",
+		"{sublist:,99}",
+	} {
+		// The point is that this returns at all.
+		if got := parse(t, in); got != "" {
+			t.Errorf("parse(%q) = %q, want \"\"", in, got)
+		}
+	}
+}
+
+// TestClampIndexFloorsAfterClamping pins the ordering directly, since
+// the function is shared and the next caller will not be SUBLIST.
+func TestClampIndexFloorsAfterClamping(t *testing.T) {
+	for _, tc := range []struct{ i, count, want int }{
+		// The empty list: clamped to 0, then floored back to
+		// 1.
+		{1, 0, 1},
+		{99, 0, 1},
+		{-1, 0, 1},
+		// Non-empty, where the two orderings agree.
+		{1, 3, 1},
+		{5, 3, 3},
+		{-1, 3, 3},
+		{-5, 3, 1},
+		{0, 3, 1},
+	} {
+		if got := clampIndex(tc.i, tc.count); got != tc.want {
+			t.Errorf("clampIndex(%d, %d) = %d, want %d",
+				tc.i, tc.count, got, tc.want)
+		}
+	}
+}

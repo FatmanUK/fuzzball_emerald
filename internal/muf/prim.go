@@ -13,10 +13,21 @@ type primFunc func(f *Frame) (*Result, error)
 var prims = map[int]primFunc{}
 
 // register installs a primitive by name.
+//
+// It panics on a **duplicate** as well as on an unknown name. INTOSTR
+// was registered twice — an integers-only version in prim_math.go
+// and the faithful one in prim_misc.go — and the right one won only
+// because Go runs a package's init functions in filename order.
+// Renaming either file would have stopped INTOSTR accepting a dbref,
+// silently. A panic at init is the right severity for a programming
+// error no test could otherwise see.
 func register(name string, fn primFunc) {
 	n := primIndex[ascii.Fold(name)]
 	if n == 0 {
 		panic("muf: registering an unknown primitive " + name)
+	}
+	if prims[n] != nil {
+		panic("muf: " + name + " registered twice")
 	}
 	prims[n] = fn
 }
