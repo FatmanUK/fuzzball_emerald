@@ -101,6 +101,16 @@ func (s *Server) cmdChown(c *ctx) {
 // the link of, or one that points nowhere. Otherwise the object has
 // to be CHOWN_OK, must not be a program, and its chown lock has to
 // pass.
+//
+// The link test is `controls_link` (db.c:1883), not `can_link`. Those
+// read alike and are different functions: `can_link`
+// (predicates.c:122) is "controls it, or it is an unlinked exit",
+// while `controls_link` asks about what the exit *points at* and who
+// owns the room it hangs in. This used to call canLink, which in this
+// branch — reached only when the exit has destinations —
+// collapses to plain controls, so the destination-owner case was
+// lost. `can_link` has two real callers upstream, `link_exit` and
+// `do_examine`, and this is not one of them.
 func (s *Server) mayTakePossession(c *ctx, thing ref.Ref,
 	wizard bool) bool {
 
@@ -108,8 +118,8 @@ func (s *Server) mayTakePossession(c *ctx, thing ref.Ref,
 		return true
 	}
 	o := c.w.Get(thing)
-	if o.Type() == ref.TypeExit &&
-		(len(o.Dest) == 0 || s.canLink(c.w, c.who, thing)) {
+	if o.Type() == ref.TypeExit && (len(o.Dest) == 0 ||
+		s.controlsLink(c.w, c.who, thing)) {
 		return true
 	}
 	if o.Flags&ref.ChownOK == 0 || o.Type() == ref.TypeProgram ||

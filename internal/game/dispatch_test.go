@@ -233,7 +233,7 @@ func TestDeclinedCommandsSayWhy(t *testing.T) {
 // golden harness cannot reach: its player is #1, who controls
 // everything in the fixture.
 //
-// The three commands still on resolveControlled keep the older, bare
+// The commands still on resolveControlled keep the older, bare
 // message on purpose — see its doc comment for why each needs its
 // own commit rather than a shared string.
 func TestMatchControlledWording(t *testing.T) {
@@ -279,9 +279,14 @@ func TestMatchControlledWording(t *testing.T) {
 		}
 	}
 
-	// And the four that are knowingly still divergent.
+	// And the ones that are knowingly still divergent.
+	//
+	// @unlink used to be here and is not: it has controls_link
+	// now, and the locket's home is #0, which this player owns
+	// — so upstream permits the unlink and this test was
+	// pinning Emerald's refusal rather than upstream's. See
+	// unlink_test.go, where the rule is covered properly.
 	for _, cmd := range []string{
-		"@unlink locket",
 		"@recycle locket",
 	} {
 		h.send(cmd)

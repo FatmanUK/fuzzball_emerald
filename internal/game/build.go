@@ -424,10 +424,33 @@ func linkedTo(c *ctx, dest ref.Ref) string {
 }
 
 // cmdUnlink removes an exit's destination or a room's drop-to.
+//
+// Its permission rule is **not** match_controlled's and not
+// resolveControlled's either. `_do_unlink` (set.c:148) asks
+//
+//	!controls(player, exit) && !controls_link(player, exit)
+//
+// so controlling the exit is only one of two ways in: the owner of
+// what an exit *points at* may unlink it, and so may the owner of the
+// room it hangs in. Emerald refused both, which made the
+// destination's owner powerless over an exit somebody else had aimed
+// at their room — the case controls_link exists for.
+//
+// The refusal is its own sentence too: "Permission denied. (You don't
+// control the exit or its link)".
 func (s *Server) cmdUnlink(c *ctx) {
-	// _do_unlink asks for an exit too (set.c:142).
-	target, ok := s.resolveControlled(c, c.arg, ref.TypeExit)
-	if !ok {
+	// init_match(..., TYPE_EXIT, ...) then match_everything, and
+	// nothing else — the same shape resolveControlled had,
+	// minus its permission test.
+	target := match.New(c.w, c.who, c.arg).
+		PreferType(ref.TypeExit).Everything().Result()
+	if !noisyMatch(c, c.arg, target) {
+		return
+	}
+	if !s.controls(c.w, c.who, target) &&
+		!s.controlsLink(c.w, c.who, target) {
+		c.tell("Permission denied. " +
+			"(You don't control the exit or its link)")
 		return
 	}
 	// Like @link, this is four operations wearing one name, and
@@ -842,6 +865,49 @@ func endowment(w *world.World, cost int) int {
 		n = 0
 	}
 	return n
+}
+
+// controlsLink is db.c:1883's controls_link: whether someone may
+// change what an object points at, which is a different question from
+// whether they control the object.
+//
+// It is what lets the owner of a *destination* unlink an exit leading
+// to it, and upstream's own comment explains the asymmetry: for
+// unlinking it decides outright, while for linking it is applied only
+// once the thing is known to be an exit, because otherwise "you can
+// allow someone to arbitrarily re-home other players that live in a
+// room that someone owns".
+//
+// Two details are load-bearing. For an exit, controlling **any one**
+// of its destinations is enough — the loop returns on the first —
+// and the fallback compares `who` to the owner of the exit's location
+// *without* going through controls, so it is a raw ownership test
+// rather than a control one. A program is never linkable by this
+// route, and neither is anything else: the default is false.
+func (s *Server) controlsLink(w *world.World, who,
+	what ref.Ref) bool {
+
+	o := w.Get(what)
+	if o == nil {
+		return false
+	}
+	switch o.Type() {
+	case ref.TypeExit:
+		for _, dest := range o.Dest {
+			if s.controls(w, who, dest) {
+				return true
+			}
+		}
+		// OWNER(LOCATION(what)), compared to who directly.
+		loc := w.Get(o.Location)
+		return loc != nil && who == loc.Owner
+	case ref.TypeRoom:
+		return s.controls(w, who, o.Dropto)
+	case ref.TypePlayer, ref.TypeThing:
+		return s.controls(w, who, o.Home)
+	default:
+		return false
+	}
 }
 
 // canLinkTo reports whether someone may attach something to a
