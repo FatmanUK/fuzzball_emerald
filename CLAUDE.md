@@ -119,6 +119,40 @@ go test -run TestExitPriorityBeatsProximity -v ./internal/match/
 The starter world's `#1` password is `potrzebie`, documented in the upstream
 README, so it is a fixture rather than a secret.
 
+## Committing
+
+**Commit only when asked.** Finish a step, verify it, report it, and wait. The
+exception is a step the current plan explicitly says to commit on its own.
+
+**Every commit is signed. Never `--no-gpg-sign`** — not to get past a failure,
+not "just this once", not for a doc-only change.
+
+**GPG pinentry times out regularly here, and a failed signature is not
+something to retry.** On the first failure: stop, leave the work staged, and
+say so. The author signs and says to go again, and the identical `git commit`
+then succeeds. Retrying unprompted just burns another pinentry timeout.
+
+**Check the added lines' width against the staged diff, not with
+`make width-check`.** That target defaults to `RANGE=HEAD`, which is the
+uncommitted *tracked* work — so it reports clean for a new untracked file and
+for anything already committed. Long lines have got through that way more than
+once:
+
+```bash
+git diff --cached --unified=0 -- '*.go' | grep -E '^\+[^+]' \
+  | sed 's/^+//' | expand -t8 | awk 'length > 70'
+```
+
+**A commit message says what was *found*, not only what was done.** The
+divergences this port keeps turning up are the valuable output, and the message
+is where they are recorded for whoever reads the history. Where upstream's
+behaviour differs from what its source reads like, say so and cite the file and
+line.
+
+**The working tree carries two deliberate exceptions**, neither of which is
+ever to be committed, touched or reverted: `testdata/applegrove.md` and
+`testdata/dreamtrack/`.
+
 ## Architecture
 
 ### One goroutine owns the world
