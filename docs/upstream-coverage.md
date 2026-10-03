@@ -48,6 +48,24 @@ documentation being wrong, not a divergence, and it should not be
 
 ## `mufman.html` — the primitives and the directives are complete
 
+**Two caveats, both found by auditing the claim rather than trusting
+it.** `NEWPROGRAM` was a registered stub that aborted when a program
+reached it, and `CHECKARGS` still is. A stub is *registered*, so the
+412-of-417 count never moved and nothing contradicted the claim. See
+"The primitive count is now self-maintaining" below for the fix;
+`NEWPROGRAM` is done and `CHECKARGS` is the one left.
+
+Two golden suites turned out to be testing nothing, for the same
+reason in both cases: `force_test.go` and `connects_test.go` raised
+the mucker level of `test`, the *exit*, where the program is
+`test.muf`. Their programs aborted on the first privileged primitive
+with "Wizbit only primitive." on both servers, so the transcripts
+matched and the cases passed while FORCE, FORCEDBY, FORCEDBY_ARRAY,
+DESCRHOST and DESCRUSER were never compared. Both are fixed and all
+five now agree. **A golden case that aborts identically on both
+servers passes while testing nothing** — worth checking, when a case
+exists to exercise a primitive, that the primitive ran.
+
 **Every primitive** Fuzzball 7 defines is implemented: 412 of the 417
 names, the other five being compiler internals (`" FOR"`,
 `" FOREACH"` and the rest) that no program can name. Nine more are

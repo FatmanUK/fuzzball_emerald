@@ -7,11 +7,20 @@ import (
 )
 
 // forceScript exercises FORCE, FORCEDBY and FORCEDBY_ARRAY against
-// both servers. WriteFixture's own "test" program compiles at mlevel
-// 3 (Mucker and SMucker, no Wizard bit), one short of FORCE's floor
-// of 4 — @set raises it before running: the Wizard bit plus any
-// mucker bit is level 4 outright, which is also why both @set lines
-// are needed and neither alone would do.
+// both servers. WriteFixture's own program compiles at mlevel 3
+// (Mucker and SMucker, no Wizard bit), one short of FORCE's floor of
+// 4, so @set raises it first: the Wizard bit plus any mucker bit is
+// level 4 outright, which is why both lines are needed and neither
+// alone would do.
+//
+// **It has to name `test.muf` and not `test`.** `test` is the exit in
+// front of the program; `@set test=wizard` reports "Flag set." and
+// sets WIZARD on the exit, where it means nothing to find_mlev. This
+// case said `test` until the NEWPROGRAM work made the same mistake
+// and noticed: the program aborted on its *first* primitive with
+// "Wizbit only primitive." on both servers, so the transcripts
+// matched and this passed while exercising none of the three
+// primitives it names.
 //
 // The program forces itself: "test" checks its own FORCEDBY first.
 // Unset (#-1, nobody has forced it yet), it forces #1 to run "test"
@@ -27,8 +36,8 @@ import (
 // marker pose sent afterwards would be attributed to whoever was left
 // holding the line.
 var forceScript = Script{
-	"@set test=wizard",
-	"@set test=3",
+	"@set test.muf=wizard",
+	"@set test.muf=3",
 	"test",
 }
 

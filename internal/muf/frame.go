@@ -66,6 +66,12 @@ type Host interface {
 
 	// Create makes an object and returns its ref.
 	Create(t ref.ObjType, name string, parent, owner ref.Ref) (ref.Ref, error)
+	// CreateProgram is create_program (db.c:252), which Create
+	// cannot stand in for: it has no parent to take, and it does
+	// four things besides creating the object — the stock
+	// description, new_program_flags, the mucker cap at the
+	// owner's level, and an empty source to edit.
+	CreateProgram(owner ref.Ref, name string) (ref.Ref, error)
 	// Recycle destroys one.
 	Recycle(obj ref.Ref) error
 	// SetOwner and SetLinks change what an object belongs to and

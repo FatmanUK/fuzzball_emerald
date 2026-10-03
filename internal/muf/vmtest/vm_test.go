@@ -24,10 +24,24 @@ type fakeHost struct {
 	told  []string
 	props map[string]props.Value
 	names map[ref.Ref]string
+
+	// owners overrides Owner per ref, which is the only way to
+	// tell ProgUID from the caller: with one owner for everything
+	// the two answers coincide.
+	owners map[ref.Ref]ref.Ref
+
+	// What CreateProgram was last asked for, so a test can assert
+	// the identity NEWPROGRAM creates as.
+	newProgramOwner ref.Ref
+	newProgramName  string
 }
 
 func newHost() *fakeHost {
-	return &fakeHost{props: map[string]props.Value{}, names: map[ref.Ref]string{}}
+	return &fakeHost{
+		props:  map[string]props.Value{},
+		names:  map[ref.Ref]string{},
+		owners: map[ref.Ref]ref.Ref{},
+	}
 }
 
 func (h *fakeHost) Notify(_ ref.Ref, msg string) {
@@ -46,7 +60,16 @@ func (h *fakeHost) SetName(o ref.Ref, n string) error {
 func (h *fakeHost) Location(ref.Ref) ref.Ref {
 	return ref.GlobalEnvironment
 }
-func (h *fakeHost) Owner(ref.Ref) ref.Ref { return ref.God }
+
+// Owner answers from a map when one has been set, and God otherwise
+// — which is what every test but the NEWPROGRAM identity one wants,
+// and what the single-owner version used to answer unconditionally.
+func (h *fakeHost) Owner(r ref.Ref) ref.Ref {
+	if o, ok := h.owners[r]; ok {
+		return o
+	}
+	return ref.God
+}
 func (h *fakeHost) Home(ref.Ref) ref.Ref {
 	return ref.GlobalEnvironment
 }
@@ -91,6 +114,18 @@ func (h *fakeHost) MatchPlayerPrefix(string) ref.Ref {
 
 func (h *fakeHost) Create(ref.ObjType, string, ref.Ref, ref.Ref) (ref.Ref, error) {
 	return ref.Ref(50), nil
+}
+
+// newProgramOwner records who CreateProgram was asked to create as,
+// which is the one thing about NEWPROGRAM the golden harness cannot
+// see: it drives a single wizard who owns everything, so ProgUID and
+// the caller are the same ref there.
+func (h *fakeHost) CreateProgram(owner ref.Ref,
+	name string) (ref.Ref, error) {
+
+	h.newProgramOwner = owner
+	h.newProgramName = name
+	return ref.Ref(51), nil
 }
 func (h *fakeHost) Recycle(ref.Ref) error       { return nil }
 func (h *fakeHost) SetOwner(ref.Ref, ref.Ref)   {}
@@ -712,4 +747,61 @@ func TestSlicingYields(t *testing.T) {
 
 func TestRecursionIsBounded(t *testing.T) {
 	runFails(t, ": rec rec ; : main rec ;", "call depth exceeded")
+}
+
+// TestNewProgramCreatesAsProgUID covers the one thing about
+// NEWPROGRAM the golden harness structurally cannot see.
+//
+// Upstream calls create_program(ProgUID, ...) — not with the
+// player. The two differ whenever the program is STICKY, HAVEN,
+// SetUID or HardUID, which is most launch sites: a property that runs
+// a program and everything the timequeue fires are HardUID. The
+// oracle drives a single wizard who is #1 and owns everything in the
+// fixture, so there the two answers coincide and a transcript cannot
+// tell them apart.
+//
+// The shared create helper that NEWOBJECT, NEWROOM and NEWEXIT go
+// through passes f.Caller, which is a divergence of its own and was
+// deliberately not copied here.
+func TestNewProgramCreatesAsProgUID(t *testing.T) {
+	const src = `: main "made" newprogram pop ;`
+
+	// Mucker 4, because NEWPROGRAM's floor is the dispatcher's
+	// and the program's own compiled level is what it reads.
+	p, err := compiler.Compile(src, compiler.Options{MLevel: 4})
+	if err != nil {
+		t.Fatalf("compiling: %v", err)
+	}
+
+	const (
+		trig      = ref.Ref(40)
+		trigOwner = ref.Ref(41)
+		caller    = ref.Ref(42)
+	)
+	h := newHost()
+	// Three distinct owners, so a wrong answer names the wrong
+	// one rather than coinciding with the right one.
+	h.owners[trig] = trigOwner
+	h.owners[caller] = caller
+
+	f := muf.NewFrame(p, h)
+	// HardUID is find_uid's branch that answers with the owner of
+	// whatever *triggered* the program, which is the case a
+	// property or the timequeue sets.
+	f.Perms = muf.HardUID
+	f.SetReserved(caller, ref.GlobalEnvironment, trig, "")
+
+	if _, err := f.Run(muf.Limits{}); err != nil {
+		t.Fatalf("running: %v", err)
+	}
+	if h.newProgramName != "made" {
+		t.Errorf("created %q, want made", h.newProgramName)
+	}
+	if h.newProgramOwner == caller {
+		t.Fatal("created as the caller, not as ProgUID")
+	}
+	if h.newProgramOwner != trigOwner {
+		t.Errorf("created as %v, want the trigger's owner %v",
+			h.newProgramOwner, trigOwner)
+	}
 }

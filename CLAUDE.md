@@ -209,6 +209,21 @@ it is given a copy of the fixture. Without that, a case defining a macro leaves
 it behind for this server to import, and the two servers stop running the same
 world.
 
+**A fixture's program is `test.muf`; `test` is the exit in front of it.** A
+case that needs mucker 4 — the fixture compiles at 3 — has to raise the
+*program*, so `@set test.muf=wizard` and `@set test.muf=3`, both lines, since
+the Wizard bit plus any mucker bit is level 4 outright and neither alone is.
+`@set test=wizard` reports "Flag set." and sets WIZARD on the **exit**, where
+it means nothing to `find_mlev`: an exit's mucker level is exit priority.
+
+That mistake is silent and it has already cost two suites. `force_test.go` and
+`connects_test.go` both said `test`, so their programs aborted on the *first*
+privileged primitive with "Wizbit only primitive." on both servers — matching
+transcripts, a passing test, and none of FORCE, FORCEDBY, FORCEDBY_ARRAY,
+DESCRHOST or DESCRUSER ever compared. **A golden case that aborts identically
+on both servers passes while testing nothing**, so when a case exists to
+exercise a primitive, check that the primitive actually ran.
+
 ## MPI
 
 `internal/mpi` evaluates the macro language inside property values. It is
@@ -994,6 +1009,24 @@ low mucker level is worth checking against the C.
 
 **A program runs at its own mucker level**, bounded by its owner's — not at its
 owner's level.
+
+**`NEWPROGRAM` creates as `ProgUID`, not as the caller**, and it is the one
+primitive that gets this right. `create_program(ProgUID, ...)` — so a program
+run HardUID makes its new program belong to whoever *triggered* it. The shared
+`create` helper that `NEWOBJECT`, `NEWROOM` and `NEWEXIT` go through passes
+`f.Caller` instead, which is a divergence of its own and was deliberately not
+copied. No transcript can see the difference: the oracle drives one wizard who
+owns everything, so both answers coincide there, and it is a unit test
+(`TestNewProgramCreatesAsProgUID`). Its type error is "Expected string
+argument." with **no** argument index, alone among the four uses of that
+wording upstream — so `popStrArg`'s "Non-string argument (N)" is the wrong
+helper. And it has no `CHECKOFLOW`: a mucker-4 program may make as many
+programs in one run as it likes, where the `NEWOBJECT` family is limited.
+
+**`ok_object_name` lives inside `create_program`, not in its callers.** So
+`@program` gets the check too, and had been missing it — `@program me` made a
+program called "me". `Server.createProgram` is the shared port and carries it
+now.
 
 **`ProgUID` is `find_uid`, and all four branches are ported.** Which identity a
 program acts with depends on `muf.Frame.Perms` — upstream's `fr->perms`, chosen

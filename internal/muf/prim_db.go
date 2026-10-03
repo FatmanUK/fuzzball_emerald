@@ -776,11 +776,47 @@ func init() {
 	register("NEWOBJECT", create(ref.TypeThing))
 	register("NEWROOM", create(ref.TypeRoom))
 	register("NEWEXIT", create(ref.TypeExit))
+	// NEWPROGRAM is prim_newprogram (p_db.c:3077). Three things
+	// about it differ from the NEWOBJECT family beside it.
+	//
+	// Its type error is "Expected string argument." with **no**
+	// argument index — the only one of the four uses of that
+	// wording upstream that carries none (p_db.c:3090 against
+	// :2521, :2525 and p_strings.c:774), so popStrArg's
+	// "Non-string argument (N)" is the wrong helper here.
+	//
+	// It creates as **ProgUID**, not as the caller. The shared
+	// create helper below passes f.Caller, which is a divergence
+	// of its own and is not copied: who a program acts as is
+	// find_uid's answer, and it differs from the caller whenever
+	// the program is STICKY, HAVEN, SetUID or HardUID — which
+	// is most launch sites.
+	//
+	// And it has no CHECKOFLOW and does not touch
+	// fr->already_created, so a mucker-4 program may make as many
+	// programs in one run as it likes. The limiter the NEWOBJECT
+	// family carries is deliberately absent.
+	//
+	// The mucker-4 gate is the dispatcher's: mlev_gen.go records
+	// the floor and prim.go emits "Permission denied. Requires
+	// Wizbit." before the body runs.
 	register("NEWPROGRAM", func(f *Frame) (*Result, error) {
-		// A program's source is edited rather than supplied,
-		// and the editor arrives with the rest of the
-		// interactive machinery.
-		return nil, errf("NEWPROGRAM is not implemented yet")
+		v, err := f.Pop()
+		if err != nil {
+			return nil, err
+		}
+		if v.Type != TypeString {
+			return nil, errf("Expected string argument.")
+		}
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		r, err := h.CreateProgram(f.progUID(h), v.Str)
+		if err != nil {
+			return nil, errf("%s", err.Error())
+		}
+		return nil, f.Push(Obj(r))
 	})
 
 	register("RECYCLE", func(f *Frame) (*Result, error) {

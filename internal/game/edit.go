@@ -804,7 +804,7 @@ func (s *Server) cmdProgram(c *ctx) {
 	}
 	if rname != "" || program == ref.Nothing {
 		var err error
-		program, err = s.createProgram(c, name)
+		program, err = s.createProgram(c.w, c.who, name)
 		if err != nil {
 			c.send(err.Error())
 			return
@@ -982,23 +982,41 @@ func (s *Server) requireNotGuest(c *ctx, cmd string) bool {
 // createProgram makes a new program owned by the player, as
 // create_program does: it goes into the player's inventory, gets a
 // stock description, and takes its flags from the new_program_flags
-// parameter.
-func (s *Server) createProgram(c *ctx, name string) (ref.Ref, error) {
-	o := c.w.Create(name, ref.TypeProgram, c.who)
+// parameter. badProgramName is ok_object_name's refusal for a
+// program, which create_program makes and nothing else does.
+const badProgramName = "You cannot use that name for a program."
+
+func (s *Server) createProgram(w *world.World, who ref.Ref,
+	name string) (ref.Ref, error) {
+
+	// ok_object_name, which lives inside create_program upstream
+	// (db.c:257) rather than in either of its callers — so
+	// @program gets it as well as NEWPROGRAM. It had been missing
+	// from both, and "@program me" made a program called "me".
+	//
+	// nameForbidden is the type-independent half of
+	// ok_object_name; the TYPE_PROGRAM half is only the
+	// 7bit_other_names test, which NameOK's doc comment explains
+	// Emerald leaves out everywhere rather than in one place.
+	if nameForbidden(name) {
+		return ref.Nothing, errMsg(badProgramName)
+	}
+
+	o := w.Create(name, ref.TypeProgram, who)
 	o.Props.SetString("_/de", sprintf("A scroll containing a spell called %s", name))
-	applyTuneFlags(o, c.w.Tune.String("new_program_flags"))
+	applyTuneFlags(o, w.Tune.String("new_program_flags"))
 
 	// A program may not be created with more authority than its
 	// author holds, which is the same rule find_mlev applies when
 	// it runs.
 	if lv := o.Flags.MLevel(); lv == 0 ||
-		lv > c.w.Get(c.who).Flags.MLevel() {
-		o.Flags = o.Flags.SetMLevel(c.w.Get(c.who).Flags.MLevel())
+		lv > w.Get(who).Flags.MLevel() {
+		o.Flags = o.Flags.SetMLevel(w.Get(who).Flags.MLevel())
 	}
-	if err := c.w.MoveTo(o.Ref, c.who); err != nil {
+	if err := w.MoveTo(o.Ref, who); err != nil {
 		return ref.Nothing, err
 	}
-	c.w.SaveSource(o.Ref, "")
+	w.SaveSource(o.Ref, "")
 	return o.Ref, nil
 }
 

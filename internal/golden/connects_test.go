@@ -5,12 +5,13 @@ import (
 	"testing"
 )
 
-// connectsScript raises "test" to mlevel 4 the same way forceScript
-// does — see its own doc comment for why both @set lines are
-// needed.
+// connectsScript raises the *program* to mlevel 4 the same way
+// forceScript does — see its own doc comment for why both @set
+// lines are needed, and for why they have to name test.muf rather
+// than the exit in front of it.
 var connectsScript = Script{
-	"@set test=wizard",
-	"@set test=3",
+	"@set test.muf=wizard",
+	"@set test.muf=3",
 	"test",
 }
 

@@ -247,6 +247,16 @@ func (h *mufHost) Create(t ref.ObjType, name string, parent, owner ref.Ref) (ref
 	return o.Ref, nil
 }
 
+// CreateProgram implements muf.Host for NEWPROGRAM, and is the same
+// create_program that @program goes through — so the two cannot
+// drift apart over the stock description, the flags or the mucker
+// cap.
+func (h *mufHost) CreateProgram(owner ref.Ref,
+	name string) (ref.Ref, error) {
+
+	return h.s.createProgram(h.w, owner, name)
+}
+
 func (h *mufHost) Recycle(obj ref.Ref) error {
 	return h.w.Recycle(obj)
 }
