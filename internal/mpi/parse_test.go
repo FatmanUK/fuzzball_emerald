@@ -268,7 +268,13 @@ func (h *stubHost) OnlinePlayers() []Ref { return nil }
 func (h *stubHost) Idle(Ref) int         { return 0 }
 func (h *stubHost) OnTime(Ref) int       { return 0 }
 func (h *stubHost) Width(Ref) int        { return 0 }
-func (h *stubHost) Height(Ref) int       { return 0 }
+
+// DescrWidth is the descriptor's own reported width, which the
+// justification functions read instead of looking a player up. Zero
+// here, so they fall back to upstream's 78.
+func (h *stubHost) DescrWidth(int) int { return 0 }
+
+func (h *stubHost) Height(Ref) int { return 0 }
 func (h *stubHost) TuneGet(string) (string, bool) {
 	return "", false
 }

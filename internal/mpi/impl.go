@@ -1,6 +1,7 @@
 package mpi
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -103,15 +104,10 @@ func init() {
 	})
 	register("MIDSTR", func(_ *Env, _ *Func, args []string) (string, error) {
 		s := args[0]
-		start, err := atoiArg("MIDSTR", args[1])
-		if err != nil {
-			return "", err
-		}
+		start := atoiArg(args[1])
 		length := len(s)
 		if len(args) > 2 {
-			if length, err = atoiArg("MIDSTR", args[2]); err != nil {
-				return "", err
-			}
+			length = atoiArg(args[2])
 		}
 		// MPI indexes strings from one.
 		if start < 1 || length < 0 || start > len(s) {
@@ -137,20 +133,14 @@ func init() {
 	register("DIV", foldDiv(false))
 	register("MOD", foldDiv(true))
 	register("ABS", func(_ *Env, _ *Func, args []string) (string, error) {
-		n, err := atoiArg("ABS", args[0])
-		if err != nil {
-			return "", err
-		}
+		n := atoiArg(args[0])
 		if n < 0 {
 			n = -n
 		}
 		return itoa(n), nil
 	})
 	register("SIGN", func(_ *Env, _ *Func, args []string) (string, error) {
-		n, err := atoiArg("SIGN", args[0])
-		if err != nil {
-			return "", err
-		}
+		n := atoiArg(args[0])
 		switch {
 		case n > 0:
 			return "1", nil
@@ -315,10 +305,7 @@ func init() {
 		return itoa(int(env.Host.Now())), nil
 	})
 	register("CONVSECS", func(env *Env, _ *Func, args []string) (string, error) {
-		n, err := atoiArg("CONVSECS", args[0])
-		if err != nil {
-			return "", err
-		}
+		n := atoiArg(args[0])
 		return time.Unix(int64(n), 0).UTC().Format("Mon Jan 02 15:04:05 2006"), nil
 	})
 
@@ -337,16 +324,9 @@ func one(fn func(string) string) impl {
 // fold builds an arithmetic function that combines every argument.
 func fold(op func(a, b int) int) impl {
 	return func(_ *Env, fn *Func, args []string) (string, error) {
-		total, err := atoiArg(fn.Name, args[0])
-		if err != nil {
-			return "", err
-		}
+		total := atoiArg(args[0])
 		for _, a := range args[1:] {
-			n, err := atoiArg(fn.Name, a)
-			if err != nil {
-				return "", err
-			}
-			total = op(total, n)
+			total = op(total, atoiArg(a))
 		}
 		return itoa(total), nil
 	}
@@ -356,15 +336,9 @@ func fold(op func(a, b int) int) impl {
 // failing when the divisor is zero, as MUF's do.
 func foldDiv(mod bool) impl {
 	return func(_ *Env, fn *Func, args []string) (string, error) {
-		total, err := atoiArg(fn.Name, args[0])
-		if err != nil {
-			return "", err
-		}
+		total := atoiArg(args[0])
 		for _, a := range args[1:] {
-			n, err := atoiArg(fn.Name, a)
-			if err != nil {
-				return "", err
-			}
+			n := atoiArg(a)
 			if n == 0 {
 				return "0", nil
 			}
@@ -381,15 +355,10 @@ func foldDiv(mod bool) impl {
 // stepBy builds {inc} and {dec}, which take an optional amount.
 func stepBy(sign int) impl {
 	return func(_ *Env, fn *Func, args []string) (string, error) {
-		n, err := atoiArg(fn.Name, args[0])
-		if err != nil {
-			return "", err
-		}
+		n := atoiArg(args[0])
 		by := 1
 		if len(args) > 1 {
-			if by, err = atoiArg(fn.Name, args[1]); err != nil {
-				return "", err
-			}
+			by = atoiArg(args[1])
 		}
 		return itoa(n + sign*by), nil
 	}
@@ -398,15 +367,9 @@ func stepBy(sign int) impl {
 // extreme builds {max} and {min}.
 func extreme(wantMax bool) impl {
 	return func(_ *Env, fn *Func, args []string) (string, error) {
-		best, err := atoiArg(fn.Name, args[0])
-		if err != nil {
-			return "", err
-		}
+		best := atoiArg(args[0])
 		for _, a := range args[1:] {
-			n, err := atoiArg(fn.Name, a)
-			if err != nil {
-				return "", err
-			}
+			n := atoiArg(a)
 			if (wantMax && n > best) ||
 				(!wantMax && n < best) {
 				best = n
@@ -438,15 +401,8 @@ func compare(ok func(int) bool) impl {
 // compareNum builds the ordering tests, which are numeric.
 func compareNum(ok func(a, b int) bool) impl {
 	return func(_ *Env, fn *Func, args []string) (string, error) {
-		a, err := atoiArg(fn.Name, args[0])
-		if err != nil {
-			return "", err
-		}
-		b, err := atoiArg(fn.Name, args[1])
-		if err != nil {
-			return "", err
-		}
-		return boolOf(ok(a, b)), nil
+		return boolOf(ok(atoiArg(args[0]),
+			atoiArg(args[1]))), nil
 	}
 }
 
@@ -471,14 +427,39 @@ func shortCircuit(stopOn bool) impl {
 type padFunc func(s string, width int, fill string) string
 
 func pad(fn padFunc) impl {
-	return func(_ *Env, f *Func, args []string) (string, error) {
-		width, err := atoiArg(f.Name, args[1])
-		if err != nil {
-			return "", err
+	return func(env *Env, f *Func,
+		args []string) (string, error) {
+
+		// {left:string[,fieldwidth[,padstr]]}
+		//
+		// The fieldwidth is optional, and all three of these
+		// take Min: 1 — so indexing args[1] unconditionally
+		// **panicked** on the one-argument form, which is
+		// legal and which a description can easily contain.
+		// Upstream falls back to the descriptor's reported
+		// width and then to 78 (mfuns.c:3833).
+		width := 78
+		if len(args) > 1 {
+			width = atoiArg(args[1])
+		} else if w := env.Host.DescrWidth(env.Descr); w > 0 {
+			width = w
 		}
+		// This is the range check upstream relies on instead
+		// of refusing a non-numeric argument, and it was
+		// missing: {left:hi,9999999} really did build a
+		// ten-million-character string.
+		if width > bufferLen-1 {
+			return "", errf(f.Name, "Fieldwidth too big.")
+		}
+		// An explicitly empty pad string is an abort, not a
+		// silent space. Treating it as a space meant
+		// {left:hi,5,} answered where upstream refuses.
 		fill := " "
-		if len(args) > 2 && args[2] != "" {
+		if len(args) > 2 {
 			fill = args[2]
+		}
+		if fill == "" {
+			return "", errf(f.Name, "Null pad string.")
 		}
 		return fn(args[0], width, fill), nil
 	}
@@ -599,13 +580,53 @@ func boolOf(b bool) string {
 	return "0"
 }
 
-// atoiArg reads a numeric argument.
-func atoiArg(fn, s string) (int, error) {
-	n, err := strconv.Atoi(strings.TrimSpace(s))
-	if err != nil {
-		return 0, errf(fn, "Non-numeric argument.")
+// atoiArg reads a numeric argument the way C's atoi does, which is
+// the only way MPI ever reads one: leading whitespace is skipped, an
+// optional sign is accepted, digits are taken until the first
+// character that is not one, and anything unparseable is **zero**.
+//
+// It used to abort with "Non-numeric argument." That string does not
+// exist anywhere in Fuzzball — `grep -rc "Non-numeric"
+// fuzzball/src/` finds nothing, and the full list of upstream's MPI
+// aborts has no numeric-parse error of any kind. Every mfun reads its
+// numbers with a bare atoi and carries on.
+//
+// The difference is not academic. MPI is evaluated over descriptions
+// and succeed/fail messages, which routinely receive whatever a
+// player typed, so an invented abort turned silent upstream behaviour
+// into a visible error across about thirty functions. Where upstream
+// does refuse, it refuses on *range* after parsing — "Out of range
+// time argument.", "Too many dice!", "Fieldwidth too big." — and
+// those checks are each function's own.
+func atoiArg(s string) int {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' ||
+		s[i] == '\n' || s[i] == '\r' || s[i] == '\v' ||
+		s[i] == '\f') {
+		i++
 	}
-	return n, nil
+	start := i
+	if i < len(s) && (s[i] == '-' || s[i] == '+') {
+		i++
+	}
+	digits := i
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == digits {
+		return 0
+	}
+	n, err := strconv.Atoi(s[start:i])
+	if err != nil {
+		// Out of int range, which atoi leaves undefined.
+		// Saturating is the one answer that cannot be
+		// mistaken for a small number.
+		if s[start] == '-' {
+			return math.MinInt
+		}
+		return math.MaxInt
+	}
+	return n
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

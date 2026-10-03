@@ -624,6 +624,74 @@ transferred, and told "No destinations linked.", because
 every other type reaches the matcher and gets
 `noisy_match_result`'s.
 
+### MPI read every number wrongly, in four separate ways
+
+One of these was recorded in advance; the other three were found by
+putting a non-numeric argument through every function that takes a
+number and letting the oracle answer.
+
+**1. The invented abort — fixed.** `atoiArg` refused anything
+unparseable with "Non-numeric argument." That string exists nowhere
+in Fuzzball: `grep -rc "Non-numeric" fuzzball/src/` finds nothing,
+and the complete list of upstream's MPI aborts contains no
+numeric-parse error of any kind. Every `mfn_*` reads its numbers with
+a bare `atoi`, which takes digits until the first character that is
+not one and yields **zero** for anything else — so `{add:abc,3}` is
+3 and `{add:12abc,1}` is 13. MPI is evaluated over descriptions and
+succeed/fail messages, which routinely receive whatever a player
+typed, so the invented abort turned silent upstream behaviour into a
+visible error across about thirty functions.
+
+Where upstream does refuse, it refuses on **range** after parsing:
+"Out of range time argument.", "Too many dice!", "Fieldwidth too
+big.", "Invalid process ID.", "Time period too short.", "Delaying
+more than a year in MPI is just silly."
+
+**2. The justification functions — fixed, and one was a crash.**
+`{left}`, `{right}` and `{center}` all take `Min: 1`, so the
+one-argument form is legal — and `pad` indexed `args[1]`
+unconditionally, so `{left:hi}` **panicked**. Upstream falls back to
+the descriptor's reported width and then to 78 (`mfuns.c:3833`),
+which needed a `DescrWidth(descr)` on the MPI host: upstream reads
+`d->detected_width` off the descriptor the evaluation is running for,
+where Emerald's existing `Width(obj)` resolves a player's
+least-idle connection instead. Two refusals were missing with it —
+`{left:hi,9999999}` really did build a ten-million-character string
+where upstream aborts "Fieldwidth too big." above `BUFFER_LEN - 1`,
+and an explicitly empty pad string was silently treated as a space
+where upstream aborts "Null pad string."
+
+**3. `{max}`, `{min}` and the four ordering tests do not use `atoi`
+at all — not fixed.** They use `msg_compare`, which compares
+numerically only when **both** arguments are numbers and as strings
+otherwise. And `{max}`/`{min}` return the argument *text* rather
+than a number, taking exactly two arguments rather than folding over
+many. Measured against the oracle: `{max:abc,2}` is `abc`,
+`{min:abc,2}` is `2`, `{gt:abc,1}` is `1` and `{lt:abc,1}` is `0`.
+Emerald answers `2`, `0`, `0` and `1`. `{eq}` and `{ne}` already
+have the string-fallback shape and are right; the other six need it.
+
+**4. `{inc}` and `{dec}` are variable operations — not fixed.**
+`mfn_inc` (`mfuns.c:2279`) reads a **variable name**, aborts "No
+such variable currently defined." when there is none, adds an
+optional amount, and **writes the result back** to the variable.
+Emerald implements both as arithmetic on the argument, so
+`{inc:abc}` answers `1` where upstream refuses.
+
+**5. `{midstr}` takes two positions, not a position and a length —
+not fixed.** `mfn_midstr` (`mfuns2.c:2897`) clamps both arguments as
+1-based positions, lets a negative one index from the end
+(`pos += len + 1`), and **walks backwards when the second is lower
+than the first**, returning the span reversed. Measured against the
+oracle: `{midstr:hello,2,4}` is `ell`, `{midstr:hello,4,2}` is
+`lle`, and `{midstr:hello,-2,-1}` is `lo`. Emerald answers `ello`,
+`lo` and the empty string.
+
+Items 3, 4 and 5 each need their own commit. The golden case
+(`internal/golden/atoi_test.go`) deliberately omits them and says so,
+so that it tests the fix it belongs to rather than passing over a
+different bug.
+
 ### MPI's {force} is half implemented
 
 Found by the propqueue golden case, which tried to use it to drive the

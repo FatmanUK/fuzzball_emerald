@@ -18,9 +18,12 @@ const (
 
 // Limits, from include/mpi.h.
 const (
-	maxFuncNameLen  = 16
-	maxVariables    = 32
-	recursionLimit  = 26
+	maxFuncNameLen = 16
+	maxVariables   = 32
+	recursionLimit = 26
+	// bufferLen is BUFFER_LEN (config.h:131), which bounds a
+	// justification fieldwidth.
+	bufferLen       = 8192
 	maxArgs         = 9
 	defaultMaxInstr = 2048
 )
@@ -171,9 +174,18 @@ type Host interface {
 	OnlinePlayers() []Ref
 	Idle(obj Ref) int
 	OnTime(obj Ref) int
-	// Width and Height are a connection's reported terminal size.
+	// Width and Height are a connection's reported terminal size,
+	// found from an object — upstream's mfn_width and
+	// mfn_height resolve a player to a descriptor themselves.
 	Width(obj Ref) int
 	Height(obj Ref) int
+	// DescrWidth is a *descriptor's* reported width, which is a
+	// different question: the justification functions read
+	// `d->detected_width` off the descriptor the evaluation is
+	// running for rather than looking a player up, so a player
+	// with two connections justifies to the one being written to.
+	// Zero when the descriptor reports none.
+	DescrWidth(descr int) int
 
 	// TuneGet reads an @tune parameter as its formatted string,
 	// and MuckName is the server's name — {sysparm} and

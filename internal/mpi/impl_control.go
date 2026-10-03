@@ -44,15 +44,15 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		start, err := parseInt(env, "FOR", args[1])
+		start, err := parseInt(env, args[1])
 		if err != nil {
 			return "", err
 		}
-		end, err := parseInt(env, "FOR", args[2])
+		end, err := parseInt(env, args[2])
 		if err != nil {
 			return "", err
 		}
-		step, err := parseInt(env, "FOR", args[3])
+		step, err := parseInt(env, args[3])
 		if err != nil {
 			return "", err
 		}
@@ -348,11 +348,13 @@ func (env *Env) sepOr(args []string, at int) string {
 	return sep
 }
 
-// parseInt evaluates an argument and reads it as a number.
-func parseInt(env *Env, fn, arg string) (int, error) {
+// parseInt evaluates an argument and reads it as a number. The read
+// cannot fail — atoiArg is C's atoi — so the only error it can
+// report is the inner evaluation's.
+func parseInt(env *Env, arg string) (int, error) {
 	got, err := Parse(env, arg)
 	if err != nil {
 		return 0, err
 	}
-	return atoiArg(fn, got)
+	return atoiArg(got), nil
 }

@@ -52,10 +52,7 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		want, err := atoiArg("SELECT", args[0])
-		if err != nil {
-			return "", err
-		}
+		want := atoiArg(args[0])
 		// Upstream searches down from the index asked for,
 		// first a short contiguous run and then through the
 		// properties that actually exist, so a sparse list
@@ -100,15 +97,10 @@ func init() {
 		items := strings.Split(args[0], sep)
 		count := countItems(args[0], sep)
 
-		first, err := atoiArg("SUBLIST", args[1])
-		if err != nil {
-			return "", err
-		}
+		first := atoiArg(args[1])
 		last := first
 		if len(args) > 2 {
-			if last, err = atoiArg("SUBLIST", args[2]); err != nil {
-				return "", err
-			}
+			last = atoiArg(args[2])
 		}
 		if first == 0 || last == 0 {
 			return "", nil

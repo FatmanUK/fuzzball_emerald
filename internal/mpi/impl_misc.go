@@ -17,10 +17,7 @@ func init() {
 	// {stimestr} as the single largest unit, {ltimestr} spelled
 	// out.
 	register("TIMESTR", func(_ *Env, _ *Func, args []string) (string, error) {
-		d, err := atoiArg("TIMESTR", args[0])
-		if err != nil {
-			return "", err
-		}
+		d := atoiArg(args[0])
 		days, hours, mins, _ := splitDuration(d)
 		if days > 0 {
 			return fmt.Sprintf("%dd %02d:%02d", days, hours, mins), nil
@@ -28,10 +25,7 @@ func init() {
 		return fmt.Sprintf("%02d:%02d", hours, mins), nil
 	})
 	register("STIMESTR", func(_ *Env, _ *Func, args []string) (string, error) {
-		d, err := atoiArg("STIMESTR", args[0])
-		if err != nil {
-			return "", err
-		}
+		d := atoiArg(args[0])
 		days, hours, mins, secs := splitDuration(d)
 		switch {
 		case days > 0:
@@ -48,10 +42,7 @@ func init() {
 	// a duration of nothing spells out as nothing at all, not "0
 	// seconds".
 	register("LTIMESTR", func(_ *Env, _ *Func, args []string) (string, error) {
-		d, err := atoiArg("LTIMESTR", args[0])
-		if err != nil {
-			return "", err
-		}
+		d := atoiArg(args[0])
 		return timefmt.Long(d), nil
 	})
 
@@ -66,17 +57,11 @@ func init() {
 	register("FTIME", func(env *Env, _ *Func, args []string) (string, error) {
 		when := env.Host.Now()
 		if len(args) > 2 {
-			n, err := atoiArg("FTIME", args[2])
-			if err != nil {
-				return "", err
-			}
+			n := atoiArg(args[2])
 			when = int64(n)
 		}
 		if len(args) > 1 && args[1] != "" {
-			off, err := atoiArg("FTIME", args[1])
-			if err != nil {
-				return "", err
-			}
+			off := atoiArg(args[1])
 			// A small number is read as hours and a large
 			// one as seconds, so both "{ftime:%H,-5}" and
 			// a raw offset work.
@@ -95,14 +80,8 @@ func init() {
 	})
 
 	register("TIMESUB", func(env *Env, _ *Func, args []string) (string, error) {
-		period, err := atoiArg("TIMESUB", args[0])
-		if err != nil {
-			return "", err
-		}
-		offset, err := atoiArg("TIMESUB", args[1])
-		if err != nil {
-			return "", err
-		}
+		period := atoiArg(args[0])
+		offset := atoiArg(args[1])
 		obj, err := env.resolve("TIMESUB", args, 3)
 		if err != nil {
 			return "", err
@@ -123,21 +102,14 @@ func init() {
 
 	// Numbers and text.
 	register("DICE", func(_ *Env, _ *Func, args []string) (string, error) {
-		sides, err := atoiArg("DICE", args[0])
-		if err != nil {
-			return "", err
-		}
+		sides := atoiArg(args[0])
 		count := 1
 		if len(args) > 1 {
-			if count, err = atoiArg("DICE", args[1]); err != nil {
-				return "", err
-			}
+			count = atoiArg(args[1])
 		}
 		offset := 0
 		if len(args) > 2 {
-			if offset, err = atoiArg("DICE", args[2]); err != nil {
-				return "", err
-			}
+			offset = atoiArg(args[2])
 		}
 		if count > 8888 {
 			return "", errf("DICE", "Too many dice!")
@@ -155,10 +127,7 @@ func init() {
 	register("DIST", func(_ *Env, _ *Func, args []string) (string, error) {
 		coords := make([]int, len(args))
 		for i, a := range args {
-			n, err := atoiArg("DIST", a)
-			if err != nil {
-				return "", err
-			}
+			n := atoiArg(a)
 			coords[i] = n
 		}
 		// Two points in one, two or three dimensions, or one
@@ -370,10 +339,7 @@ func init() {
 	})
 
 	register("KILL", func(env *Env, _ *Func, args []string) (string, error) {
-		pid, err := atoiArg("KILL", args[0])
-		if err != nil {
-			return "", err
-		}
+		pid := atoiArg(args[0])
 		if pid < 0 {
 			return "", errf("KILL", "Invalid process ID.")
 		}
@@ -406,10 +372,7 @@ func init() {
 	})
 
 	register("DELAY", func(env *Env, _ *Func, args []string) (string, error) {
-		secs, err := atoiArg("DELAY", args[0])
-		if err != nil {
-			return "", err
-		}
+		secs := atoiArg(args[0])
 		if secs < 1 {
 			secs = 1
 		}

@@ -133,6 +133,21 @@ func (h *mpiHost) Width(obj mpi.Ref) int {
 	w, _ := h.terminalSize(obj)
 	return w
 }
+
+// DescrWidth is the width the given descriptor reported, which is
+// what the justification functions use — upstream reads
+// d->detected_width off the descriptor the evaluation is running for,
+// not off a player.
+func (h *mpiHost) DescrWidth(descr int) int {
+	// Zero rather than a default when the descriptor is not
+	// there, because the caller's fallback is upstream's 78 and
+	// mufHost.DescrSize's 80/24 would quietly replace it.
+	if d := h.s.hub.Get(descr); d != nil {
+		return d.Width
+	}
+	return 0
+}
+
 func (h *mpiHost) Height(obj mpi.Ref) int {
 	_, ht := h.terminalSize(obj)
 	return ht
