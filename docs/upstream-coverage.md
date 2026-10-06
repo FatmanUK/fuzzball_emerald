@@ -1048,10 +1048,31 @@ both invisible to the oracle because its player is `#1`:
   parameters upstream reserves for God. Closing it means teaching the
   MUF side `TUNE_MLEV` too, since `SETSYSPARM` and `SYSPARM_ARRAY`
   share the rule.
-- **`SETSYSPARM` cannot tell bad syntax from a bad value.** Upstream
-  aborts with "Bad parameter syntax. (2)" or "Bad parameter value.
-  (2)" from `tune_setparm`'s two codes; `muf.Host.TuneSet` returns a
-  plain error, so the primitive always says the second.
+- **`SETSYSPARM` — fixed, and it was using the wrong setter.** The
+  recorded complaint was that it could not tell bad syntax from a
+  bad value: `tune_setparm` has six result codes and
+  `muf.Host.TuneSet` returned `(bool, error)`, so the primitive
+  always said "Bad parameter value. (2)".
+
+  The larger half was that it never called `tune_setparm` at all. It
+  did the lookup and the permission test by hand and then wrote
+  through **`World.SetTune`** — the *loader's* setter, which is the
+  lax one. So a program could put values in the database that
+  `@tune` itself refuses: `"true"` for a boolean (upstream reads only
+  the first character, so `"yellow"` is true and `"true"` is a
+  syntax error), `"12abc"` for an integer, a bare `3600` for a
+  timespan. It goes through `tune.Set.SetParm` now, which is
+  `tune_setparm`, and reports its code.
+
+  One detail was got wrong first and the oracle corrected it: the
+  dbref resolver was given no searcher, on the reasoning that a MUF
+  caller has none. `tune_setparm` takes `player`, so it has one —
+  the program's **caller** — and `"here"` resolves for `SETSYSPARM`
+  exactly as it does for `@tune`.
+
+  Two of the six codes are still uncovered by the golden case:
+  `TUNESET_BADVAL` and `TUNESET_DENIED`. Both are reachable, but not
+  from a mucker-4 program driving a wizard.
 
 ---
 

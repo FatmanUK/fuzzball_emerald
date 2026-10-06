@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"strings"
 	"time"
 
@@ -58,21 +59,63 @@ func (h *mufHost) TuneWriteMLevel(name string) (int, bool) {
 	return p.WriteMLev, true
 }
 
-// TuneSet implements muf.Host for SETSYSPARM, upstream's tune_setparm
-// minus its own mlev gate.
-func (h *mufHost) TuneSet(name, value string) (bool, error) {
-	reset := false
-	if rest, isReset := strings.CutPrefix(name, "%"); isReset {
-		name, reset = rest, true
+// TuneSet implements muf.Host for SETSYSPARM, and goes through
+// **tune_setparm** (tune.Set.SetParm) rather than the loader's
+// setter.
+//
+// That is two fixes in one. SetParm is the stricter of the two --
+// CLAUDE.md spells out how: a boolean reads only its first character,
+// a timespan refuses a bare count of seconds -- so SETSYSPARM used to
+// accept values upstream rejects. And it returns tune_setparm's own
+// result code, which the primitive needs because upstream has a
+// different message for each; this used to do the lookup and the
+// permission test by hand and then report every failure as a bad
+// value.
+//
+// mlev is the caller's, which SetParm compares against each
+// parameter's own write level.
+func (h *mufHost) TuneSet(name, value string,
+	mlev int) muf.TuneSetResult {
+
+	switch h.w.SetParm(name, value, mlev, h.tuneRefResolver()) {
+	case tune.SetSuccess:
+		return muf.TuneSetSuccess
+	case tune.SetSuccessDefault:
+		return muf.TuneSetSuccessDefault
+	case tune.SetUnknown:
+		return muf.TuneSetUnknown
+	case tune.SetSyntax:
+		return muf.TuneSetSyntax
+	case tune.SetBadVal:
+		return muf.TuneSetBadVal
+	default:
+		return muf.TuneSetDenied
 	}
-	p, ok := tune.Lookup(name)
-	if !ok {
-		return false, nil
+}
+
+// tuneRefResolver is the match list tune_setparm uses for a dbref
+// parameter: absolute, registered, player, me, here — and nothing
+// nearby, so a room cannot be named by standing in it unless "here"
+// is typed.
+//
+// The searcher is the program's **caller**, which is what
+// tune_setparm's own `player` argument is. An earlier version here
+// dropped Me, Here and Player on the reasoning that a MUF caller has
+// no searcher; it does, and the oracle said so — "here" resolves
+// for SETSYSPARM exactly as it does for @tune.
+func (h *mufHost) tuneRefResolver() func(string) (ref.Ref,
+	ref.ObjType, bool) {
+
+	return func(name string) (ref.Ref, ref.ObjType, bool) {
+		r := match.New(h.w, h.caller, name).
+			Absolute().Registered().Player().Me().Here().
+			Result()
+		o := h.w.Get(r)
+		if o == nil {
+			return ref.Nothing, 0, false
+		}
+		return r, o.Type(), true
 	}
-	if reset {
-		return true, h.w.ResetTune(p.Name)
-	}
-	return true, h.w.SetTune(p.Name, value)
 }
 
 // TuneBool and TuneInt implement muf.Host's typed, server-side tune

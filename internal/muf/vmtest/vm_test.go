@@ -373,8 +373,13 @@ func (h *fakeHost) TuneReadMLevel(string) (int, bool) {
 func (h *fakeHost) TuneWriteMLevel(string) (int, bool) {
 	return 0, false
 }
-func (h *fakeHost) TuneSet(string, string) (bool, error) {
-	return false, nil
+func (h *fakeHost) TuneSet(name, value string,
+	mlev int) muf.TuneSetResult {
+
+	// The fake accepts anything, which is what the tests that
+	// touch SETSYSPARM want; the real one goes through
+	// tune_setparm and has a result per failure.
+	return muf.TuneSetSuccess
 }
 func (h *fakeHost) TuneList(string, int) []muf.TuneEntry {
 	return nil

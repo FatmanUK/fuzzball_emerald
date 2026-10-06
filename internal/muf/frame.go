@@ -213,8 +213,12 @@ type Host interface {
 	// with "%" resets the parameter to its default, upstream's
 	// own TP_HAS_FLAG_DEFAULT convention; value is then ignored.
 	// ok is false for an unknown parameter name; err is the parse
-	// failure otherwise.
-	TuneSet(name, value string) (ok bool, err error)
+	// failure otherwise. It returns tune_setparm's own result
+	// code, because SETSYSPARM has a different message for each:
+	// this used to collapse them into (bool, error) and so always
+	// said "Bad parameter value. (2)" where upstream
+	// distinguishes unknown, bad syntax, bad value and denied.
+	TuneSet(name, value string, mlev int) TuneSetResult
 	// TuneList is upstream's tune_parms_array: every parameter
 	// mlevel may read, matching pattern — upstream's own exact,
 	// case-insensitive equalstr, not truly an smatch pattern
@@ -946,3 +950,18 @@ func (f *Frame) scope() []Value {
 	}
 	return f.scopes[len(f.scopes)-1]
 }
+
+// TuneSetResult is tune_setparm's return (tune.h:18), which
+// SETSYSPARM reports with a different message for each value.
+// internal/tune has the same enum; this one exists so internal/muf
+// need not import it.
+type TuneSetResult int
+
+const (
+	TuneSetSuccess TuneSetResult = iota
+	TuneSetSuccessDefault
+	TuneSetUnknown
+	TuneSetSyntax
+	TuneSetBadVal
+	TuneSetDenied
+)

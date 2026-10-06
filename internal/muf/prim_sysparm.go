@@ -57,16 +57,23 @@ func init() {
 			return nil, errf("Invalid argument. (2)")
 		}
 
-		name := nameV.Str
-		writeMLev, ok := h.TuneWriteMLevel(trimTuneReset(name))
-		if !ok {
+		// tune_setparm does the lookup, the permission test
+		// and the validation itself, and has a distinct
+		// result for each failure (p_misc.c's own switch).
+		// This used to do the first two by hand and then call
+		// a *lax* setter -- the loader's, which accepts
+		// values tune_setparm refuses -- and report every
+		// failure as a bad value.
+		switch h.TuneSet(nameV.Str, valueV.Str,
+			h.Flags(f.Caller).MLevel()) {
+		case TuneSetUnknown:
 			return nil, errf("Unknown parameter. (1)")
-		}
-		if h.Flags(f.Caller).MLevel() < writeMLev {
-			return nil, errf("Permission denied. (1)")
-		}
-		if _, err := h.TuneSet(name, valueV.Str); err != nil {
+		case TuneSetSyntax:
+			return nil, errf("Bad parameter syntax. (2)")
+		case TuneSetBadVal:
 			return nil, errf("Bad parameter value. (2)")
+		case TuneSetDenied:
+			return nil, errf("Permission denied. (1)")
 		}
 		return nil, nil
 	})
