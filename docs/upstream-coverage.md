@@ -682,58 +682,66 @@ only way to reach the arithmetic at all. Upstream's doc comment for
 `mfn_dec` says "The variable is not updated."; the code updates it
 (`:2329`) and the oracle agrees with the code.
 
-**6. A rebinding shadows upstream and overwrites here — not
-fixed.** Found by a probe written for item 4 and kept because it
-measured something real.
+**6. A rebinding shadows upstream and overwrote here — fixed.**
+Found by a probe written for item 4 and kept because it measured
+something real.
 
-Upstream's `{with}` pushes a new variable with `new_mvar` and pops it
-with `free_top_mvar`, so binding a name that is already bound
-**shadows** it and the outer value comes back afterwards. Emerald's
-`Env.SetVar` searches for an existing name and *overwrites* it
-instead of appending, and `PopVar` then removes whatever is last —
-so the outer binding is destroyed rather than restored.
+Upstream's `varv` is a **stack**: `new_mvar` (`msgparse.c:871`)
+appends without looking for the name first, `get_mvar` searches
+**backwards** so it finds the newest, and `free_top_mvar` pops one.
+So binding a name that is already bound **shadows** it and the outer
+value comes back. `Env.SetVar` searched for an existing name and
+*overwrote* it, and `PopVar` then removed whatever was last — so the
+outer binding was destroyed rather than restored.
+`{with:n,1,{with:n,2,{&n}}{&n}}` was an "Unrecognized variable."
+error where upstream answers `21`.
 
-Measured against the oracle: `{with:n,1,{with:n,2,{&n}}{&n}}` is
-`21` upstream, and here the inner `{with}`'s pop leaves `n` undefined
-so the outer `{&n}` is an "Unrecognized variable." error.
-`{with:n,1,{with:n,2,{inc:n}}{&n}}` is `31` upstream and empty here.
+The cause was one function doing two jobs. `Env.BindVar` now pushes,
+which is what `{with}` and the looping functions need, and
+`Env.AssignVar` writes to the **innermost** binding and reports
+whether there was one, which is what `{set}`, `{inc}` and `{dec}`
+need — upstream writes through the pointer `get_mvar` hands back, so
+it pushes nothing. `AssignVar` searches newest-first to match
+`get_mvar`; `SetVar` searched oldest-first, so reading and writing
+disagreed the moment two bindings shared a name.
 
-The fix is to separate the two operations upstream keeps apart:
-`{with}` and the looping functions **bind** (push), while `{set}`,
-`{inc}` and `{dec}` **assign** to an existing binding in place.
-`Env.SetVar` currently does both and so can do neither correctly. It
-affects every binding construct — `{with}`, `{for}`, `{foreach}`,
-`{parse}`, `{filter}`, `{fold}` and `{lsort}` — and needs its own
-commit. `internal/golden/varscope_test.go` holds the measurement.
+The split is exactly **ten binding sites** — `{with}`, `{for}`,
+`{foreach}`, `{parse}`, `{filter}`, `{fold}` (two), `{lsort}` (two)
+and `{commas}` — which is also how many occurrences `mfuns2.c` has
+of each of the two refusals, and that agreement is what confirmed the
+partition. Both refusals were missing: Emerald answered an invented
+"Variable limit exceeded." and never checked a name's length at all.
+They are "Too many variables already defined." and "Variable name
+too long.", each reported by the function that asked.
 
-Also worth noting: `Env.Var` searches newest-first (as `get_mvar`
-does) while `SetVar` searches oldest-first, so the two disagree the
-moment a duplicate name exists. That is the same defect seen from
-the other side.
+The three ambient variables every evaluation declares — `how`, `cmd`
+and `arg` (`do_parse_mesg_2`, `:1940`) — are `new_mvar` pushes too,
+so the game-side callers bind rather than assign.
 
-**5. `{midstr}` takes two positions, not a position and a length —
-fixed.** `mfn_midstr` (`mfuns2.c:2897`) clamps both arguments as
-1-based positions, lets a negative one index from the end
-(`pos += len + 1`), and **walks backwards when the second is lower
-than the first**, returning the span reversed. So
-`{midstr:hello,2,4}` is `ell`, `{midstr:hello,4,2}` is `lle`, and
-`{midstr:hello,-2,-1}` is `lo`; this server answered `ello`, `lo`
-and the empty string. Reading the second number as a length made
-every three-argument call wrong, and neither the negative form nor
-the reversal existed at all.
+**7. `{with}` returns only its last body — fixed.** Found while
+fixing item 6. `mfn_with` (`mfuns2.c:1039`) parses each argument
+after the first two into **one reused buffer** and returns the
+pointer afterwards, so every body but the last is evaluated for its
+side effects and discarded: `{with:n,5,a,b,c}` is `c`, where this
+server answered `abc`. `{for}` already had the right shape for the
+same reason — its `out.Reset()` — so the two disagreed about one
+question.
 
-The clamping order is upstream's and is load-bearing: a position of
-zero returns the empty string **before** any clamping, and only then
-is a position above the length pulled down, a negative one wrapped,
-and anything still below one raised to 1.
+**Two things measured and deliberately left alone.**
 
-One thing needed a guard the C does not have. With an empty subject
-both positions clamp to 1, and upstream then copies the string's own
-NUL terminator — which reads back as the empty string. Indexing
-`s[0]` in Go would panic, so `midstr` returns early; the oracle
-confirms the answer.
+"Too many variables already defined." is **unreachable by nesting**:
+`MPI_MAX_VARIABLES` is 32 and the recursion limit is 26, so thirty-
+three nested `{with}` calls hit "Recursion limit exceeded." first.
+The refusal is implemented and correct, but no golden case can reach
+it that way.
 
-Item 6 needs its own commit. The golden case
+That probe also showed upstream's MPI error reporting **walking back
+out**, naming each enclosing function — a line of `{WITH} (arg 2)`
+per level. That is the already-recorded gap under "MPI error
+reporting does not walk back out", and this is the first measurement
+of it.
+
+All seven are done. The golden case
 (`internal/golden/atoi_test.go`) deliberately omits them and says so,
 so that it tests the fix it belongs to rather than passing over a
 different bug.

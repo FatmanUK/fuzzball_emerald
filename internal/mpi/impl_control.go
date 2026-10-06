@@ -56,7 +56,7 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(name, ""); err != nil {
+		if err := env.BindVar("FOR", name, ""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
@@ -68,9 +68,7 @@ func init() {
 			if n++; n >= maxListLen {
 				return "", errf("FOR", "Iteration limit exceeded")
 			}
-			if err := env.SetVar(name, itoa(i)); err != nil {
-				return "", err
-			}
+			env.AssignVar(name, itoa(i))
 			// As with {while}, each pass replaces the
 			// last rather than adding to it.
 			out.Reset()
@@ -98,16 +96,15 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(name, ""); err != nil {
+		if err := env.BindVar("FOREACH", name,
+			""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
 
 		var out strings.Builder
 		for _, item := range items {
-			if err := env.SetVar(name, item); err != nil {
-				return "", err
-			}
+			env.AssignVar(name, item)
 			out.Reset()
 			body, err := Parse(env, args[2])
 			if err != nil {
@@ -131,16 +128,14 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(name, ""); err != nil {
+		if err := env.BindVar("PARSE", name, ""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
 
 		var out []string
 		for _, item := range items {
-			if err := env.SetVar(name, item); err != nil {
-				return "", err
-			}
+			env.AssignVar(name, item)
 			got, err := Parse(env, args[2])
 			if err != nil {
 				return "", err
@@ -163,16 +158,15 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(name, ""); err != nil {
+		if err := env.BindVar("FILTER", name,
+			""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
 
 		var out []string
 		for _, item := range items {
-			if err := env.SetVar(name, item); err != nil {
-				return "", err
-			}
+			env.AssignVar(name, item)
 			got, err := Parse(env, args[2])
 			if err != nil {
 				return "", err
@@ -200,11 +194,13 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(accName, ""); err != nil {
+		if err := env.BindVar("FOLD", accName,
+			""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
-		if err := env.SetVar(itemName, ""); err != nil {
+		if err := env.BindVar("FOLD", itemName,
+			""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
@@ -214,12 +210,8 @@ func init() {
 		}
 		acc := items[0]
 		for _, item := range items[1:] {
-			if err := env.SetVar(accName, acc); err != nil {
-				return "", err
-			}
-			if err := env.SetVar(itemName, item); err != nil {
-				return "", err
-			}
+			env.AssignVar(accName, acc)
+			env.AssignVar(itemName, item)
 			if acc, err = Parse(env, args[3]); err != nil {
 				return "", err
 			}

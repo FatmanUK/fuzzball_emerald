@@ -160,9 +160,9 @@ func (s *Server) evalMPIAs(w *world.World, descr int,
 	// path where upstream's are not empty, this is the line to
 	// revisit — Emerald has no ambient equivalent of those two
 	// globals to fill them from.
-	_ = env.SetVar("how", how)
-	_ = env.SetVar("cmd", cmd)
-	_ = env.SetVar("arg", arg)
+	_ = env.BindVar("", "how", how)
+	_ = env.BindVar("", "cmd", cmd)
+	_ = env.BindVar("", "arg", arg)
 
 	// Eval reports a failure to the viewer and yields empty text
 	// rather than propagating, so a broken description cannot

@@ -496,20 +496,54 @@ func (env *Env) Var(name string) (string, bool) {
 	return "", false
 }
 
-// SetVar binds a variable, replacing any existing one of the same
-// name.
-func (env *Env) SetVar(name, value string) error {
-	for i := range env.vars {
-		if upper(env.vars[i].name) == upper(name) {
-			env.vars[i].value = value
-			return nil
-		}
+// BindVar pushes a new variable, and is new_mvar (msgparse.c:871).
+//
+// **Binding is not assignment, and conflating the two was a bug.**
+// Upstream's varv is a stack and new_mvar appends to it without
+// looking for the name first, so binding a name that is already bound
+// **shadows** it — get_mvar searches backwards and finds the newest
+// — and PopVar brings the outer one back. The old SetVar searched
+// for an existing name and overwrote it instead, so
+// `{with:n,1,{with:n,2,{&n}}{&n}}` destroyed the outer binding and
+// left n undefined, where upstream answers "21".
+//
+// Both refusals are upstream's wording and each is reported by the
+// function that asked, which is why fn is a parameter: there are ten
+// binding sites and ten occurrences of each message in mfuns2.c. The
+// old code had neither, answering an invented "Variable limit
+// exceeded." and never checking the name's length at all.
+func (env *Env) BindVar(fn, name, value string) error {
+	if len(name) > maxFuncNameLen {
+		return errf(fn, "Variable name too long.")
 	}
 	if len(env.vars) >= maxVariables {
-		return errf("", "Variable limit exceeded.")
+		return errf(fn, "Too many variables already defined.")
 	}
 	env.vars = append(env.vars, variable{name: name, value: value})
 	return nil
+}
+
+// AssignVar writes to the **innermost** binding of name and reports
+// whether there was one.
+//
+// This is what {set}, {inc} and {dec} do: upstream writes through the
+// pointer get_mvar hands back, which is the buffer belonging to the
+// most recent binding of that name. It pushes nothing and pops
+// nothing, so a name must already be bound for any of the three to
+// work — and the value it changes is the one the innermost {with}
+// or loop is holding.
+//
+// The search runs newest-first to match get_mvar. The old SetVar
+// searched oldest-first, so reading and writing disagreed the moment
+// two bindings shared a name.
+func (env *Env) AssignVar(name, value string) bool {
+	for i := len(env.vars) - 1; i >= 0; i-- {
+		if upper(env.vars[i].name) == upper(name) {
+			env.vars[i].value = value
+			return true
+		}
+	}
+	return false
 }
 
 // PopVar removes the most recently bound variable, which the looping

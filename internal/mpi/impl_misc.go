@@ -217,14 +217,13 @@ func init() {
 			if err != nil {
 				return "", err
 			}
-			if err := env.SetVar(name, ""); err != nil {
+			if err := env.BindVar("COMMAS", name,
+				""); err != nil {
 				return "", err
 			}
 			defer env.PopVar()
 			for i, item := range items {
-				if err := env.SetVar(name, item); err != nil {
-					return "", err
-				}
+				env.AssignVar(name, item)
 				if items[i], err = Parse(env, args[3]); err != nil {
 					return "", err
 				}

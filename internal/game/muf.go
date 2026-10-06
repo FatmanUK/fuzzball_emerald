@@ -393,7 +393,7 @@ func (h *mufHost) ParseProp(obj ref.Ref, path, arg string,
 		Host:    &mpiHost{s: h.s, w: h.w},
 	}
 	if arg != "" {
-		if err := env.SetVar("arg", arg); err != nil {
+		if err := env.BindVar("", "arg", arg); err != nil {
 			return "", err
 		}
 	}
@@ -428,7 +428,8 @@ func (h *mufHost) ParsePropEx(obj ref.Ref, path string,
 		Host:    &mpiHost{s: h.s, w: h.w},
 	}
 	for _, kv := range vars {
-		if err := env.SetVar(kv.Name, kv.Value); err != nil {
+		if err := env.BindVar("", kv.Name,
+			kv.Value); err != nil {
 			return "", vars, err
 		}
 	}
@@ -461,7 +462,7 @@ func (h *mufHost) ParseMPI(who ref.Ref, source, arg string, blessed bool) (strin
 		Host:    &mpiHost{s: h.s, w: h.w},
 	}
 	if arg != "" {
-		if err := env.SetVar("arg", arg); err != nil {
+		if err := env.BindVar("", "arg", arg); err != nil {
 			return "", err
 		}
 	}

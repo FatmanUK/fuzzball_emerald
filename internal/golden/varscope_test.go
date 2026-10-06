@@ -9,19 +9,16 @@ import (
 // with free_top_mvar, so binding a name that is already bound
 // **shadows** it and the outer value comes back afterwards.
 //
-// Emerald's Env.SetVar searches for an existing name and overwrites
-// it rather than appending, and PopVar then removes whatever is last
-// — so the outer binding is destroyed instead of restored.
+// Emerald's Env.SetVar searched for an existing name and overwrote it
+// rather than appending, and PopVar then removed whatever was last
+// — so the outer binding was destroyed instead of restored.
 //
-// This case is **expected to fail** until that is fixed, and is
-// skipped rather than deleted so the measurement is not lost. The fix
-// is to separate the two operations upstream keeps apart: {with} and
-// the looping functions bind, while {set}, {inc} and {dec} assign to
-// an existing binding in place.
+// The fix was to separate the two operations upstream keeps apart:
+// Env.BindVar pushes, which is what {with} and the looping functions
+// need, and Env.AssignVar writes to the innermost binding, which is
+// what {set}, {inc} and {dec} need. One function doing both could do
+// neither correctly.
 func TestMPIVariableScopeMatchesFuzzball(t *testing.T) {
-	t.Skip("variable shadowing is a known gap — see " +
-		"docs/upstream-coverage.md item 6")
-
 	requireOracle(t)
 	ctx := context.Background()
 
@@ -31,10 +28,39 @@ func TestMPIVariableScopeMatchesFuzzball(t *testing.T) {
   var! out me @ "[" out @ strcat "]" strcat notify
 ;
 : main
+  ( --- a rebinding shadows, and the outer value comes back --- )
   "{with:n,1,{with:n,2,{&n}}{&n}}" show
   "{with:n,1,{with:n,2,{inc:n}}{&n}}" show
   "{with:n,1,{with:n,2,{set:n,9}}{&n}}" show
+  "{with:n,1,{with:n,2,{set:n,9}{&n}}{&n}}" show
   "{with:a,1,{with:b,2,{&a}{&b}}{&a}}" show
+  "{with:n,1,{with:n,2,{with:n,3,{&n}}{&n}}{&n}}" show
+
+  ( --- assignment reaches the innermost binding only --------- )
+  "{with:n,1,{with:n,2,{inc:n}{&n}}{&n}}" show
+  "{with:n,1,{with:n,2,{dec:n,5}{&n}}{&n}}" show
+
+  ( --- the loops bind too, so the same shadowing applies ----- )
+  "{with:i,9,{for:i,1,3,1,{&i}}{&i}}" show
+  "{with:x,9,{foreach:x,a b c,{&x}}{&x}}" show
+  "{for:i,1,2,1,{for:i,5,6,1,{&i}}}" show
+
+  ( --- a name the outer scope never had is gone afterwards --- )
+  "{with:n,1,{&n}}{&n}" show
+
+  ( --- only the last body's result is returned, not all of
+        them joined: each is parsed into one reused buffer and
+        the pointer is returned afterwards ------------------- )
+  "{with:n,5,a,b,c}" show
+  "{with:n,5,{&n},x,y}" show
+  "{with:n,5,{&n}}" show
+  "{with:n,5,{set:n,7},{&n}}" show
+
+  ( --- upstream's two binding refusals, neither of which this
+        server had: it answered an invented "Variable limit
+        exceeded." and never checked the name at all ---------- )
+  "{with:abcdefghijklmnop,1,{&abcdefghijklmnop}}" show
+  "{with:abcdefghijklmnopq,1,x}" show
 ;`
 	fx, err := WriteFixture(t.TempDir(), src)
 	if err != nil {

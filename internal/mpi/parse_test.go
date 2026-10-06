@@ -126,7 +126,7 @@ func TestEscapes(t *testing.T) {
 
 func TestVariables(t *testing.T) {
 	env := newEnv(newStub())
-	if err := env.SetVar("name", "Igor"); err != nil {
+	if err := env.BindVar("", "name", "Igor"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Parse(env, "hello {&name}")

@@ -234,30 +234,48 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(args[0], value); err != nil {
+		if err := env.BindVar("WITH", args[0],
+			value); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
 
-		var out strings.Builder
+		// **Only the last body's result is returned**, not
+		// all of them joined. mfn_with (mfuns2.c:1039) parses
+		// each remaining argument into one reused buffer and
+		// returns the pointer afterwards, so every body but
+		// the last is evaluated for its side effects and then
+		// discarded: "{with:n,5,a,b,c}" is "c".
+		//
+		// This server concatenated, answering "abc". {for}
+		// already had the right shape for the same reason —
+		// see its out.Reset() — so the two disagreed about
+		// the same question.
+		//
+		// Min is 3, so there is always at least one body; a
+		// bodyless {with} would return upstream's parsed
+		// *name*, which cannot be reached.
+		var out string
 		for _, body := range args[2:] {
 			got, err := Parse(env, body)
 			if err != nil {
 				return "", err
 			}
-			out.WriteString(got)
+			out = got
 		}
-		return out.String(), nil
+		return out, nil
 	})
 	register("SET", func(env *Env, _ *Func, args []string) (string, error) {
 		// Only an already-bound variable may be set, and the
 		// new value is also what the call produces — so
 		// "{set:n,5}{&n}" reads "55", not "5".
-		if _, ok := env.Var(args[0]); !ok {
-			return "", errf("SET", "No such variable currently defined.")
-		}
-		if err := env.SetVar(args[0], args[1]); err != nil {
-			return "", err
+		//
+		// It assigns rather than binds: upstream writes
+		// through get_mvar's pointer, so the value changed is
+		// the innermost binding's and nothing is pushed.
+		if !env.AssignVar(args[0], args[1]) {
+			return "", errf("SET",
+				"No such variable currently defined.")
 		}
 		return args[1], nil
 	})
@@ -445,9 +463,9 @@ func stepBy(sign int) impl {
 			by = atoiArg(args[1])
 		}
 		out := itoa(atoiArg(cur) + sign*by)
-		if err := env.SetVar(args[0], out); err != nil {
-			return "", err
-		}
+		// Assign, not bind: the write lands on the binding
+		// env.Var just read, which is the innermost one.
+		env.AssignVar(args[0], out)
 		return out, nil
 	}
 }

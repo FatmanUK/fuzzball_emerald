@@ -214,11 +214,13 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if err := env.SetVar(nameA, ""); err != nil {
+		if err := env.BindVar("LSORT", nameA,
+			""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
-		if err := env.SetVar(nameB, ""); err != nil {
+		if err := env.BindVar("LSORT", nameB,
+			""); err != nil {
 			return "", err
 		}
 		defer env.PopVar()
@@ -230,12 +232,8 @@ func init() {
 		// comparisons made.
 		for i := 0; i < len(items); i++ {
 			for j := i + 1; j < len(items); j++ {
-				if err := env.SetVar(nameA, items[i]); err != nil {
-					return "", err
-				}
-				if err := env.SetVar(nameB, items[j]); err != nil {
-					return "", err
-				}
+				env.AssignVar(nameA, items[i])
+				env.AssignVar(nameB, items[j])
 				got, err := Parse(env, args[3])
 				if err != nil {
 					return "", err

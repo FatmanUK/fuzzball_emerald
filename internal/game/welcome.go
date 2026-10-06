@@ -63,9 +63,9 @@ func (s *Server) parseWelcome(w *world.World, d *session.Descriptor,
 		Type: mpi.Private,
 		Host: &mpiHost{s: s, w: w},
 	}
-	_ = env.SetVar("how", welcomeProplist)
-	_ = env.SetVar("cmd", strconv.Itoa(d.ID))
-	_ = env.SetVar("arg", d.Hostname)
+	_ = env.BindVar("", "how", welcomeProplist)
+	_ = env.BindVar("", "cmd", strconv.Itoa(d.ID))
+	_ = env.BindVar("", "arg", d.Hostname)
 	return mpi.Eval(env, text)
 }
 
