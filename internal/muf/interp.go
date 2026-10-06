@@ -18,13 +18,20 @@ const (
 
 // Limits bound what a program may do.
 type Limits struct {
-	// Slice is how many instructions run before the interpreter
-	// yields, so one program cannot monopolise the world
-	// goroutine. Zero means the default.
+	// Slice is instr_slice: how many instructions run before the
+	// interpreter yields, so one program cannot monopolise the
+	// world goroutine. Zero means the default.
 	Slice int
-	// Total is the hard ceiling on instructions for one run,
-	// after which the program is aborted. Zero means the default.
+	// Total is max_instr_count, which upstream uses for **two**
+	// different ceilings — the preempt-mode abort and the total
+	// ceiling below mucker 3. Zero means the default.
 	Total int
+	// ML4Preempt is max_ml4_preempt_count, the preempt ceiling
+	// for a mucker-4 program. **Zero disables the check** rather
+	// than meaning a default: upstream resets the counter instead
+	// (interp.c:1735), so a level-4 program runs unbounded in
+	// preempt mode when the parameter is zero.
+	ML4Preempt int
 }
 
 // Default instruction limits. Upstream tunes both; these stand in
@@ -50,8 +57,37 @@ func (l Limits) total() int {
 }
 
 // Run executes until the program finishes, yields, or fails.
+//
+// The three instruction limits are upstream's and none of them was
+// applied the way interp_loop applies it. This server counted every
+// program against one unconditional ceiling and aborted with an
+// invented message; upstream has a **mode-dependent** ceiling, a
+// **mucker-dependent** one, and a yield condition in two parts.
+//
+//   - **Preempt** mode never yields. Instead the instructions run
+//     since this resume are capped: at mucker 4 by ML4Preempt when
+//     it is non-zero, and otherwise by Total, aborting "Maximum
+//     preempt instruction count exceeded" (interp.c:1731, :1743).
+//     A program flagged BUILDER counts as preempt whatever its
+//     mode says (:1728), which is what the "B" flag means on a
+//     program.
+//   - **Foreground and background** yield, but only once the frame
+//     has run `Slice * 4` instructions in total *and* `Slice` since
+//     this resume (:1753). So a short program runs to completion
+//     without ever yielding, where a single budget would have made
+//     it yield at Slice.
+//   - **Below mucker 3** there is a total ceiling as well, at
+//     `Total` for level 1 and **four times** that for level 2
+//     (:1876), aborting "Maximum total instruction count exceeded."
+//     At level 3 and above there is no total ceiling at all — this
+//     server imposed one on every program.
 func (f *Frame) Run(lim Limits) (Result, error) {
-	budget := lim.slice()
+	slice, total := lim.slice(), lim.total()
+
+	// local is upstream's instr_count: instructions run since
+	// this resume, as against f.Instructions, which is the
+	// frame's own lifetime count (fr->instcnt).
+	local := 0
 
 	// Whether this program is being traced is settled here rather
 	// than per instruction: it depends on a flag and a control
@@ -66,14 +102,43 @@ func (f *Frame) Run(lim Limits) (Result, error) {
 		if f.PC < 0 || f.PC >= len(f.Prog.Code) {
 			return Done, nil
 		}
-		if f.Instructions >= lim.total() {
-			return Done, f.raise(errf("program exceeded its instruction limit"))
-		}
-		if budget <= 0 {
+
+		// Upstream increments both counters *before* every
+		// check below (interp.c:1721), so the first
+		// instruction after a resume counts as one.
+		f.Instructions++
+		local++
+
+		if f.preempting() {
+			if f.MLevel() == 4 {
+				over := lim.ML4Preempt > 0 &&
+					local >= lim.ML4Preempt
+				if over {
+					return Done, f.raise(
+						errf(preemptCapMsg))
+				}
+				if lim.ML4Preempt <= 0 {
+					local = 0
+				}
+			} else if local >= total {
+				return Done, f.raise(
+					errf(preemptCapMsg))
+			}
+		} else if f.Instructions > slice*4 && local >= slice {
 			return Yielded, nil
 		}
-		budget--
-		f.Instructions++
+
+		if lv := f.MLevel(); lv < 3 {
+			ceiling := total
+			if lv == 2 {
+				ceiling *= 4
+			}
+			if f.Instructions > ceiling {
+				return Done, f.raise(errf(
+					"Maximum total instruction " +
+						"count exceeded."))
+			}
+		}
 
 		in := f.Prog.Code[f.PC]
 		if f.Traced {
@@ -364,4 +429,25 @@ func (f *Frame) raise(err error) error {
 		return f.decorate(err, f.Prog.Code[f.PC])
 	}
 	return err
+}
+
+// preemptCapMsg is abort_loop_hard's wording at interp.c:1732 and
+// :1744, which both sites share.
+const preemptCapMsg = "Maximum preempt instruction count exceeded"
+
+// preempting reports whether this frame is subject to the
+// preempt-mode instruction cap rather than the yield.
+//
+// It is PREEMPT mode **or** the BUILDER flag on the program
+// (interp.c:1728), which is what "B" means on a program object: it
+// runs without yielding, so it must be bounded by an instruction
+// count instead.
+func (f *Frame) preempting() bool {
+	if f.Mode == ModePreempt {
+		return true
+	}
+	if f.host == nil || f.Prog == nil {
+		return false
+	}
+	return f.host.Flags(f.Prog.Ref)&ref.Builder != 0
 }

@@ -258,7 +258,7 @@ func (s *Server) resume(w *world.World, p *process, push *muf.Value) {
 // step runs a process until it finishes, blocks again, or fails.
 func (s *Server) step(w *world.World, p *process) {
 	for {
-		res, err := p.frame.Run(muf.Limits{})
+		res, err := p.frame.Run(mufLimits(w))
 		if err != nil {
 			s.failProcess(w, p, err)
 			return

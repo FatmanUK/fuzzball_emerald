@@ -313,7 +313,7 @@ func (s *Server) propqProgram(w *world.World, r propqRun,
 	w.Used(prog)
 
 	for {
-		res, err := f.Run(muf.Limits{})
+		res, err := f.Run(mufLimits(w))
 		if err != nil {
 			s.reportMUFErrorTo(w, r.player, f, prog, err)
 			return
@@ -528,7 +528,7 @@ func (s *Server) propqProgramAs(w *world.World, r propqRun,
 
 	w.Used(prog)
 	for {
-		res, err := f.Run(muf.Limits{})
+		res, err := f.Run(mufLimits(w))
 		if err != nil {
 			s.reportMUFErrorTo(w, r.player, f, prog, err)
 			return

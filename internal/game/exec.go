@@ -160,7 +160,7 @@ func (s *Server) runMesgProgram(w *world.World, descr int,
 	w.Used(prog)
 
 	for {
-		res, err := f.Run(muf.Limits{})
+		res, err := f.Run(mufLimits(w))
 		if err != nil {
 			s.reportMUFErrorTo(w, player, f, prog, err)
 			return

@@ -712,6 +712,10 @@ func TestSlicingYields(t *testing.T) {
 	}
 	f := muf.NewFrame(p, newHost())
 	f.SetReserved(ref.God, ref.GlobalEnvironment, ref.Nothing, "")
+	// Slicing is a FOREGROUND and BACKGROUND behaviour: a PREEMPT
+	// program never yields (interp.c:1728), and the zero value of
+	// Mode is PREEMPT.
+	f.Mode = muf.ModeForeground
 
 	res, err := f.Run(muf.Limits{Slice: 100})
 	if err != nil {

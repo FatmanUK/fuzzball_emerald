@@ -732,6 +732,14 @@ func (s *Server) runProgram(c *ctx, prog ref.Ref, trigger ref.Ref, arg string) {
 	// not, and silence here would look like an oversight.
 	// move.c:686.
 	f.Perms = muf.RegUID
+	// And **FOREGROUND**, which move.c:685 passes and which this
+	// left at the zero value — PREEMPT. It matters to the
+	// instruction limits: a preempt program never yields and is
+	// capped per resume, where a foreground one yields every
+	// instr_slice once it has run four of them. Every other
+	// launch site already says which mode it wants; this was the
+	// one that did not, and silence meant the wrong answer.
+	f.Mode = muf.ModeForeground
 
 	me := c.w.Get(c.who)
 	loc := ref.Nothing
@@ -920,4 +928,20 @@ func mlevelOf(w *world.World, r ref.Ref) int {
 		return 0
 	}
 	return o.Flags.MLevel()
+}
+
+// mufLimits reads the three instruction limits out of @tune, which
+// nothing did before: every Run passed an empty muf.Limits{} and so
+// got the compiled-in defaults, leaving instr_slice, max_instr_count
+// and max_ml4_preempt_count inert.
+//
+// ML4Preempt is passed through as it is read, because **zero means
+// "no check"** there rather than "use a default" — upstream resets
+// the counter instead (interp.c:1735).
+func mufLimits(w *world.World) muf.Limits {
+	return muf.Limits{
+		Slice:      int(w.Tune.Int("instr_slice")),
+		Total:      int(w.Tune.Int("max_instr_count")),
+		ML4Preempt: int(w.Tune.Int("max_ml4_preempt_count")),
+	}
 }

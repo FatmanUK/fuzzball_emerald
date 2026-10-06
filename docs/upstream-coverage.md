@@ -828,6 +828,68 @@ once, from `Eval`, so the chain is carried on `mpi.Error.Trail`
 instead — which also keeps the lines in upstream's order, where
 notifying during the unwind would print the innermost message last.
 
+### The instruction limits, and a mucker level fixed at compile time
+
+`instr_slice`, `max_instr_count` and `max_ml4_preempt_count` were
+read nowhere: every `Run` passed an empty `muf.Limits{}`, so the
+compiled-in defaults applied and all three parameters were inert.
+Wiring them up meant fixing the rules they drive, because **none was
+applied the way `interp_loop` applies it**.
+
+- **Preempt mode never yields.** The instructions run since the
+  resume are capped instead: at mucker 4 by `max_ml4_preempt_count`
+  when it is non-zero, otherwise by `max_instr_count`, aborting
+  "Maximum preempt instruction count exceeded" (`interp.c:1731`,
+  `:1743`). A **zero** `max_ml4_preempt_count` disables the check
+  rather than meaning a default — upstream resets the counter
+  (`:1735`). And a program flagged **BUILDER** counts as preempt
+  whatever its mode says (`:1728`), which is what "B" means on a
+  program.
+- **Foreground and background yield in two parts**: the frame must
+  have run `instr_slice * 4` instructions *and* `instr_slice` since
+  the resume (`:1753`). So a short program never yields at all,
+  where a single budget made it yield at the slice.
+- **The total ceiling applies only below mucker 3**, at
+  `max_instr_count` for level 1 and **four times** that for level 2
+  (`:1876`), aborting "Maximum total instruction count exceeded."
+  At level 3 and above there is none. This server capped every
+  program at one unconditional figure and aborted with an invented
+  message.
+
+**A command or an exit runs FOREGROUND**, which `move.c:685` passes
+and which this server left at the zero value — PREEMPT. Every other
+launch site already said which mode it wanted; the command path was
+the one that did not, and silence meant the wrong answer. It is the
+difference between a program that yields and one that does not.
+
+**`Frame.MLevel()` is the compile-time level, and upstream's is
+per-run.** `mlev = ProgMLevel(program)` is read inside `interp_loop`
+(`interp.c:1706`) and **re-read whenever execution enters another
+program** (`:2180`, `:2300`, `:2324`, `:2575`), so it is a live
+value. Emerald computes `min(program, owner)` once at compile time,
+bakes it into `Program.MLevel`, and caches the compile by ref — and
+`@set` does not invalidate it. So a program's mucker bits take
+effect only on its **first** run, and a frame executing a library's
+code uses the *caller's* level rather than the library's.
+
+That affects **every mucker gate in the interpreter**, not just the
+ceiling above, and it needs its own work: a runtime level on the
+frame, separate from the compile-time one the compiler legitimately
+wants for `$ifcancall`. `internal/golden/instrlimit_test.go` works
+around it by giving each level a program of its own, compiled cold.
+
+Two things that cannot be compared are left alone. The
+**nested-interp loop counters** — `max_nested_interp_loop_count` and
+`max_ml4_nested_interp_loop_count` — need a count of INTERP nesting
+that Emerald does not keep, so those two parameters stay inert. And
+the **instruction a MUF error report names** is masked in that case:
+upstream renders the current instruction with `insttotext`, so an
+abort on a jump reads "IF->line4", where this server's report names
+only primitives and leaves it empty. The two compilers emit
+different code for the same source, which is the same reason the
+debug trace is compared by source line rather than instruction for
+instruction.
+
 ### Two preferred types are still unset
 
 `choose_thing`'s type preference is wired at the thirteen call sites

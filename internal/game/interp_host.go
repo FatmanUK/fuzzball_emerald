@@ -41,7 +41,7 @@ func (h *mufHost) Interp(descr, level int, prog, trig ref.Ref,
 	f.Mode = muf.ModePreempt
 
 	for {
-		res, err := f.Run(muf.Limits{})
+		res, err := f.Run(mufLimits(h.w))
 		if err != nil {
 			return muf.Value{}, false
 		}

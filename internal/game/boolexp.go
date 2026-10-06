@@ -156,7 +156,7 @@ func (h *lockHost) RunLock(descr int, player, prog, thing ref.Ref) bool {
 	f.Level = callerLevel + 1
 
 	for {
-		res, err := f.Run(muf.Limits{})
+		res, err := f.Run(mufLimits(h.w))
 		if err != nil {
 			return false
 		}
