@@ -78,6 +78,9 @@ func (s *Server) cmdAction(c *ctx) {
 		return
 	}
 
+	if !s.checkName(c, name, ref.TypeExit) {
+		return
+	}
 	o := c.w.Create(name, ref.TypeExit, c.who)
 	if err := c.w.MoveTo(o.Ref, source); err != nil {
 		c.tell("The action could not be attached.")

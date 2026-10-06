@@ -108,6 +108,9 @@ func (s *Server) cmdCreate(c *ctx) {
 		return
 	}
 
+	if !s.checkName(c, name, ref.TypeThing) {
+		return
+	}
 	o := c.w.Create(name, ref.TypeThing, c.who)
 	o.Home = c.w.Get(c.who).Location
 	o.Props.Set(propValue, props.Value{Type: props.Int, Num: int64(endowment(c.w, cost))})
@@ -146,6 +149,9 @@ func (s *Server) cmdDig(c *ctx) {
 	// world.
 	parent := defaultRoomParent(c.w, c.who)
 
+	if !s.checkName(c, name, ref.TypeRoom) {
+		return
+	}
 	o := c.w.Create(name, ref.TypeRoom, c.who)
 	o.Dropto = ref.Nothing
 	if err := c.w.MoveTo(o.Ref, parent); err != nil {
@@ -212,6 +218,9 @@ func (s *Server) cmdOpen(c *ctx) {
 		return
 	}
 
+	if !s.checkName(c, name, ref.TypeExit) {
+		return
+	}
 	o := c.w.Create(name, ref.TypeExit, c.who)
 	if err := c.w.MoveTo(o.Ref, here); err != nil {
 		c.tell("The exit could not be attached.")

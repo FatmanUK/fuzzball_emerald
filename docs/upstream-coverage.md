@@ -890,6 +890,52 @@ different code for the same source, which is the same reason the
 debug trace is compared by source line rather than instruction for
 instruction.
 
+### "home" is a direction, and four creators skipped ok_object_name
+
+`home` was in the command table, which is consulted **after** exit
+matching, where `can_move` (`predicates.c:509`) answers yes for it
+outright when `enable_home` is set -- so upstream makes an exit of
+that name unreachable and this server let the exit win. The
+precedence was the other way round.
+
+`do_move`'s branch (`move.c:730`) is also more than a move. It
+announces "X goes home." to the room, says "There's no place like
+home..." **three times**, adds "You wake up back home, without your
+possessions.", and then `send_home` (`move.c:1262`) sends the
+player's **contents** home *first* -- upstream's own comment
+explaining the order, so they see their possessions on arrival. This
+server printed one line and left the inventory alone: a quiet
+teleport where upstream is a small ceremony with a cost. It also
+invented "You have no home to go to." and, when `enable_home` was
+clear, "That command is disabled." Upstream has neither; with the
+parameter clear the word is ordinary and falls through to exit
+matching.
+
+**Two further gaps came out of writing the case for it.**
+
+**`ok_object_name` was missing from four creators.** It lives inside
+`create_action`, `create_room`, `create_thing` and `create_program`
+(`db.c:216`, `:314`, `:357`, `:257`) rather than in the commands that
+call them -- the same shape `create_program` already had here, which
+is why `@program` had the check and `@open`, `@dig`, `@create` and
+`@action` did not. So a world could make an exit called "home",
+"me", "here" or "nil" that nothing could ever refer to, because the
+matcher claims all four before it looks at anything. Each creator has
+its own refusal: "You cannot use that name for an exit or action.",
+"...for a room.", "...for a thing.", "...for a program."
+
+`nameForbidden` was also folding with `strings.ToLower` where
+`CLAUDE.md` requires `internal/ascii` -- upstream's `strcasecmp`
+folds only A-Z.
+
+**`cmdGo` invented both of its failure messages.** A name that
+matches nothing is **`noisy_match_result`'s** to report, and
+`do_move` returns silently once it has spoken (`move.c:751`). "You
+can't go that way." belongs to a different case entirely -- an exit
+that was *found* and then failed `could_doit` -- so it was the wrong
+answer for a name that matched nothing, and "I don't know which way
+you mean." for an ambiguous one is upstream's nowhere.
+
 ### Two preferred types are still unset
 
 `choose_thing`'s type preference is wired at the thirteen call sites

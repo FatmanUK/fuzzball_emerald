@@ -269,8 +269,12 @@ func (s *Server) cmdGo(c *ctx) {
 		c.tell("Go where?")
 		return
 	}
-	if ascEqual(c.arg, "home") {
-		s.cmdHome(c)
+	// "go home" reaches the same branch, and is gated the same
+	// way: with enable_home clear, "home" is just a name to match
+	// against exits.
+	if ascEqual(c.arg, "home") &&
+		c.w.Tune.Bool("enable_home") {
+		s.goHome(c)
 		return
 	}
 	// init_match_check_keys(descr, player, direction, TYPE_EXIT)
@@ -280,27 +284,62 @@ func (s *Server) cmdGo(c *ctx) {
 		PreferType(ref.TypeExit).
 		Usable(s.usableBy(c.w, c.d.ID, c.who)).
 		Exits().Result()
-	switch r {
-	case ref.Nothing:
-		c.tell("You can't go that way.")
-	case ref.Ambiguous:
-		c.tell("I don't know which way you mean.")
-	default:
-		s.useExit(c, r)
+	// A failed match is **noisy_match_result's** to report, not
+	// this function's: do_move returns silently once it has
+	// spoken (move.c:751). "You can't go that way." belongs to a
+	// different case — an exit that was *found* and then failed
+	// could_doit — so answering it here said the wrong thing
+	// for a name that matched nothing, and invented "I don't know
+	// which way you mean." for an ambiguous one.
+	if !noisyMatch(c, c.arg, r) {
+		return
 	}
+	s.useExit(c, r)
 }
 
-// cmdHome sends the player to their home.
-func (s *Server) cmdHome(c *ctx) {
-	if !c.w.Tune.Bool("enable_home") {
-		c.tell("That command is disabled.")
+// goHome is do_move's "home" branch (move.c:730), which is more than
+// a move: it announces the departure, says the same line **three
+// times**, and takes the player's possessions off them.
+//
+// Nothing here was right. This server printed one line, invented "You
+// have no home to go to." for a home it could not reach, and left the
+// player's inventory alone — so "home" was a quiet teleport where
+// upstream is a small ceremony with a cost.
+//
+// send_home(descr, player, 1) (move.c:1262) sends the **contents**
+// home first and then walks the player in, upstream's own comment
+// explaining the order: that way they see their possessions when they
+// arrive. There is no validity test on the home at all — enter_room
+// resolves it, and moveObject's ladder catches a home that has gone.
+func (s *Server) goHome(c *ctx) {
+	me := c.w.Get(c.who)
+	if me == nil {
 		return
 	}
-	home := c.w.Get(c.who).Home
-	if !c.w.Valid(home) {
-		c.tell("You have no home to go to.")
-		return
+	if loc := me.Location; c.w.Valid(loc) {
+		s.notifyRoomFrom(c.w, c.who, loc,
+			[]ref.Ref{c.who}, "%s goes home.", me.Name)
 	}
-	c.tell("There's no place like home...")
-	s.moveTo(c.w, c.d.ID, c.who, home, ref.Nothing)
+	// Three times, which is upstream's and not a slip here
+	// (move.c:742).
+	for i := 0; i < 3; i++ {
+		c.tell("There's no place like home...")
+	}
+	c.tell("You wake up back home, without your possessions.")
+
+	// The possessions go first so they are there on arrival.
+	for _, held := range c.w.Contents(c.who) {
+		moveObject(c.w, held, ref.Home)
+	}
+	s.enterRoom(c.w, c.d.ID, c.who, me.Home, me.Location)
+}
+
+// cmdHomeDisabled is what "home" means when enable_home is clear:
+// nothing. Upstream has no command of that name at all — can_move
+// declines it, exit matching finds no exit, and process_command falls
+// through to huh_mesg. Reaching this entry means the direction test
+// in command() already declined, so answering the same way the
+// dispatcher answers an unknown word is what upstream does.
+func (s *Server) cmdHomeDisabled(c *ctx) {
+	c.tell("%s", c.w.Tune.String("huh_mesg"))
 }

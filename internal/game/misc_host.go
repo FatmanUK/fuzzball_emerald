@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/logging"
@@ -28,9 +29,16 @@ func nameForbidden(name string) bool {
 	if strings.ContainsAny(name, "=&|\r\x1b") {
 		return true
 	}
-	switch strings.ToLower(name) {
-	case "me", "here", "home", "nil":
-		return true
+	// ascii.EqualFold, not strings.ToLower: upstream's strcasecmp
+	// folds only A-Z, so a name differing outside that range is a
+	// different name. CLAUDE.md is explicit about it and this was
+	// the one place in the package still using the Unicode-aware
+	// form.
+	reserved := []string{"me", "here", "home", "nil"}
+	for _, r := range reserved {
+		if ascii.EqualFold(name, r) {
+			return true
+		}
 	}
 	return false
 }
@@ -198,3 +206,39 @@ func (h *mufHost) Stats(owner ref.Ref) [7]int {
 }
 
 var _ muf.Host = (*mufHost)(nil)
+
+// nameRefusal is the message each creator gives for a name
+// ok_object_name rejects, and there is one per type (db.c:217, :258,
+// :315, :358). The check lives **inside** upstream's create_action,
+// create_room, create_thing and create_program rather than in the
+// commands that call them — which is why `@program` already had it
+// here and `@open`, `@dig`, `@create` and `@action` did not.
+//
+// Without it a world could make an exit called "home", "me", "here"
+// or "nil" that nothing could ever refer to, because the matcher
+// claims all four before it looks at anything.
+func nameRefusal(t ref.ObjType) string {
+	switch t {
+	case ref.TypeExit:
+		return "You cannot use that name for an exit " +
+			"or action."
+	case ref.TypeRoom:
+		return "You cannot use that name for a room."
+	case ref.TypeProgram:
+		return "You cannot use that name for a program."
+	default:
+		return "You cannot use that name for a thing."
+	}
+}
+
+// checkName refuses a name no object of that type may carry, and says
+// which type refused it.
+func (s *Server) checkName(c *ctx, name string,
+	t ref.ObjType) bool {
+
+	if nameForbidden(name) {
+		c.tell("%s", nameRefusal(t))
+		return false
+	}
+	return true
+}

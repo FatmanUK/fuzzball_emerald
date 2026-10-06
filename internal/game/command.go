@@ -87,7 +87,13 @@ func init() {
 	register("whisper", (*Server).cmdWhisper)
 	register("goto", (*Server).cmdGo)
 	register("move", (*Server).cmdGo)
-	register("home", (*Server).cmdHome)
+	// "home" stays in the table so a name nothing else claims
+	// still resolves, but it is reached before exit matching by
+	// the direction test above — this entry only runs when
+	// enable_home is clear, where upstream treats the word as
+	// ordinary and the dispatcher says what it says for any
+	// unknown command.
+	register("home", (*Server).cmdHomeDisabled)
 	register("inventory", (*Server).cmdInventory)
 	register("examine", (*Server).cmdExamine)
 
@@ -188,6 +194,22 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 	case strings.HasPrefix(line, string(poseToken)):
 		c.arg, c.rest = strings.TrimSpace(line[1:]), line[1:]
 		s.cmdPose(c)
+		return
+	}
+
+	// "home" is a **direction**, and it is tested before exits
+	// rather than after them. can_move (predicates.c:509) answers
+	// yes for it outright when enable_home is set, so an exit of
+	// that name is unreachable; this server had it in the command
+	// table instead, which is consulted *after* exit matching, so
+	// the precedence was the other way round. With enable_home
+	// clear it is not special at all and falls through to exit
+	// matching, where this used to answer an invented "That
+	// command is disabled."
+	if !overridden && ascEqual(line, "home") &&
+		w.Tune.Bool("enable_home") {
+		s.logCommand(w, d, line, "")
+		s.goHome(c)
 		return
 	}
 
