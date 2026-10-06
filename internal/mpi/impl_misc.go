@@ -328,12 +328,32 @@ func init() {
 			return "", errf("FORCE", "Bad object reference. (arg1)")
 		}
 		if args[1] == "" {
-			return "", errf("FORCE", "Null command string. (arg2)")
+			return "", errf("FORCE",
+				"Null command string. (arg2)")
 		}
-		if !env.Blessed {
-			return "", errf("FORCE", "Permission Denied.")
+		if err := forceAllowed(env, obj); err != nil {
+			return "", err
 		}
-		env.Host.Force(env.Descr, obj, args[1])
+		// The command string may be a **list**, split on
+		// carriage returns, and each one is forced in turn.
+		for _, cmd := range strings.Split(args[1], "\r") {
+			// Repeated per command, and not gated on
+			// blessing like the checks above: upstream
+			// re-tests the name inside the loop for
+			// anything that is not a player, so a blessed
+			// {force} is refused here too. Its message
+			// carries a "[2]" to tell the two apart.
+			name := firstWord(env.Host.Name(obj))
+			if env.Host.TypeName(obj) != "Player" &&
+				env.Host.PlayerNamed(name) {
+				return "", errf("FORCE",
+					"Cannot force a thing named "+
+						"after a player. [2]")
+			}
+			if cmd != "" {
+				env.Host.Force(env.Descr, obj, cmd)
+			}
+		}
 		return "", nil
 	})
 
@@ -422,4 +442,113 @@ func isqrt(n int) int {
 		y = (x + n/x) / 2
 	}
 	return x
+}
+
+// firstWord is the leading run of non-space characters, which is how
+// upstream reads a puppet's name when deciding whether it is named
+// after a player: NAME(obj) is copied until the first isspace.
+func firstWord(s string) string {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n', '\v', '\f':
+			return s[:i]
+		}
+	}
+	return s
+}
+
+// forceAllowed is mfn_force's permission ladder (mfuns2.c:2770), and
+// most of it is the **unblessed path this server did not have**.
+//
+// Emerald refused every unblessed {force} with "Permission Denied."
+// Upstream refuses only when `allow_zombies` is off; with it on, an
+// unblessed force proceeds and is then subject to six refusals of its
+// own, four of which apply to a THING alone. A world that allows
+// zombies therefore has a whole mechanism — puppets forced from
+// their own descriptions — that could not run here at all.
+//
+// The order is upstream's and is observable, because the messages
+// differ. Note that two of them are "Permission denied." with a
+// lower-case d where the allow_zombies refusal above has a capital
+// one; that is upstream's inconsistency, not a transcription slip.
+func forceAllowed(env *Env, obj Ref) error {
+	blessed := env.Blessed
+	if !env.tuneBool("allow_zombies") && !blessed {
+		return errf("FORCE", "Permission Denied.")
+	}
+
+	if !blessed {
+		if env.Host.TypeName(obj) == "Thing" {
+			if env.Host.HasFlag(obj, "dark") {
+				return errf("FORCE",
+					"Cannot force a dark puppet.")
+			}
+			owner := env.Host.Owner(obj)
+			if env.Host.HasFlag(owner, "zombie") {
+				return errf("FORCE",
+					"Permission denied.")
+			}
+			// A no-puppets room, which is ZOMBIE on the
+			// *room* rather than on the thing.
+			loc := env.Host.Location(obj)
+			if env.Host.Valid(loc) &&
+				env.Host.HasFlag(loc, "zombie") &&
+				env.Host.TypeName(loc) == "Room" {
+				return errf("FORCE",
+					"Cannot force a Puppet in a "+
+						"no-puppets room.")
+			}
+			first := firstWord(env.Host.Name(obj))
+			if env.Host.PlayerNamed(first) {
+				return errf("FORCE",
+					"Cannot force a thing named "+
+						"after a player.")
+			}
+		}
+		if !env.Host.HasFlag(obj, "xforcible") {
+			return errf("FORCE", "Permission denied: "+
+				"forced object not @set Xforcible.")
+		}
+		// The force lock, which nothing in this server
+		// evaluated before: an unset lock is **false**, so a
+		// thing has to be force-locked to the trigger for an
+		// unblessed force to reach it at all.
+		if !env.Host.ForceLockPasses(env.Descr, env.Perms,
+			obj) {
+			return errf("FORCE", "Permission denied: "+
+				"Object not force-locked to trigger.")
+		}
+	}
+
+	// These two are outside the blessed test, so they refuse a
+	// blessed {force} as readily as any other.
+	if obj == 1 {
+		return errf("FORCE",
+			"Permission denied: You can't force God.")
+	}
+	if env.Host.ForceLevel() > env.tuneInt("max_force_level")-1 {
+		return errf("FORCE", "Permission denied: "+
+			"You can't force recursively.")
+	}
+	return nil
+}
+
+// tuneBool and tuneInt read an @tune parameter through the host's
+// string accessor, which is the only shape it offers.
+//
+// The boolean reads its **first character**, which is what upstream's
+// own tune_setparm does (`y`, `Y` or `1` is true) and what a listing
+// emits — "yes". Comparing the whole word would tie this to the
+// listing's exact spelling for no gain.
+func (env *Env) tuneBool(name string) bool {
+	v, ok := env.Host.TuneGet(name)
+	if !ok || v == "" {
+		return false
+	}
+	return v[0] == 'y' || v[0] == 'Y' || v[0] == '1'
+}
+
+func (env *Env) tuneInt(name string) int {
+	v, _ := env.Host.TuneGet(name)
+	return atoiArg(v)
 }

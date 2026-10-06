@@ -66,6 +66,27 @@ func (h *mpiHost) HasFlag(obj mpi.Ref, flag string) bool {
 	return o.Flags.HasNamed(flag)
 }
 
+// ForceLevel is upstream's force_level global, which {force} and
+// @force share.
+func (h *mpiHost) ForceLevel() int { return h.s.forceDepth }
+
+// PlayerNamed is lookup_player: an exact player name, nothing else.
+func (h *mpiHost) PlayerNamed(name string) bool {
+	_, ok := h.w.PlayerNamed(name)
+	return ok
+}
+
+// ForceLockPasses is test_lock_false_default against the force lock,
+// which **nothing in this server evaluated** before: `@/flk` could be
+// set with @flock or @force_lock and was shown by examine, but
+// neither {force} nor @force ever read it, so a lock meant to say who
+// may force a puppet protected nothing at all. Upstream reads it in
+// both (mfuns2.c:2820 and wiz.c:563).
+func (h *mpiHost) ForceLockPasses(descr int, who, obj mpi.Ref) bool {
+	return h.s.lockPasses(h.w, descr, 1, ref.Ref(who),
+		ref.Ref(obj), propForceLock, false)
+}
+
 func (h *mpiHost) Exits(obj mpi.Ref) []mpi.Ref {
 	return toMPIRefs(h.w.Exits(ref.Ref(obj)))
 }

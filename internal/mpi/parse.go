@@ -165,6 +165,21 @@ type Host interface {
 	// thing.
 	Controls(who, target Ref) bool
 	Locked(descr int, player, thing Ref) bool
+	// ForceLevel is how deep a chain of forces already is, which
+	// bounds {force} against max_force_level. Upstream's is a
+	// global, force_level.
+	ForceLevel() int
+	// PlayerNamed reports whether a player of that exact name
+	// exists, which is lookup_player. {force} needs it to refuse
+	// a puppet whose first word is somebody's name, so that a
+	// thing cannot be made to impersonate a player.
+	PlayerNamed(name string) bool
+	// ForceLockPasses evaluates the force lock (`@/flk`) on obj
+	// against who, defaulting to **false** when none is set —
+	// test_lock_false_default (boolexp.c:906), which returns 0
+	// for an unset lock rather than passing it.
+	ForceLockPasses(descr int, who, obj Ref) bool
+
 	// TestLock evaluates a lock expression written as text.
 	TestLock(descr int, player, thing Ref, lock string) (bool, error)
 
@@ -217,6 +232,22 @@ type Host interface {
 type Error struct {
 	Func string
 	Msg  string
+	// Trail is the enclosing calls whose *argument parsing*
+	// failed because of this error, innermost first.
+	//
+	// Upstream reports a nested MPI failure as several lines, not
+	// one: the innermost ABORT_MPI notifies its own message, and
+	// then every enclosing function that was pre-parsing an
+	// argument notifies "{NAME} (arg N)" as the NULL propagates
+	// out (msgparse.c:1637). So "{null:{force:me,x}}" prints the
+	// {FORCE} refusal *and* " {NULL} (arg 1)", where this server
+	// printed the first line and stopped.
+	//
+	// Emerald reports a failure once, from Eval, so the chain is
+	// carried on the error rather than notified as it unwinds —
+	// which also keeps the lines in upstream's order. The frames
+	// carry no colon, unlike the message line.
+	Trail []string
 }
 
 func (e *Error) Error() string {
@@ -248,6 +279,13 @@ func Eval(env *Env, in string) string {
 	// one, which leaves the leading space upstream also produces.
 	how, _ := env.Var("how")
 	env.Host.Notify(env.Who, how+" "+err.Error())
+	// Then one line per enclosing call that was parsing an
+	// argument when this failed, innermost first.
+	if e, ok := err.(*Error); ok {
+		for _, frame := range e.Trail {
+			env.Host.Notify(env.Who, how+" "+frame)
+		}
+	}
 	return ""
 }
 
@@ -391,7 +429,8 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 		for j := range args {
 			evaluated, err := Parse(env, args[j])
 			if err != nil {
-				return "", 0, err
+				return "", 0, withFrame(err,
+					fn.Name, j+1)
 			}
 			args[j] = evaluated
 		}
@@ -556,3 +595,22 @@ func (env *Env) PopVar() {
 
 // Notes returns the messages produced during evaluation.
 func (env *Env) Notes() []string { return env.notes }
+
+// withFrame records an enclosing call on an error as it propagates
+// out of argument parsing, which is how upstream's several-line
+// report is built: msgparse.c:1637 notifies "{NAME} (arg N)" at each
+// level the NULL passes through.
+//
+// An error that is not one of ours is wrapped, so a failure from
+// anywhere still accumulates a trail.
+func withFrame(err error, name string, arg int) error {
+	frame := fmt.Sprintf("%c%s%c (arg %d)",
+		leadChar, name, argEnd, arg)
+	e, ok := err.(*Error)
+	if !ok {
+		return &Error{Msg: err.Error(),
+			Trail: []string{frame}}
+	}
+	e.Trail = append(e.Trail, frame)
+	return e
+}

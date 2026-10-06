@@ -274,6 +274,15 @@ func (h *stubHost) Width(Ref) int        { return 0 }
 // here, so they fall back to upstream's 78.
 func (h *stubHost) DescrWidth(int) int { return 0 }
 
+// {force}'s own three. No forcing is in progress, no player is named
+// after anything, and an unset force lock is false — which is
+// test_lock_false_default's own default.
+func (h *stubHost) ForceLevel() int         { return 0 }
+func (h *stubHost) PlayerNamed(string) bool { return false }
+func (h *stubHost) ForceLockPasses(int, Ref, Ref) bool {
+	return false
+}
+
 func (h *stubHost) Height(Ref) int { return 0 }
 func (h *stubHost) TuneGet(string) (string, bool) {
 	return "", false

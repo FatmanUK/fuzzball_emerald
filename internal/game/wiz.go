@@ -334,6 +334,33 @@ func (s *Server) cmdForce(c *ctx) {
 		c.tell("Permission denied: forced object not @set Xforcible.")
 		return
 	}
+	// The force lock, which **nothing in this server evaluated**:
+	// `@/flk` could be set with @flock or @force_lock and was
+	// shown by examine, but neither this nor {force} ever read
+	// it, so a lock meant to say who may force a puppet protected
+	// nothing. An unset lock is false (test_lock_false_default,
+	// boolexp.c:906), so a mortal needs an explicit lock that
+	// passes.
+	//
+	// Note the wording differs from {force}'s for the same test:
+	// this says "to you" and MPI's says "to trigger".
+	if !wizard && !s.lockPasses(c.w, c.d.ID, 1, c.who, victim,
+		propForceLock, false) {
+		c.tell("Permission denied: Object not force-locked " +
+			"to you.")
+		return
+	}
+	// A no-puppet zone is ZOMBIE on the *room*, not on the
+	// puppet, and was missing too.
+	if !wizard && o.Type() == ref.TypeThing {
+		if loc := c.w.Get(o.Location); loc != nil &&
+			loc.Type() == ref.TypeRoom &&
+			loc.Flags&ref.Zombie != 0 {
+			c.tell("Sorry, but that's in a " +
+				"no-puppet zone.")
+			return
+		}
+	}
 	if !wizard && o.Type() == ref.TypeThing {
 		if c.w.Get(c.who).Flags&ref.Zombie != 0 {
 			c.tell("Permission denied -- you cannot use zombies.")

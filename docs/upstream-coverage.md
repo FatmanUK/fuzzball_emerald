@@ -746,23 +746,87 @@ All seven are done. The golden case
 so that it tests the fix it belongs to rather than passing over a
 different bug.
 
-### MPI's {force} is half implemented
+### MPI's {force} is implemented, and the force lock is now read
 
-Found by the propqueue golden case, which tried to use it to drive the
-recursion limit. `mfn_force` (`mfuns2.c:2760`) has an **unblessed
-path** Emerald does not: with `allow_zombies` set, an unblessed
-`{force}` is allowed to proceed and is then subject to seven refusals
-of its own — a dark puppet, an owner flagged ZOMBIE, a no-puppets
-room, a thing named after a player, the XFORCIBLE flag, the force
-lock, and God. Emerald refuses every unblessed `{force}` outright with
-"Permission Denied.", where upstream's wording for the XFORCIBLE case
-alone is "Permission denied: forced object not @set Xforcible."
+Found by the propqueue golden case, which tried to use `{force}` to
+drive the recursion limit.
 
-It also found that **MPI reports only the innermost failing
-function**. Upstream walks back out, so `{null:{force:...}}` prints
-the `{FORCE}` error and then `{NULL} (arg 1)`; Emerald prints the
-first line and stops. That is the error *reporting*, not the
-evaluation, and it affects every nested MPI failure.
+`mfn_force` (`mfuns2.c:2753`) has an **unblessed path** Emerald did
+not have. It refused every unblessed `{force}` with "Permission
+Denied."; upstream refuses only when `allow_zombies` is off, and with
+it on an unblessed force proceeds and is then subject to six refusals
+of its own, four of which apply to a THING alone:
+
+- DARK — "Cannot force a dark puppet."
+- the owner flagged ZOMBIE — "Permission denied."
+- a no-puppets room, which is ZOMBIE on the **room** — "Cannot force
+  a Puppet in a no-puppets room."
+- a first word that is a player's name — "Cannot force a thing named
+  after a player."
+- no XFORCIBLE — "Permission denied: forced object not @set
+  Xforcible."
+- the force lock — "Permission denied: Object not force-locked to
+  trigger."
+
+So a world that allows zombies had a whole mechanism — puppets forced
+from their own descriptions — that could not run here at all. Two of
+those read "Permission denied." with a lower-case d where the
+`allow_zombies` refusal has a capital D; that is upstream's and the
+golden case pins it.
+
+Two more sit **outside** the blessed test and so refuse a blessed
+force too: God, and `force_level > max_force_level - 1`. An unblessed
+force never reaches the God one, because XFORCIBLE refuses a player
+first. And the command string is a **list** split on carriage
+returns, with the name-after-a-player test repeated per command for
+anything that is not a player — its message carries a "[2]".
+
+**The force lock was evaluated nowhere.** `@/flk` could be set with
+`@flock` or `@force_lock` and was shown by `examine`, but neither
+`{force}` nor `@force` ever read it, so a lock whose whole purpose is
+to say who may force a puppet protected nothing. Upstream reads it in
+both (`mfuns2.c:2820` and `wiz.c:563`), and an unset lock is **false**
+— `test_lock_false_default` (`boolexp.c:906`) returns 0 rather than
+passing. The wording differs between the two callers: `@force` says
+"force-locked to **you**" and `{force}` says "to **trigger**".
+
+`@force` was missing a second refusal with it: a no-puppet zone,
+"Sorry, but that's in a no-puppet zone." (`wiz.c:567`).
+
+**Two smaller `do_force` divergences are recorded and not fixed.**
+Its `allow_zombies` gate is `!Wizard(player) || Typeof(player) !=
+TYPE_PLAYER`, so upstream refuses a *puppet* forcing even when its
+owner is a wizard, where Emerald tests the wizard bit alone. And its
+last three refusals ask `Wizard(OWNER(player))` where the three above
+them ask `Wizard(player)` — the same for a player, who owns
+themselves, and different for a puppet. Both only bite when the
+forcer is not a player, which needs its own thought.
+
+### A nested MPI failure is several lines, not one
+
+Found by the `{force}` work above, which is why the two landed
+together.
+
+The innermost `ABORT_MPI` notifies its own message, and then **every
+enclosing function that was pre-parsing an argument** notifies
+`{NAME} (arg N)` as the NULL propagates out (`msgparse.c:1637`). So
+`{null:{force:me,look}}` prints the `{FORCE}` refusal *and*
+` {NULL} (arg 1)`, and a two-deep nest prints two frames. The
+argument's **position** is reported, not just the function, so
+`{midstr:abc,{force:me,look}}` ends ` {MIDSTR} (arg 2)`.
+
+Emerald printed the first line and stopped, so anything that failed
+inside a nest gave no indication of where it had failed from.
+
+Two details. The frames carry **no colon**, unlike the message line.
+And a function that does not pre-parse its arguments adds no frame at
+all — `{lit:{force:me,look}}` prints nothing whatever, because the
+inner call never runs.
+
+Upstream notifies each line as it unwinds. Emerald reports a failure
+once, from `Eval`, so the chain is carried on `mpi.Error.Trail`
+instead — which also keeps the lines in upstream's order, where
+notifying during the unwind would print the innermost message last.
 
 ### Two preferred types are still unset
 
