@@ -45,7 +45,6 @@ var primMLevel = map[string]int{
 	"PROGRAM_SETLINES":     4,
 	"PROPDIR?":             2,
 	"QUEUE":                3,
-	"SETNAME":              4,
 	"SETOWN":               4,
 	"TOADPLAYER":           4,
 	"UNCOMPILE":            4,

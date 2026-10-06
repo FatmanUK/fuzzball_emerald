@@ -57,6 +57,23 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
 # denied." — also not universal: GETPIDS (src/p_db.c) aborts with
 # "Permission denied.  Requires Mucker Level 3.", found the same way, when
 # it was ported.
+# A bare "mlev < N" that sits inside an *enclosing* guard the extractor
+# cannot see is not a floor either, and this is the one case found so
+# far.
+#
+# prim_setname's effective rule is "(mlev < 4) && !permissions(ProgUID,
+# ref)" -- a wizard, or whoever has permissions on the object. It has a
+# second, bare "if (mlev < 4)" as well, but nested inside
+# "if (Typeof(ref) == TYPE_PLAYER)", so it applies only to renaming a
+# player and only in the one case the outer test lets through: a program
+# renaming its own owner, where permissions() answers 1 for
+# "thing == player". conditions() yields that inner test without its
+# enclosing one, so it read as an unconditional level-4 floor and was
+# recorded as one -- which refused a mortal renaming an object they own.
+CONDITIONAL_FLOOR = {
+    "SETNAME",
+}
+
 CUSTOM_ABORT_MESSAGE = {
     "FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS", "WATCHPID",
     # src/p_connects.c: every mlev floor in this module has its own wording,
@@ -200,7 +217,8 @@ def main():
     table = {}
     for fn, lv in levels.items():
         nm = name_of.get(fn)
-        if nm and nm not in CUSTOM_ABORT_MESSAGE:
+        if nm and nm not in CUSTOM_ABORT_MESSAGE \
+                and nm not in CONDITIONAL_FLOOR:
             table[nm] = lv
 
     q = json.dumps

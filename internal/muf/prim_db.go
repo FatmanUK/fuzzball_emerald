@@ -14,12 +14,32 @@ import (
 
 func init() {
 	register("NAME", refToStr(func(h Host, r ref.Ref) string { return h.Name(r) }))
+	// SETNAME was gated at mucker 4 by the generated table, which
+	// was wrong: prim_setname's rule is "(mlev < 4) &&
+	// !permissions(ProgUID, ref)" — a wizard **or** whoever has
+	// permissions on the object — so a mortal could not rename
+	// an object they owned, and the refusal said "Permission
+	// denied. Requires Wizbit." where upstream says a bare
+	// "Permission denied."
+	//
+	// The false floor came from a *second*, bare "if (mlev < 4)"
+	// nested inside "if (Typeof(ref) == TYPE_PLAYER)": the
+	// extractor sees the inner condition without its enclosing
+	// one. That inner check is live, but only for the one case
+	// the outer test lets a mortal through — a program renaming
+	// its own owner, where permissions() answers 1 because "thing
+	// == player". SETNAME is in the generator's CONDITIONAL_FLOOR
+	// set now and checks for itself here.
+	//
+	// The **order** matters too: both type tests come before the
+	// permission one, so a mortal handed a non-string name is
+	// told about the argument rather than about permission.
 	register("SETNAME", func(f *Frame) (*Result, error) {
-		name, err := f.popStr()
+		nameVal, err := f.Pop()
 		if err != nil {
 			return nil, err
 		}
-		obj, err := f.popRef()
+		objVal, err := f.Pop()
 		if err != nil {
 			return nil, err
 		}
@@ -27,6 +47,50 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// valid_object (interp.c:2672): a dbref that exists
+		// and is not garbage.
+		if objVal.Type != TypeObject ||
+			!h.Valid(objVal.Ref) {
+			return nil, errf("Invalid argument type (1)")
+		}
+		if nameVal.Type != TypeString {
+			return nil, errf("Non-string argument (2)")
+		}
+		obj, name := objVal.Ref, nameVal.Str
+
+		if f.MLevel() < 4 &&
+			!f.permissions(h, f.progUID(h), obj) {
+			return nil, errf("Permission denied.")
+		}
+
+		if h.ObjType(obj) == ref.TypePlayer {
+			// Reached by a mortal only when renaming its
+			// own owner, which permissions() allows and
+			// this refuses.
+			if f.MLevel() < 4 {
+				return nil, errf("Permission denied.")
+			}
+			// A player's new name carries the password
+			// after it, so the name is the first word and
+			// everything past the whitespace is the
+			// credential.
+			newName, pass := splitNameAndPassword(name)
+			if pass == "" {
+				return nil, errf("%s", pwNeeded)
+			}
+			if !h.CheckPassword(obj, pass) {
+				return nil, errf("%s", pwWrong)
+			}
+			if !ascii.EqualFold(newName, h.Name(obj)) &&
+				!h.NameOK(newName, ref.TypePlayer) {
+				return nil, errf("You can't give a " +
+					"player that name.")
+			}
+			name = newName
+		} else if !h.NameOK(name, h.ObjType(obj)) {
+			return nil, errf("Invalid name.")
+		}
+
 		if err := h.SetName(obj, name); err != nil {
 			return nil, errf("%s", err.Error())
 		}
@@ -1076,3 +1140,55 @@ func validNewObjectParent(h Host, parent ref.Ref) bool {
 
 // equalFoldASCII compares two names the way property lookup does.
 func equalFoldASCII(a, b string) bool { return ascii.EqualFold(a, b) }
+
+// prim_setname's two password refusals, named because they do not fit
+// on the line that uses them at this indentation.
+const (
+	pwNeeded = "Player namechange requires password."
+	pwWrong  = "Incorrect password."
+)
+
+// permissions is interp.c:2706's permissions(), which is **not**
+// controls(): it has no wizard escape at all, and it answers false
+// for a player who is not the asker.
+//
+//   - the object itself, or HOME, is always permitted
+//   - a PLAYER never is, unless it *is* the asker
+//   - an EXIT is, when the owners match or it has no owner
+//   - a ROOM, THING or PROGRAM is, when the owners match
+//   - anything else, garbage included, is not
+//
+// Several primitives pair it with "mlev < 4" to mean "a wizard or the
+// owner", which is the shape the mucker-level generator has to skip
+// rather than read as a floor.
+func (f *Frame) permissions(h Host, who, thing ref.Ref) bool {
+	if thing == who || thing == ref.Home {
+		return true
+	}
+	switch h.ObjType(thing) {
+	case ref.TypePlayer:
+		return false
+	case ref.TypeExit:
+		owner := h.Owner(thing)
+		return owner == h.Owner(who) || owner == ref.Nothing
+	case ref.TypeRoom, ref.TypeThing, ref.TypeProgram:
+		return h.Owner(thing) == h.Owner(who)
+	}
+	return false
+}
+
+// splitNameAndPassword cuts a player's new name from the password
+// after it, which is how prim_setname reads its argument: the name is
+// the leading run of non-space characters and the credential is what
+// follows the whitespace.
+func splitNameAndPassword(s string) (name, pass string) {
+	i := 0
+	for i < len(s) && !isSpaceByte(s[i]) {
+		i++
+	}
+	name = s[:i]
+	for i < len(s) && isSpaceByte(s[i]) {
+		i++
+	}
+	return name, s[i:]
+}

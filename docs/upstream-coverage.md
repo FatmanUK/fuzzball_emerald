@@ -920,22 +920,52 @@ exist at all and the code path was unreachable.
 case, which would also exercise `leave`'s three remaining refusals
 from the inside rather than as unit tests.
 
-### Three MUF error messages are still not upstream's
+### The MUF error messages: one divergence, and one that was not
 
 Found by probing four deliberate program failures through both
-servers while writing the ANSI case. Programs match on these strings,
-so each is a real divergence rather than a cosmetic one:
+servers while writing the ANSI case, and **re-measured since** --
+which corrected the record.
 
-- **`+` reports itself as `+` and says "Invalid argument type."**
-  Upstream names the instruction `++` and says "Invalid datatype."
-  The doubled name is upstream's own and is not a typo in this
-  document.
-- **`SETNAME` checks permission before the argument type.** Given a
-  non-string name by a mortal, upstream answers "Non-string argument
-  (2)" and Emerald answers "Permission denied.  Requires Wizbit." The
-  order is what differs, not either message.
-- A fourth has been fixed: the stack underflow aborts said "stack
+- **`+` was recorded as a divergence and is not one.** This document
+  said upstream names the instruction `++` and says "Invalid
+  datatype." Driving `1 "a" +` through both servers, caught and
+  uncaught, gives byte-identical output either way: the instruction
+  is `+` and the message is "Invalid argument type.", which is what
+  this server already said. The entry was wrong in both halves.
+- **`SETNAME` -- fixed, and it was worse than an ordering.** The
+  recorded complaint was that it checks permission before the
+  argument type. It did, but the permission it checked was a
+  **mucker-4 floor that does not exist**: `prim_setname`'s rule is
+  `(mlev < 4) && !permissions(ProgUID, ref)` -- a wizard *or*
+  whoever has permissions on the object -- so a mortal program could
+  not rename an object it owned, and the refusal said "Permission
+  denied.  Requires Wizbit." where upstream says a bare "Permission
+  denied."
+
+  The false floor came from a **second**, bare `if (mlev < 4)`
+  nested inside `if (Typeof(ref) == TYPE_PLAYER)`. The mucker-level
+  generator's `conditions()` yields that inner test without its
+  enclosing one, so it read as unconditional. `CLAUDE.md` already
+  warns the extractor is approximate; this is the first case of the
+  **enclosing-guard** shape rather than the same-condition one it
+  already skips, and `gen_mlev.py` has a `CONDITIONAL_FLOOR` set for
+  it now.
+
+  The inner check is still live, for exactly one case the outer test
+  lets a mortal through: a program renaming its **own owner**, where
+  `permissions()` answers true because `thing == player`.
+
+  `permissions()` (`interp.c:2706`) is **not** `controls()` -- no
+  wizard escape at all, and false for any player but the asker. It
+  is ported as `Frame.permissions` because several primitives pair
+  it with `mlev < 4` to mean "a wizard or the owner".
+- A third has been fixed: the stack underflow aborts said "stack
   underflow" where upstream says "Stack underflow."
+
+**Worth re-checking the rest of the mucker table for the same
+shape.** `SETNAME` was found by chasing a message; nothing surveys
+the 34 gated names against their enclosing guards, so another false
+floor would look exactly like a deliberate one.
 
 `STRCAT`'s "Non-string argument." agrees exactly, which is why the
 ANSI case uses it to produce an error report.
