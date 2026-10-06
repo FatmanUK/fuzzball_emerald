@@ -115,10 +115,20 @@ distclean: clean pod-clean ## Remove artefacts and containers
 
 # The store tests need a database and skip without one. They are pointed at a
 # database of their own, never the one holding your world.
+# Go's per-package test timeout defaults to 10 minutes, and the golden
+# package crossed it: it starts a container per case and grows by about
+# two seconds for each one added, so it ran 578s early in the tranche
+# that added CHECKARGS and 600.6s by the end of the one that added
+# "home". A suite that fails on the clock looks exactly like a suite
+# that fails on a diff, so this is explicit rather than left to the
+# default.
+GOTIMEOUT ?= 30m
+
 .PHONY: test
 test: ## Run the tests (starts Postgres if it is not already up)
 	@$(MAKE) --no-print-directory db-up
-	FBE_TEST_DATABASE_URL="$(TEST_DB_URL)" $(GO) test -race ./...
+	FBE_TEST_DATABASE_URL="$(TEST_DB_URL)" $(GO) test -race \
+		-timeout $(GOTIMEOUT) ./...
 
 .PHONY: test-short
 test-short: ## Run only the tests that need no database
@@ -333,7 +343,7 @@ $(ORACLE_SRC)/src:
 golden: ## Run the differential tests against the C server
 	@podman image exists $(ORACLE_IMAGE) \
 		|| { echo "the oracle is not built; run 'make golden-build'"; exit 1; }
-	$(GO) test -v -count=1 ./internal/golden/
+	$(GO) test -v -count=1 -timeout $(GOTIMEOUT) ./internal/golden/
 
 .PHONY: golden-clean
 golden-clean: ## Remove the oracle image

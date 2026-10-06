@@ -953,20 +953,39 @@ that can reach it. Two of upstream's cannot be wired as things stand:
 Neither is observable without two exact matches of one name in one
 container, which is why they are recorded rather than chased.
 
-### Boarding a vehicle is reachable and uncovered
+### Boarding a vehicle is covered now
 
 `trigger()` boards a thing when the exit is *inside* it and it is a
-VEHICLE — `dest == LOCATION(exit)` — so making one needs `@action`,
+VEHICLE -- `dest == LOCATION(exit)` -- so making one needs `@action`,
 which attaches an exit to a named object. `@open` always attaches to
 the room, so while `@action` was its alias no boarding exit could
 exist at all and the code path was unreachable.
 
-`@action` is ported, so it is reachable now and simply has no test:
-`@action board=<vehicle>` then `@link board=<vehicle>`. Worth a golden
-case, which would also exercise `leave`'s three remaining refusals
-from the inside rather than as unit tests.
+`internal/golden/board_test.go` covers it, and the code turned out
+correct -- the first uncovered path this session that was. Disabling
+the boarding test changes thirteen transcript lines, so the case does
+reach it.
 
-### The MUF error messages: one divergence, and one that was not
+**The vehicle had to be dropped first.** `@create` leaves it in the
+player's inventory, and entering something you are carrying is a
+loop: both servers answer "That would cause a paradox." and the case
+compared clean while boarding nothing. That is the third time this
+session a case has passed over `@create`'s placement -- the others
+were the no-puppets-room run in `force_mpi_test.go` and an earlier
+`@recycle` probe. **Worth a habit: after writing a case, read one
+transcript rather than only comparing two.**
+
+Two of `trigger()`'s guards are still unreached and cannot be from a
+player: "a VEHICLE may not enter a VEHICLE" and "a non-wizard THING
+may not enter a ZOMBIE room" both test the object being *moved*, and
+a player is neither. They need a thing traversing an exit -- one that
+fetches it into a vehicle -- which is its own case.
+
+Naming an object from *inside* it does not work either: `@contents
+bus` and `@teleport bus=tram` both answer "I don't understand 'bus'."
+on both servers, which measures the matcher rather than boarding.
+
+### The MUF error messages: one divergence### The MUF error messages: one divergence, and one that was not
 
 Found by probing four deliberate program failures through both
 servers while writing the ANSI case, and **re-measured since** --
