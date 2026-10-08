@@ -585,3 +585,60 @@ func (w *World) Each(fn func(*Object) bool) {
 		}
 	}
 }
+
+// OwnerOf returns the object a player's possessions belong to, which
+// for a player is themselves.
+//
+// It lives here rather than in internal/game because the matcher
+// needs it too: `match_exits` weighs an exit's owner against where
+// the searcher is standing, and internal/match cannot import the
+// package that owns the commands.
+func (w *World) OwnerOf(r ref.Ref) ref.Ref {
+	o := w.Get(r)
+	if o == nil {
+		return ref.Nothing
+	}
+	if o.Type() == ref.TypePlayer {
+		return r
+	}
+	return o.Owner
+}
+
+// Controls is `controls` (`db.c:1822`): whether a player may modify
+// an object.
+//
+// The test is made on whoever owns the asking object, not the object
+// itself, so a puppet controls exactly what its owner does — which
+// is what lets a program running as a thing touch its owner's things.
+//
+// A wizard controls everything, with one exception: while
+// strict_god_priv is set, only God may touch God's objects. Without
+// that a wizard could edit God's programs and so give themselves
+// God's powers.
+//
+// Two of upstream's routes past the ownership test are **not** here
+// and are recorded in docs/upstream-coverage.md: `tp_realms_control`,
+// which defaults off, and an **ownership lock**, which does not —
+// `@ownlock` writes a property that nothing reads.
+func (w *World) Controls(who, target ref.Ref) bool {
+	o := w.Get(target)
+	if o == nil {
+		return false
+	}
+	owner := w.OwnerOf(who)
+	p := w.Get(owner)
+	if p == nil {
+		return false
+	}
+	if p.Flags.IsWizard() {
+		if w.Tune.Bool("strict_god_priv") &&
+			o.Owner == ref.God && owner != ref.God {
+			return false
+		}
+		return true
+	}
+	if who == target {
+		return true
+	}
+	return o.Owner == owner
+}

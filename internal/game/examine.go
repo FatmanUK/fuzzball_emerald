@@ -110,7 +110,14 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 	}
 
 	// Locks are shown by the name each one is known by, and only
-	// when set.
+	// when set -- and **rendered with names**, which is what
+	// `displayprop` does and what this loop was not doing. A lock
+	// is *stored* unparsed with the fullname argument off, so the
+	// property holds "#1&!#1"; showing a key means re-parsing it
+	// and unparsing it with that argument on, which is
+	// `lockText`. It already existed, for the property listing;
+	// this loop printed the raw stored string instead, so every
+	// key in every `examine` showed bare dbrefs.
 	for _, lk := range []struct{ label, path string }{
 		{"Key", propLock},
 		{"Link_OK Key", propLinkLock},
@@ -120,8 +127,10 @@ func (s *Server) examineObject(c *ctx, target ref.Ref) {
 		{"Read Key", propReadLock},
 		{"Ownership Key", propOwnLock},
 	} {
-		if v := lockString(w, target, lk.path); v != unlockedValue {
-			c.tell("%s: %s", lk.label, v)
+		if v := lockString(w, target,
+			lk.path); v != unlockedValue {
+			c.tell("%s: %s", lk.label,
+				s.lockText(w, c.d.ID, c.who, v))
 		}
 	}
 

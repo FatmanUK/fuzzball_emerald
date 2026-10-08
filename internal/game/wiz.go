@@ -414,17 +414,10 @@ func (s *Server) force(w *world.World, callerD *session.Descriptor, victim ref.R
 	s.commandAs(w, d, victim, strings.TrimSpace(command))
 }
 
-// ownerOf returns the object a player's possessions belong to, which
-// for a player is themselves.
+// ownerOf is World.OwnerOf, kept as a free function because a few
+// hundred call sites read better without the receiver.
 func ownerOf(w *world.World, r ref.Ref) ref.Ref {
-	o := w.Get(r)
-	if o == nil {
-		return ref.Nothing
-	}
-	if o.Type() == ref.TypePlayer {
-		return r
-	}
-	return o.Owner
+	return w.OwnerOf(r)
 }
 
 // ownerIsWizard reports whether whoever owns an object has wizard

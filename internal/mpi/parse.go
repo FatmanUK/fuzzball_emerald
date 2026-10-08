@@ -132,7 +132,11 @@ type Host interface {
 	IsPlayer(obj Ref) bool
 	Online(obj Ref) bool
 	// Match resolves a name the way a player's command would.
-	Match(who Ref, name string) Ref
+	// Match is mesg_dbref_raw (msgparse.c:667). It takes both the
+	// viewer and the object carrying the message, because "this"
+	// names the latter and because a failed search is retried
+	// *around* it.
+	Match(who, what Ref, name string) Ref
 	// Notify sends a line to an object's connections, and
 	// NotifyExcept to everything in a room but the objects named.
 	Notify(obj Ref, msg string)

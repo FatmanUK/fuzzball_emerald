@@ -410,37 +410,14 @@ func (s *Server) canSee(w *world.World, who, thing ref.Ref,
 	return o.Flags&ref.Dark == 0 || owned
 }
 
-// controls reports whether a player may modify an object.
-//
-// The test is made on whoever owns the asking object, not the object
-// itself, so a puppet controls exactly what its owner does — which
-// is what lets a program running as a thing touch its owner's things.
-//
-// A wizard controls everything, with one exception: while
-// strict_god_priv is set, only God may touch God's objects. Without
-// that a wizard could edit God's programs and so give themselves
-// God's powers.
-func (s *Server) controls(w *world.World, who, target ref.Ref) bool {
-	o := w.Get(target)
-	if o == nil {
-		return false
-	}
-	owner := ownerOf(w, who)
-	p := w.Get(owner)
-	if p == nil {
-		return false
-	}
-	if p.Flags.IsWizard() {
-		if w.Tune.Bool("strict_god_priv") &&
-			o.Owner == ref.God && owner != ref.God {
-			return false
-		}
-		return true
-	}
-	if who == target {
-		return true
-	}
-	return o.Owner == owner
+// controls is World.Controls, which moved into internal/world when
+// the matcher turned out to need it: `match_exits` weighs an exit's
+// owner against where the searcher is standing, and internal/match
+// cannot import this package.
+func (s *Server) controls(w *world.World, who,
+	target ref.Ref) bool {
+
+	return w.Controls(who, target)
 }
 
 // cmdInventory lists what the player is carrying, and then what they

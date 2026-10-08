@@ -482,7 +482,7 @@ func (m *Matcher) matchExitsOn(on ref.Ref) {
 		if !ok {
 			continue
 		}
-		lev := priority(e.Flags)
+		lev := m.exitLevel(r, e)
 		switch {
 		case lev > m.level:
 			m.level, m.longest = lev, len(alias)
@@ -557,6 +557,41 @@ func matchAlias(exitName, name string, takesArg bool) (
 		}
 	}
 	return "", "", "", false
+}
+
+// exitLevel is PLevel plus `compatible_priorities` (`match.c:588`),
+// which **promotes a default-priority exit to 2** and had no reader
+// anywhere in this server -- one of the 69 `@tune` parameters nothing
+// consulted, and it defaults *on*.
+//
+// What it is for: without it an exit hanging on a THING would lose to
+// a plain exit on the room, because a plain exit is PLevel 1 and a
+// thing's is too, and the room is searched first. With it both reach
+// 2, and the equal-level tie then goes to whichever stage found one
+// first -- so the room's exit wins, which is the legacy behaviour the
+// name refers to.
+//
+// The promotion is skipped for an exit on a THING whose owner does
+// not control where the searcher is standing: somebody else's puppet
+// cannot outrank the room you are in.
+func (m *Matcher) exitLevel(r ref.Ref, e *world.Object) int {
+	lev := priority(e.Flags)
+	if lev != 1 || !m.w.Tune.Bool("compatible_priorities") {
+		return lev
+	}
+	loc := m.w.Get(e.Location)
+	if e.Location == ref.Nothing || loc == nil ||
+		loc.Type() != ref.TypeThing {
+		return 2
+	}
+	from := m.w.Get(m.from)
+	if from == nil {
+		return 2
+	}
+	if m.w.Controls(m.w.OwnerOf(r), from.Location) {
+		return 2
+	}
+	return lev
 }
 
 // priority is Fuzzball's PLevel: an exit's mucker bits raise how

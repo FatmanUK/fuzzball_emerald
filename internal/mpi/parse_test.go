@@ -38,12 +38,12 @@ func (h *stubHost) Parent(obj Ref) Ref {
 	}
 	return 0
 }
-func (h *stubHost) Owner(Ref) Ref         { return 1 }
-func (h *stubHost) Contents(Ref) []Ref    { return nil }
-func (h *stubHost) Valid(obj Ref) bool    { return obj >= 0 }
-func (h *stubHost) IsPlayer(obj Ref) bool { return obj == 1 }
-func (h *stubHost) Online(Ref) bool       { return true }
-func (h *stubHost) Match(Ref, string) Ref { return 1 }
+func (h *stubHost) Owner(Ref) Ref              { return 1 }
+func (h *stubHost) Contents(Ref) []Ref         { return nil }
+func (h *stubHost) Valid(obj Ref) bool         { return obj >= 0 }
+func (h *stubHost) IsPlayer(obj Ref) bool      { return obj == 1 }
+func (h *stubHost) Online(Ref) bool            { return true }
+func (h *stubHost) Match(Ref, Ref, string) Ref { return 1 }
 func (h *stubHost) Notify(_ Ref, msg string) {
 	h.told = append(h.told, msg)
 }

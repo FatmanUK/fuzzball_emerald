@@ -1458,6 +1458,101 @@ then auditing every command that reads `ctx.arg`, so it is recorded
 here rather than folded into the `@set` work. There is deliberately
 no golden probe for it: one would be a case that cannot pass.
 
+### MPI ran on a brace and on nothing else
+
+§2.2.2's looktrap is `` @set here = _details/sign;...:type `look
+mailboxes' `` and the two servers disagreed about the **backtick**:
+upstream consumed it, this server printed it. Not a looktrap bug —
+it reproduces on a plain `@desc`.
+
+`do_parse_mesg` (`msgparse.c:1400`) runs its scanner over every
+message property whether or not the text contains a call, and the
+scanner does three things besides evaluating one. A backtick toggles
+literal mode and is consumed (`MFUN_LITCHAR`, `mpi.h:31`); `\r`
+becomes a carriage return and `\[` becomes the escape character,
+which is how a world writes ANSI into a description; and any other
+`\x` passes through as `x`, which is the only way to write a
+literal brace or backtick. **`evalMPIAs` short-circuited on "does
+the text contain a `{`?"**, which was invented here — so every
+description without a call in it was printed raw and all three
+behaviours were missing.
+
+### MPI could not resolve `this`
+
+The same script's `{name:this}` answered "Match failed." `Host.Match`
+was `match_everything` plus an unconditional player search, and
+`mesg_dbref_raw` (`msgparse.c:667`) is a different function:
+
+- **four keyword names first** — `this`, `me`, `here`, `home` —
+  and upstream's own comment says matching `this` is unique to MPI.
+  `me` and `here` happened to work through `match_everything`;
+  `this` was not handled at all, so every `{...:this}` failed. `home`
+  is reproduced and is **dead**: it yields HOME, which the
+  function's own closing `OkObj` check rejects, so `{name:home}` is
+  "Match failed." upstream too;
+- then a **five-stage** search — absolute, all exits, neighbour,
+  possession, registered — with no `match_me` or `match_here`,
+  because the keywords have answered those, and `match_absolute`
+  without the wizard gate `match_everything` puts on it;
+- then, if that found nothing, **the same search again around the
+  object carrying the message** (`init_match_remote`), with
+  `match_player` in front. So a description on an object elsewhere
+  can name what is near *it*. `Matcher.Around` is that constructor
+  and had been written with no caller at all.
+
+Not ported, and recorded instead: the three wrappers around
+`mesg_dbref_raw` have **different permission rules and a second
+failure value**. `mesg_dbref` (`:742`) applies `mesg_read_perms`,
+`mesg_dbref_strict` (`:775`) demands the blessed bit or common
+ownership, and both answer `PERMDENIED` where the raw form answers
+`UNKNOWN` — two outcomes with two messages, where `Env.resolve` has
+one path and no permission test.
+
+Five mutations, all five caught. The first attempt at one of them
+did not compile, so it tested nothing until it was rewritten without
+the import it had removed.
+
+### `examine` printed the stored lock, not the rendered one
+
+§2.3's locks. A lock is **stored** unparsed with
+`unparse_boolexp`'s fullname argument *off*, so the property holds
+`#1&!#1`; `displayprop` renders a key by re-parsing it and
+unparsing it with that argument *on*, which gives
+`One(#1PWM3)&!One(#1PWM3)`. `lockText` already did exactly that, for
+the property listing — `examine`'s own seven-key block called
+`lockString` and printed the raw stored string, so every key in
+every `examine` showed bare dbrefs.
+
+### `compatible_priorities` had no reader, and exit priority was wrong
+
+§2.3.3. `match_exits` (`match.c:588`) **promotes a
+default-priority exit from 1 to 2** when `compatible_priorities` is
+set, which it is by default — one of the 69 `@tune` parameters
+nothing in this server consulted.
+
+Without the promotion an exit hanging on a THING beats a plain exit
+on the room: both are `PLevel` 1, and a strictly higher level
+overwrites an earlier stage's match while an equal one does not. With
+it both reach 2, the tie goes to the stage that searched first, and
+the room's exit wins — which is the legacy behaviour the parameter is
+named for. The manual's own example is a global `bank` against a
+local one, and the two servers picked differently.
+
+The promotion is **withheld** from an exit on a thing whose owner
+does not control where the searcher is standing, so somebody else's
+puppet cannot outrank the room you are in. No transcript can reach
+that branch, because the oracle's player owns every object in its
+world, so it is a unit test — as is the parameter being off, and a
+mucker bit making the level explicit so the promotion never applies.
+
+Porting it moved `controls` and `ownerOf` into `internal/world` as
+`World.Controls` and `World.OwnerOf`: the test is
+`controls(OWNER(exit), LOCATION(match_from))`, `internal/match`
+cannot import `internal/game`, and `Server.controls` never used its
+receiver. The two names in `internal/game` now delegate.
+
+Five mutations across the two, all five caught.
+
 ### The six `_sys` values on `#0`
 
 `SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream

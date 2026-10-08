@@ -124,6 +124,148 @@ var buildInnScript = Script{
 	"examine here",
 }
 
+// furnishScript is §2.2.1 (droptos) and §2.2.2 (looktraps), the
+// chapters about what a room does with what is put in it and what it
+// says when a player looks at part of it.
+var furnishScript = Script{
+	"@dig Lost and Found", // #4
+
+	// A dropto: things dropped here go straight through, because
+	// the room is not STICKY.
+	"@link here=#4",
+	"@create bic", // #5
+	"drop bic",
+	"@contents here",
+	"@contents #4",
+
+	// STICKY postpones it until every player has left, and nobody
+	// leaves in this script -- so the pen stays put and the bic
+	// is already gone.
+	"@set here=S",
+	"@create pen", // #6
+	"drop pen",
+	"@contents here",
+	"@contents #4",
+	"@set here=!S",
+
+	// And removing the dropto, which has its own wording.
+	"@unlink here",
+	"@create pad", // #7
+	"drop pad",
+	"@contents here",
+
+	// §2.2.2: a looktrap is a `_details` property with
+	// semicolon-separated aliases, and the manual uses `@set` for
+	// it rather than `@propset` -- which is what sent the
+	// previous commit at `@set`'s own rules.
+	"@set here = _details/sign;plaque;notice:To see who " +
+		"lives here, type `look mailboxes'.",
+	"look sign",
+	"look plaque",
+	"look notice",
+
+	// A name the trap does not carry, so the ordinary look
+	// failure still answers.
+	"look mailboxes",
+	"examine here=_details/**",
+
+	// MPI inside a detail. `{time}` is in the manual and cannot
+	// be compared -- the two servers run in different zones -- so
+	// this uses a function whose answer is the world's own.
+	"@set here=_details/map;chart:The chart is headed " +
+		"{name:this}.",
+	"look map",
+	"look chart",
+
+	// A detail that is **not a string** does not run, which is
+	// the reason `@set`'s `^N` form matters: it is the only way
+	// to make an integer property from the command line.
+	"@set here=_details/count:^42",
+	"look count",
+	"examine here=_details/**",
+
+	// Two traps whose alias lists overlap. The walk stops at the
+	// first match deterministically, so this is safe where an
+	// ambiguous *object* would be a coin toss.
+	"@set here=_details/sign;board:A second sign.",
+	"look sign",
+	"look board",
+}
+
+// lockScript is §2.3 and its three sub-chapters: an exit with a lock
+// and its four messages, a **bogus** exit that goes nowhere, an
+// **unsecured** exit and the two ways of securing one, and exit
+// **priority**, which is mucker bits on an exit.
+var lockScript = Script{
+	"@dig Vault",         // #4
+	"@open vault;v = #4", // #5
+
+	// A lock that passes, with the fail messages that will not
+	// show while it does.
+	"@lock v = me",
+	"@fail v = The vault is sealed.",
+	"@ofail v = rattles the vault door.",
+	"@succ v = The door swings open.",
+	"@osucc v = opens the vault.",
+	"v",
+	"@tel me = #0",
+
+	// And one nobody passes, which is the idiom §2.3.2 gives for
+	// securing an exit without linking it.
+	"@lock v = me&!me",
+	"v",
+	"examine v",
+	"@unlock v",
+	"v",
+	"@tel me = #0",
+
+	// §2.3.1: a bogus exit is one that leads nowhere and exists
+	// for its messages. The manual links it to $nothing, a std-db
+	// program; the fixture's own program stands in.
+	"@register #2 = nothing",
+	"@open Grandma's Rocker;grandmas rocker;rocker;chair;sit",
+	"@link chair = $nothing",
+	"@desc chair = An old, old rocker that has been in the " +
+		"family for generations.",
+	"@succ chair = You take a seat in the old rocker.",
+	"@osucc chair = takes a seat in the old rocker.",
+	"look rocker",
+	"examine chair",
+
+	// §2.3.2: an unlinked exit can be seized by anybody who uses
+	// it, so it is either linked or locked shut. This one is
+	// locked rather than linked, which is the other half of the
+	// advice.
+	"@open bench",
+	"@lock bench = me&!me",
+	"bench",
+	"examine bench",
+
+	// §2.3.3: priority is mucker bits on the exit, and an exit
+	// at a higher level wins outright -- so two exits of one name
+	// at *different* levels are decided deterministically, where
+	// two at the same level are a coin toss `choose_thing`
+	// deliberately reproduces. Both are named by dbref, because
+	// naming "bank" while two of them exist would be ambiguous
+	// for `@set` as well.
+	"@create till", // #8
+	"drop till",
+	"@action bank = till", // #9, on the thing
+	"@open bank",          // #10, on the room
+	"@link #9 = $nothing",
+	"@link #10 = $nothing",
+	"@succ #9 = The till rattles open.",
+	"@succ #10 = The branch is closed.",
+	"@set #9 = M1",
+	"examine #9",
+	"examine #10",
+	"bank",
+	"@set #9 = M0",
+	"@set #10 = M2",
+	"examine #10",
+	"bank",
+}
+
 // TestWalkthroughMatchesFuzzball drives the manual's own scenarios
 // through both servers.
 func TestWalkthroughMatchesFuzzball(t *testing.T) {
@@ -133,6 +275,8 @@ func TestWalkthroughMatchesFuzzball(t *testing.T) {
 		script Script
 	}{
 		{"BuildAnInn", buildInnScript},
+		{"FurnishIt", furnishScript},
+		{"LockIt", lockScript},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			compareWalkthrough(t, tc.script)

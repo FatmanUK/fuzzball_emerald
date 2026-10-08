@@ -1,8 +1,7 @@
 package game
 
 import (
-	"strings"
-
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/mpi"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -96,8 +95,49 @@ func (h *mpiHost) Online(obj mpi.Ref) bool {
 	return h.s.hub.Online(ref.Ref(obj))
 }
 
-func (h *mpiHost) Match(who mpi.Ref, name string) mpi.Ref {
-	return mpi.Ref(match.New(h.w, ref.Ref(who), name).Everything().Player().Result())
+// Match is `mesg_dbref_raw` (`msgparse.c:667`): four keyword names,
+// then a five-stage search around the viewer, then **the same search
+// again around the object carrying the message**.
+//
+// What stood here was `match_everything` plus an unconditional player
+// search, which is a different function. So `{name:this}` answered
+// "Match failed." -- `this` is the one name that is unique to MPI and
+// it was not handled at all -- and a description on an object in
+// another room could not name anything near itself, because the
+// remote pass did not exist. `Matcher.Around` is `init_match_remote`
+// and had been written with no caller.
+func (h *mpiHost) Match(who, what mpi.Ref, name string) mpi.Ref {
+	viewer, obj := ref.Ref(who), ref.Ref(what)
+	switch {
+	case ascii.EqualFold(name, "this"):
+		return mpi.Ref(obj)
+	case ascii.EqualFold(name, "me"):
+		return mpi.Ref(viewer)
+	case ascii.EqualFold(name, "here"):
+		if o := h.w.Get(viewer); o != nil {
+			return mpi.Ref(o.Location)
+		}
+		return mpi.Ref(ref.Nothing)
+	case ascii.EqualFold(name, "home"):
+		// Reproduced because upstream has it, and **dead**
+		// because upstream's own closing `OkObj` check
+		// rejects HOME: `{name:home}` is "Match failed."
+		// there too.
+		return mpi.Ref(ref.Home)
+	}
+	// Note what this list is not: no `match_me` or `match_here`,
+	// which the keywords above have already answered, and
+	// `match_absolute` without the wizard gate `match_everything`
+	// puts on it.
+	r := match.New(h.w, viewer, name).
+		Absolute().Exits().Neighbor().Possession().
+		Registered().Result()
+	if r == ref.Nothing {
+		r = match.New(h.w, viewer, name).Around(obj).
+			Player().Exits().Neighbor().Possession().
+			Registered().Result()
+	}
+	return mpi.Ref(r)
 }
 
 func (h *mpiHost) Notify(obj mpi.Ref, msg string) {
@@ -126,9 +166,15 @@ func (s *Server) evalMPIAs(w *world.World, descr int,
 	viewer, what ref.Ref, text, how, cmd, arg string,
 	blessed bool, kind mpi.MesgType) string {
 
-	if !strings.ContainsRune(text, '{') {
-		return text
-	}
+	// There is deliberately no "does it contain a brace?"
+	// short-circuit. One used to stand here, and it was invented:
+	// `do_parse_mesg` always runs the scanner, which does three
+	// things besides evaluating calls -- it consumes the
+	// **backtick** that toggles literal mode (`MFUN_LITCHAR`,
+	// `mpi.h:31`), turns `\r` into a carriage return and `\[`
+	// into an escape, and passes any other `\x` through as `x`.
+	// So a description with no brace in it still changes, and
+	// every such description diverged.
 	if !w.Tune.Bool("do_mpi_parsing") {
 		return text
 	}

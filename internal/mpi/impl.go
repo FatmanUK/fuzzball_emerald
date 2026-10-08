@@ -711,7 +711,7 @@ func (env *Env) lookup(name string) Ref {
 			return Ref(n)
 		}
 	}
-	return env.Host.Match(env.Who, name)
+	return env.Host.Match(env.Who, env.What, name)
 }
 
 // mayWrite reports whether this evaluation may change an object.
