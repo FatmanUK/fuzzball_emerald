@@ -103,3 +103,15 @@ func TestPronounSubUsesDefaultTableByGender(t *testing.T) {
 		t.Errorf("literal/unknown directives: got %q, want %q", got, want)
 	}
 }
+
+// ProgMLevel declines to answer, so Frame.MLevel falls back to the
+// level the test set on the Program itself.
+//
+// Every host here embeds a nil Host, which is deliberate: anything a
+// test does not answer is a programming error rather than a silent
+// zero. Frame.MLevel reads this for *every* mucker gate, though, so
+// without it a primitive with a floor segfaults rather than saying
+// which method it wanted.
+func (h *pronounTestHost) ProgMLevel(ref.Ref) (int, bool) {
+	return 0, false
+}

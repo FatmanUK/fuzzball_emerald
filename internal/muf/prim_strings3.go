@@ -41,7 +41,9 @@ func init() {
 			return nil, err
 		}
 		if msg != "" {
-			h.NotifyExcept(h.Location(f.Caller), []ref.Ref{f.Caller}, msg)
+			h.NotifyExcept(h.Location(f.Caller),
+				[]ref.Ref{f.Caller},
+				mlev1Prefix(f, h, msg, ref.Nothing))
 		}
 		return nil, nil
 	})

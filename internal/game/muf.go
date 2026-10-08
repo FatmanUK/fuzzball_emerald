@@ -99,6 +99,59 @@ func (h *mufHost) MoveTo(what, dest ref.Ref) error {
 	return h.w.MoveTo(what, dest)
 }
 
+// progMLevel is find_mlev: a program runs at the lower of its own
+// mucker level and its owner's.
+//
+// A wizard with no mucker bits has level 0, so programs it owns are
+// capped there. ok is false for an object that is not there, so a
+// frame falls back to whatever its compile recorded.
+func progMLevel(w *world.World, r ref.Ref) (int, bool) {
+	o := w.Get(r)
+	if o == nil {
+		return 0, false
+	}
+	mlev := o.Flags.MLevel()
+	if owner := w.Get(o.Owner); owner != nil {
+		if lim := owner.Flags.MLevel(); lim < mlev {
+			mlev = lim
+		}
+	}
+	return mlev, true
+}
+
+// ProgMLevel implements muf.Host, so a frame reads the level live
+// rather than taking the one its compile was handed. Server.programs
+// caches a compile for the life of the process and nothing
+// invalidates it on a flag change -- and it could not usefully, since
+// the *owner's* level caps it too, so changing one player's bits
+// would mean invalidating every program they own.
+func (h *mufHost) ProgMLevel(prog ref.Ref) (int, bool) {
+	return progMLevel(h.w, prog)
+}
+
+// ChownLockPasses implements muf.Host for SETOWN, which is the one
+// primitive that consults an object's @chlock. The true default when
+// no lock is set is test_lock's own (boolexp.c:880), not an invention
+// here.
+func (h *mufHost) ChownLockPasses(descr int, who,
+	what ref.Ref) bool {
+
+	return h.s.lockPasses(h.w, descr, 1, who, what,
+		propChownLock, true)
+}
+
+// PrefixName implements muf.Host for the notify primitives' mucker-1
+// name prefixing. prefixMessage is already prefix_message with
+// SuppressIfPresent set, which is the argument upstream passes here
+// too.
+func (h *mufHost) PrefixName(text string, who ref.Ref) string {
+	o := h.w.Get(who)
+	if o == nil {
+		return text
+	}
+	return prefixMessage(text, o.Name)
+}
+
 func (h *mufHost) Valid(obj ref.Ref) bool { return h.w.Valid(obj) }
 
 func (h *mufHost) ObjType(obj ref.Ref) ref.ObjType {
@@ -558,16 +611,7 @@ func (s *Server) compileSource(w *world.World, r ref.Ref,
 	//
 	// Note that a wizard with no mucker bits has level 0, so
 	// programs it owns are capped there.
-	o := w.Get(r)
-	mlev := 1
-	if o != nil {
-		mlev = o.Flags.MLevel()
-		if owner := w.Get(o.Owner); owner != nil {
-			if lim := owner.Flags.MLevel(); lim < mlev {
-				mlev = lim
-			}
-		}
-	}
+	mlev, _ := progMLevel(w, r)
 
 	res, err := compiler.CompileResult(src, compiler.Options{
 		Ref:            r,

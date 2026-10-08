@@ -742,6 +742,16 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// p_db.c:379. A tunable floor, so the mucker table
+		// cannot hold it; the default is 1, which is why
+		// nothing noticed it was unread.
+		if err := tunableFloor(f, h, "pennies_muf_mlev",
+			penniesDenied); err != nil {
+			return nil, err
+		}
+		if !isMoneyHolder(h, obj) {
+			return nil, errf("%s", badMoneyArg)
+		}
 		v, _ := h.GetProp(obj, propValue)
 		return nil, f.Push(Int(v.Num))
 	})
@@ -754,10 +764,142 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// p_db.c:74 onwards. The table had an invented floor
+		// of 4 here, taken from the mlev<4 block below, which
+		// is arithmetic rather than permission.
+		if err := tunableFloor(f, h, "addpennies_muf_mlev",
+			addPenniesDenied); err != nil {
+			return nil, err
+		}
+		if !isMoneyHolder(h, obj) {
+			return nil, errf("%s", badMoneyArg)
+		}
+		// Level 4 is needed for a *thing*, not in general: a
+		// type test, not a floor (p_db.c:88).
+		if f.MLevel() < 4 &&
+			h.ObjType(obj) == ref.TypeThing {
+			return nil, errf("Permission denied.")
+		}
 		v, _ := h.GetProp(obj, propValue)
+		if f.MLevel() < 4 {
+			if err := penniesRange(h, v.Num,
+				amount); err != nil {
+				return nil, err
+			}
+		}
 		h.SetProp(obj, propValue, props.Value{Type: props.Int, Num: v.Num + amount})
 		return nil, nil
 	})
+}
+
+// The three money primitives' refusals. Upstream's wording is oddly
+// literal and inconsistently capitalised -- "Permission Denied" for
+// addpennies and pennies against "Permission denied" for movepennies
+// -- and programs match on it, so it is reproduced rather than
+// tidied. prim_misc2.go's USERLOG is the same shape.
+const (
+	penniesDenied = "Permission Denied " +
+		"(mlev < tp_pennies_muf_mlev)"
+	addPenniesDenied = "Permission Denied " +
+		"(mlev < tp_addpennies_muf_mlev)"
+	movePenniesDenied = "Permission denied " +
+		"(mlev < tp_movepennies_muf_mlev)"
+	badMoneyArg = "Invalid player or thing argument."
+)
+
+// tunableFloor refuses when the frame is below a floor named by an
+// @tune parameter.
+//
+// A map[string]int cannot express a gate a world can move at runtime,
+// so these five live in the primitives rather than in mlev_gen.go --
+// and gen_mlev.py now names them in TUNABLE_FLOOR so that dropping
+// one is a generator failure rather than a silent hole, which is how
+// all three of these came to have no gate at all.
+func tunableFloor(f *Frame, h Host, parm, msg string) error {
+	if f.MLevel() < int(h.TuneInt(parm)) {
+		return errf("%s", msg)
+	}
+	return nil
+}
+
+// isMoneyHolder is the "player or thing" test all three money
+// primitives make on their object argument.
+func isMoneyHolder(h Host, obj ref.Ref) bool {
+	t := h.ObjType(obj)
+	return h.Valid(obj) &&
+		(t == ref.TypePlayer || t == ref.TypeThing)
+}
+
+// penniesRange is ADDPENNIES's four refusals below mucker 4
+// (p_db.c:96 onwards): the signed overflow tests upstream writes as
+// comparisons that only make sense on a wrapping int, plus the
+// max_pennies ceiling and the floor at zero.
+func penniesRange(h Host, have, add int64) error {
+	if add > 0 {
+		if have > have+add {
+			return errf("Would roll over player's score.")
+		}
+		if have+add > h.TuneInt("max_pennies") {
+			return errf("Would exceed MAX_PENNIES.")
+		}
+		return nil
+	}
+	if have < have+add {
+		return errf("Would roll over player's score.")
+	}
+	if have+add < 0 {
+		return errf("Result would be negative.")
+	}
+	return nil
+}
+
+// setownMortalRules is the block SETOWN's "if (mlev < 4)" opens
+// (p_db.c:1891). It is not a floor: a mortal program may chown an
+// object marked CHOWN_OK to its own owner, and the table's recorded 4
+// forbade exactly the case the flag exists for.
+//
+// Four refusals, each with its own sentence, and the order is
+// upstream's: the new owner must be the caller, the object must be
+// CHOWN_OK *and* pass its @chlock, a room must be stood in, and a
+// thing must be carried.
+func setownMortalRules(f *Frame, h Host, obj, owner ref.Ref) error {
+	if owner != f.Caller {
+		return errf("Permission denied. (2)")
+	}
+	if h.Flags(obj)&ref.ChownOK == 0 ||
+		!h.ChownLockPasses(f.Descr, f.Caller, obj) {
+		return errf("Permission denied. (1)")
+	}
+	if h.ObjType(obj) == ref.TypeRoom &&
+		h.Location(f.Caller) != obj {
+		return errf("Permission denied: not in room. (1)")
+	}
+	if h.ObjType(obj) == ref.TypeThing &&
+		h.Location(obj) != f.Caller {
+		return errf("Permission denied: object not " +
+			"carried. (1)")
+	}
+	return nil
+}
+
+// movePenniesRange is MOVEPENNIES's four refusals below mucker 4
+// (p_db.c:2459 onwards). They are the same shape as ADDPENNIES's but
+// each carries an argument number, and the pair is checked in one
+// direction only: the amount is already known to be non-negative.
+func movePenniesRange(h Host, from, to, amount int64) error {
+	if from < from-amount {
+		return errf("Would roll over player's score. (1)")
+	}
+	if from-amount < 0 {
+		return errf("Result would be negative. (1)")
+	}
+	if to > to+amount {
+		return errf("Would roll over player's score. (2)")
+	}
+	if to+amount > h.TuneInt("max_pennies") {
+		return errf("Would exceed MAX_PENNIES. (2)")
+	}
+	return nil
 }
 
 // propValue is where an object's currency is kept, from include/db.h.
@@ -888,6 +1030,21 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// p_db.c:2200 is
+		//   (mlev < 3) || ((mlev < 4) && !permissions(...))
+		// -- two independent disjuncts. The generator's skip
+		// regex matched "permissions(" anywhere in the
+		// condition and discarded the whole thing, so the
+		// unconditional floor of 3 was lost and this
+		// primitive had no level check at all: a mucker-1
+		// program could recycle anything. The 3 is back in
+		// the table (gen_mlev.py splits on top-level "||"
+		// now); the second disjunct has to be here, because
+		// it needs the argument.
+		if f.MLevel() < 4 &&
+			!f.permissions(h, f.progUID(h), obj) {
+			return nil, errf("Permission denied.")
+		}
 		if err := h.Recycle(obj); err != nil {
 			return nil, errf("%s", err.Error())
 		}
@@ -903,6 +1060,29 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// p_db.c:1880 onwards. The table recorded a floor of
+		// 4 from the "if (mlev < 4)" below, which opens a
+		// block of mortal-only restrictions rather than
+		// refusing -- so a mortal program could not chown
+		// anything, including an object its owner had marked
+		// CHOWN_OK for exactly that purpose.
+		if !h.Valid(obj) ||
+			h.ObjType(obj) == ref.TypePlayer {
+			return nil, errf("Invalid argument (1)")
+		}
+		if !h.Valid(owner) ||
+			h.ObjType(owner) != ref.TypePlayer {
+			return nil, errf("Invalid argument (2)")
+		}
+		if f.MLevel() < 4 {
+			if err := setownMortalRules(f, h, obj,
+				owner); err != nil {
+				return nil, err
+			}
+		}
+		// OWNER(oper1) rather than oper1: for a player those
+		// are the same object, and valid_player above is what
+		// makes that so.
 		h.SetOwner(obj, owner)
 		return nil, nil
 	})
@@ -988,8 +1168,52 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// p_db.c:2433. Another tunable floor, default 2,
+		// where the table had an invented 4.
+		if err := tunableFloor(f, h, "movepennies_muf_mlev",
+			movePenniesDenied); err != nil {
+			return nil, err
+		}
+		// Both object arguments are tested
+		//   Typeof(x) != TYPE_PLAYER
+		//       || Typeof(x) == TYPE_THING
+		// which is upstream's and is odd twice over: the
+		// second disjunct cannot hold when the first does
+		// not, so it is dead, and the effect is that
+		// MOVEPENNIES takes *players only* despite every
+		// message saying "player or thing". That in turn
+		// makes the "mlev < 4 && Typeof == THING" check below
+		// it unreachable, and the "Typeof(ref) ==
+		// TYPE_PLAYER"
+		// guard around the range tests always true. All three
+		// are reproduced as written rather than simplified,
+		// because what a program sees is the refusal.
+		if !h.Valid(from) ||
+			h.ObjType(from) != ref.TypePlayer {
+			return nil, errf("Invalid player or thing " +
+				"argument (1)")
+		}
+		if !h.Valid(to) || h.ObjType(to) != ref.TypePlayer {
+			return nil, errf("Invalid player or thing " +
+				"argument (2)")
+		}
+		if amount < 0 {
+			return nil, errf("Argument must be a " +
+				"non-negative integer. (3)")
+		}
+		if f.MLevel() < 4 &&
+			h.ObjType(from) == ref.TypeThing {
+			return nil, errf("Permission denied. (2)")
+		}
 		fromVal, _ := h.GetProp(from, propValue)
 		toVal, _ := h.GetProp(to, propValue)
+		if f.MLevel() < 4 &&
+			h.ObjType(from) == ref.TypePlayer {
+			if err := movePenniesRange(h, fromVal.Num,
+				toVal.Num, amount); err != nil {
+				return nil, err
+			}
+		}
 		h.SetProp(from, propValue, props.Value{Type: props.Int, Num: fromVal.Num - amount})
 		h.SetProp(to, propValue, props.Value{Type: props.Int, Num: toVal.Num + amount})
 		return nil, nil

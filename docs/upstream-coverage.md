@@ -985,7 +985,7 @@ Naming an object from *inside* it does not work either: `@contents
 bus` and `@teleport bus=tram` both answer "I don't understand 'bus'."
 on both servers, which measures the matcher rather than boarding.
 
-### The MUF error messages: one divergence### The MUF error messages: one divergence, and one that was not
+### The MUF error messages: one divergence, and one that was not
 
 Found by probing four deliberate program failures through both
 servers while writing the ANSI case, and **re-measured since** --
@@ -1034,6 +1034,159 @@ floor would look exactly like a deliberate one.
 
 `STRCAT`'s "Non-string argument." agrees exactly, which is why the
 ANSI case uses it to produce an error report.
+
+### The mucker table surveyed: nine false floors and one missing
+
+`internal/muf/mlev_gen.go` is generated from the `mlev <` checks in
+the C and is the **only** gate: `prim.go` refuses before the
+implementation runs. `gen_mlev.py` was approximate by its own
+admission, and SETNAME's false floor had been found by chasing a
+message rather than by looking. All thirty-four entries have now been
+checked against their guards: **25 genuine, 9 false, 1 missing.**
+
+**The generator is fixed structurally rather than by name.** It used
+to carry a `CONDITIONAL_FLOOR` set holding SETNAME and an
+escape-hatch token list that had grown `control_process(` after KILL
+came out wrong. Two rules replace both:
+
+- **the guarded statement must be a bare `abort_interp(...)`** -- any
+  other body means the `mlev <` test selects a *scope*, not a
+  refusal; and
+- **the `if` must sit at brace depth 0** of the function body -- a
+  deeper one is reachable only under a condition the extractor never
+  sees, which is exactly how SETNAME got through.
+
+Run against all thirty-four plus SETNAME, the two together flag
+precisely the nine findings and SETNAME, with **zero false positives
+among the 25 genuine floors**. Both are load-bearing: SETNAME has a
+bare abort body and is caught only by the depth rule, while SETOWN
+and ADDPENNIES are at depth 0 and caught only by the body rule. A
+third rule, **splitting a condition on its top-level `||`**, recovers
+the missing floor. Comments and string literals are blanked before
+any of this, because `abort_interp("Permission Denied (mlev < ...)")`
+unbalances a paren scan and a comment mentioning `permissions()`
+would exempt a floor that is real.
+
+Two accounting checks confirm nothing is dropped silently: 67
+functions carry an unconditional floor, 26 reach the table and 41 are
+excluded for having their own abort wording -- and
+`CUSTOM_ABORT_MESSAGE` holds exactly 41 names, **every one of them
+used**. The generator now also **fails loudly** on an `mlev <` whose
+right-hand side it does not recognise, which is how three tunable
+floors had gone missing.
+
+**Five of the nine were not guards at all.** `NOTIFY`,
+`NOTIFY_NOLISTEN`, `NOTIFY_EXCLUDE`, `OTELL` and `ARRAY_NOTIFY` were
+recorded at 2, taken from
+
+```c
+if (tp_force_mlev1_name_notify && mlev < 2 && player != target)
+    prefix_message(buf, msg, NAME(player), BUFFER_LEN, 1);
+else
+    strcpyn(buf, sizeof(buf), msg);
+```
+
+where there is **no `abort_interp` anywhere on the path** -- the
+branch picks a message prefix. So **a mucker-1 program could not
+produce output at all**, which is the most basic thing a MUF program
+does. `force_mlev1_name_notify` defaults to true and was read
+nowhere, so the behaviour the floor displaced had never existed
+either; `mlev1Prefix` is it, over `prefixMessage`, which was already
+`prefix_message` with `SuppressIfPresent` set. Only NOTIFY and
+NOTIFY_NOLISTEN carry the "not when notifying yourself" exemption.
+
+**Four opened a block of extra mortal-only restrictions.** `SETOWN`,
+`ADDPENNIES` and `MOVEPENNIES` were recorded at 4 from an
+`if (mlev < 4)` whose body is further `if`s, and `MOVETO` at 3 the
+same way. Their real gates are three @tune parameters -- 
+`addpennies_muf_mlev` and `movepennies_muf_mlev` default to 2,
+`pennies_muf_mlev` to 1 -- and **this server read none of them**, so
+`PENNIES` had no gate at all while the other two had an invented one.
+A `map[string]int` cannot express a runtime gate, so these are inline
+checks, following `USERLOG`'s precedent down to upstream's oddly
+literal and inconsistently capitalised wording.
+
+All four had **no argument validation, no permission rules and no
+range checks whatsoever** -- the invented floor was standing in for
+every one of them. SETOWN gained its four distinct refusals, the
+CHOWN_OK and @chlock tests, and the room-and-thing location rules;
+the two pennies primitives gained their overflow, ceiling and
+negative tests. **None of the four had a single test, golden or
+unit, anywhere in the tree.**
+
+**`RECYCLE` is the one wrongly-allowed finding**, and the direction
+that matters. `p_db.c:2200` is
+`(mlev < 3) || ((mlev < 4) && !permissions(ProgUID, result))`, two
+independent disjuncts; the skip regex saw `permissions(` and
+discarded the whole condition, so RECYCLE was in no table and had no
+level check anywhere. **A mucker-1 program could recycle objects
+upstream refuses it.** The floor is back and the second disjunct is
+inline.
+
+Its other refusals are **still missing** and are a separate gap:
+`#0`, a player, an object named by a dbref @tune parameter, the
+running program, and `unset_source` on an exit before recycling.
+"Cannot recycle active program." cannot be reproduced at all, because
+`Frame` has no caller-program stack.
+
+**`MOVETO`'s floor is deliberately kept**, in `gen_mlev.py`'s
+`HELD_FLOOR`, and that entry is the thing to delete rather than a
+list to add to. The floor is wrong -- its real gate is conditional --
+but `internal/muf`'s MOVETO is a bare `h.MoveTo(what, dest)`: none of
+`prim_moveto`'s type switch, no `enter_room` for a player, no
+`parent_loop_check`, no exit re-sourcing, no room reparenting, no
+`secure_thing_movement`, and none of its **thirteen**
+mlev-conditional refusals. Ungating it would hand a mucker-1 program
+an unvalidated raw move of any object. A faithful port needs five
+Host methods that do not exist and is its own piece of work,
+comparable to `@teleport`.
+
+**No golden case could have caught any of this, and the reason is
+worth keeping.** A fixture compiles at mucker 3, so **nothing in the
+oracle suite had ever run a program below it**. Raising a program's
+level is documented; lowering it is `@set <prog>=1`, where upstream
+clears both mucker bits before applying, so it is an assignment
+rather than an or. `internal/golden/mlevfloor_test.go` runs fifteen
+probes at mucker 1 and again at 3, through the catchable-abort route.
+Six mutations, all caught -- and two of the first verdicts were
+false: one mutation failed `vet` with unreachable code, and one hit a
+**non-unique anchor** and silently mutated a different primitive.
+That is the same family as "a mutation that fails to compile tests
+nothing": the anchor has to be checked for uniqueness, not just for
+presence.
+
+**The compile-time mucker level is fixed**, which the instruction-limit
+work above had already recorded and left. `Frame.MLevel()` now reads
+`Host.ProgMLevel` live, so `@set` takes effect on a program's next
+run and a nested frame uses its own program's level. Invalidating the
+compile cache instead would not have done: the *owner's* level caps
+the program's, so changing one player's bits would mean finding every
+program they own. The dangerous direction is the one tested --
+`internal/game/mlevlive_test.go` demotes a mucker-4 program and
+checks it stops acting like one, where before it went on at its old
+level until something happened to recompile it.
+
+**Seven abort messages among the 25 genuine floors are still
+wrong**, and the generic-message design is what is failing: 7 of 25
+is not an exception list. `ENTRANCES_ARRAY` and `PART_PMATCH` want
+"Permission denied.  Requires Mucker Level 3." -- wording already in
+`CUSTOM_ABORT_MESSAGE` for `NEXTENTRANCE`; `NOTIFY_SECURE` wants
+"Mucker level 3 primitive.", already there for
+`ARRAY_NOTIFY_SECURE`; and `NEWEXIT`, `QUEUE`, `FORK` and
+`PROGRAM_SETLINES` each want their own. The generator should extract
+the message rather than the level alone.
+
+**Two upstream oddities found in passing and reproduced as written.**
+`MOVEPENNIES` tests both object arguments with
+`Typeof(x) != TYPE_PLAYER || Typeof(x) == TYPE_THING`, whose second
+disjunct cannot hold when the first does not -- so it takes *players
+only* despite every one of its messages saying "player or thing",
+which in turn makes its own `mlev < 4 && Typeof == THING` check
+unreachable and its `Typeof(ref) == TYPE_PLAYER` guard always true.
+And `ARRAY_NOTIFY` iterates **lines outer, targets inner**, where
+this server iterates targets outer: each target sees its own lines in
+order either way, so only the interleaving across targets differs and
+no transcript with one player can see it. Left alone.
 
 ### @tune: two things still collapsed
 

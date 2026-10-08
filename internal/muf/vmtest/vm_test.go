@@ -253,6 +253,26 @@ func (h *fakeHost) Now() time.Time {
 func (h *fakeHost) Uptime() time.Duration { return time.Hour }
 func (h *fakeHost) Version() string       { return "test" }
 
+// ProgMLevel declines to answer, so a frame uses the level its
+// compile recorded -- which is what every test in this package sets
+// up directly.
+func (h *fakeHost) ProgMLevel(ref.Ref) (int, bool) {
+	return 0, false
+}
+
+// ChownLockPasses answers true, which is test_lock's own default for
+// an unset lock -- so SETOWN's CHOWN_OK test is what decides here.
+func (h *fakeHost) ChownLockPasses(int, ref.Ref, ref.Ref) bool {
+	return true
+}
+
+// PrefixName is prefix_message's job, which belongs to the game
+// package; this is enough for the notify primitives' mucker-1 path to
+// be distinguishable in a transcript.
+func (h *fakeHost) PrefixName(text string, _ ref.Ref) string {
+	return "NAME " + text
+}
+
 func (h *fakeHost) TestLock(int, int, ref.Ref, *boolexp.Expr, ref.Ref, ref.Ref) (bool, error) {
 	return false, nil
 }

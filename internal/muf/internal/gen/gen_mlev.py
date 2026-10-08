@@ -57,21 +57,68 @@ LEVELS = {"MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
 # denied." — also not universal: GETPIDS (src/p_db.c) aborts with
 # "Permission denied.  Requires Mucker Level 3.", found the same way, when
 # it was ported.
-# A bare "mlev < N" that sits inside an *enclosing* guard the extractor
-# cannot see is not a floor either, and this is the one case found so
-# far.
+# A "mlev < N" sharing its condition with one of these is not a floor
+# but a choice: "a wizard *or* whoever owns it". Recording it as a
+# floor refuses the owner, which is the whole hazard this generator
+# exists to avoid.
 #
-# prim_setname's effective rule is "(mlev < 4) && !permissions(ProgUID,
-# ref)" -- a wizard, or whoever has permissions on the object. It has a
-# second, bare "if (mlev < 4)" as well, but nested inside
-# "if (Typeof(ref) == TYPE_PLAYER)", so it applies only to renaming a
-# player and only in the one case the outer test lets through: a program
-# renaming its own owner, where permissions() answers 1 for
-# "thing == player". conditions() yields that inner test without its
-# enclosing one, so it read as an unconditional level-4 floor and was
-# recorded as one -- which refused a mortal renaming an object they own.
-CONDITIONAL_FLOOR = {
-    "SETNAME",
+# This list grew by accretion -- "control_process(" was added after
+# KILL came out as an unconditional 3 and broke a mucker-2 player
+# killing their own program -- which is the argument for the two
+# structural rules in guards() and _bare_abort() carrying most of the
+# weight instead. A token list can only ever name the escape hatches
+# somebody has already been bitten by.
+ESCAPE_HATCH = re.compile(
+    r'permissions\s*\(|controls\s*\(|control_process\s*\(|'
+    r'prop_read_perms|prop_write_perms|'
+    r'Wizard\s*\(|test_lock|already_created|'
+    r'Typeof\s*\(|FLAGS\s*\(|'
+    # "unless it is my own pid" -- GETPIDINFO's
+    # "mlev < 3 && oper1->data.number != fr->pid" is the same shape as
+    # an ownership escape hatch, against a running process instead of
+    # an owned object.
+    r'fr\s*->\s*pid|'
+    # STATS/STATS_ARRAY spell the ownership test directly rather than
+    # through permissions().
+    r'OWNER\s*\(')
+
+# Floors whose level is an @tune parameter rather than a literal.
+#
+# A map[string]int cannot express a gate a world can move at runtime,
+# so each of these is checked inline by the primitive that has it --
+# prim_misc2.go's USERLOG is the pattern, down to reproducing
+# upstream's own oddly literal wording. They are named here so this
+# generator can tell a known one from a new one, because the old code
+# simply dropped any right-hand side it did not recognise: that is how
+# ADDPENNIES, PENNIES and MOVEPENNIES came to have no gate at all
+# while carrying an invented one of 4.
+TUNABLE_FLOOR = {
+    "tp_addpennies_muf_mlev",
+    "tp_movepennies_muf_mlev",
+    "tp_pennies_muf_mlev",
+    "tp_userlog_mlev",
+    "tp_mcp_muf_mlev",
+}
+
+# A floor the C does not have, kept deliberately because this
+# server's implementation is not yet faithful enough to drop it.
+#
+# MOVETO's real gate is conditional: "if ((mlev < 3))" at p_db.c:234
+# opens a block of extra mortal-only restrictions, on top of two
+# genuinely conditional tests at :213 and :217, so this table should
+# not hold it at all. But internal/muf's MOVETO is a bare
+# h.MoveTo(what, dest) -- none of prim_moveto's type switch, no
+# enter_room for a player, no parent_loop_check, no exit re-sourcing,
+# no room reparenting, and none of its thirteen mlev-conditional
+# refusals. Dropping the floor would hand a mucker-1 program an
+# unvalidated raw move of any object in the database.
+#
+# So the floor stays until prim_moveto is ported, which needs five
+# Host methods that do not exist yet. Recorded in
+# docs/upstream-coverage.md, and this entry is the thing to delete
+# when it lands -- not a name to add to.
+HELD_FLOOR = {
+    "MOVETO": 3,
 }
 
 CUSTOM_ABORT_MESSAGE = {
@@ -123,24 +170,186 @@ CUSTOM_ABORT_MESSAGE = {
 
 
 
-def conditions(body):
-    """Yield each if-condition in a function body, parentheses balanced.
+def scrub(src):
+    """Blank out comments and literal contents, keeping every offset.
 
-    Matching to the first ")" is not enough: "if ((mlev < 4) && !permissions(x))"
-    would be cut after "(mlev < 4", hiding the permission test that makes it a
-    choice rather than a floor.
+    Everything below counts braces and parentheses, and a C string is
+    full of both: abort_interp("Permission Denied (mlev < tp_x)") alone
+    would unbalance the scan. Comments matter for a second reason --
+    the escape-hatch test below looks for tokens like "permissions(",
+    and a comment mentioning one would exempt a floor that is real.
     """
-    for m in re.finditer(r'\bif\s*\(', body):
-        i = m.end() - 1
-        depth = 0
-        for j in range(i, len(body)):
-            if body[j] == '(':
-                depth += 1
-            elif body[j] == ')':
-                depth -= 1
-                if depth == 0:
-                    yield body[i + 1:j]
-                    break
+    out = list(src)
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '/' and i + 1 < n and src[i + 1] == '/':
+            while i < n and src[i] != '\n':
+                out[i] = ' '
+                i += 1
+        elif c == '/' and i + 1 < n and src[i + 1] == '*':
+            out[i] = out[i + 1] = ' '
+            i += 2
+            while i + 1 < n and not (src[i] == '*' and src[i + 1] == '/'):
+                if src[i] != '\n':
+                    out[i] = ' '
+                i += 1
+            if i + 1 < n:
+                out[i] = out[i + 1] = ' '
+                i += 2
+        elif c in '"\'':
+            quote = c
+            i += 1
+            while i < n and src[i] != quote:
+                if src[i] == '\\':
+                    out[i] = ' '
+                    i += 1
+                    if i < n:
+                        out[i] = ' '
+                        i += 1
+                    continue
+                out[i] = ' '
+                i += 1
+            i += 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+_IF = re.compile(r'\bif\s*\(')
+
+
+def _balanced(src, open_at, opener='(', closer=')'):
+    """Index of the bracket matching the one at open_at, or -1."""
+    depth = 0
+    for k in range(open_at, len(src)):
+        if src[k] == opener:
+            depth += 1
+        elif src[k] == closer:
+            depth -= 1
+            if depth == 0:
+                return k
+    return -1
+
+
+def _bare_abort(src, pos):
+    """Is the statement starting at pos nothing but abort_interp(...)?
+
+    This is the first of the two structural rules. When the guarded
+    statement is anything else -- nested ifs adding extra
+    restrictions, or a prefix_message choosing how to word the output
+    -- the "mlev <" test is selecting a *scope* and not refusing at
+    all. Five of p_strings.c's and p_array.c's notify primitives are
+    the second kind: their mlev<2 branch picks a message prefix and
+    there is no abort anywhere on the path, so recording it as a floor
+    stopped a mucker-1 program producing output at all.
+
+    Both spellings have to be handled, and getting this wrong is not
+    conservative in the safe direction. Most of p_props.c writes the
+    braceless form
+
+        if (mlev < 2)
+            abort_interp("Permission denied.");
+
+    and reading "the rest of the statement" as the rest of the
+    function made every one of those look like a scope guard, which
+    would have deleted eight real floors.
+    """
+    rest = src[pos:]
+    body = rest.lstrip()
+    if body.startswith('{'):
+        start = pos + rest.index('{')
+        end = _balanced(src, start, '{', '}')
+        if end < 0:
+            return False
+        inner = src[start + 1:end].strip()
+        m = re.match(r'abort_interp\s*\(', inner)
+        if not m:
+            return False
+        close = _balanced(inner, m.end() - 1)
+        if close < 0:
+            return False
+        # Nothing may follow it inside the block but its semicolon.
+        return inner[close + 1:].strip().rstrip(';').strip() == ''
+    m = re.match(r'abort_interp\s*\(', body)
+    if not m:
+        return False
+    close = _balanced(body, m.end() - 1)
+    if close < 0:
+        return False
+    # Braceless: the guarded statement ends at its own semicolon, and
+    # whatever the function does next is none of our business.
+    return body[close + 1:].lstrip().startswith(';')
+
+
+def guards(body):
+    """Yield (condition, depth, bare_abort) for each `if` in a body.
+
+    depth is the brace nesting the `if` itself sits at, counted from
+    the function body: an `if` written at the top level of the
+    function is 0, and one inside an enclosing `if` or a switch is
+    deeper. That is the second structural rule -- a deeper check is
+    reachable only under a condition this extractor never sees, which
+    is exactly how prim_setname's "if (mlev < 4)" nested inside
+    "if (Typeof(ref) == TYPE_PLAYER)" was read as an absolute
+    mucker-4 floor and refused a mortal renaming an object they own.
+
+    Matching a condition to its first ")" is not enough either:
+    "if ((mlev < 4) && !permissions(x))" would be cut after
+    "(mlev < 4", hiding the permission test that makes it a choice.
+    """
+    depth = 0
+    i, n = 0, len(body)
+    while i < n:
+        c = body[i]
+        if c == '{':
+            depth += 1
+            i += 1
+            continue
+        if c == '}':
+            depth -= 1
+            i += 1
+            continue
+        m = _IF.match(body, i)
+        if not m:
+            i += 1
+            continue
+        open_at = m.end() - 1
+        close = _balanced(body, open_at)
+        if close < 0:
+            i = open_at + 1
+            continue
+        yield (body[open_at + 1:close], depth,
+               _bare_abort(body, close + 1))
+        i = close + 1
+
+
+def disjuncts(cond):
+    """Split a condition on its top-level "||".
+
+    Each disjunct aborts on its own, so one that names a level and has
+    no escape hatch is a genuine floor even when another disjunct has
+    one. prim_recycle is
+    "(mlev < 3) || ((mlev < 4) && !permissions(ProgUID, result))":
+    reading it whole, the "permissions(" exempts the lot and the
+    unconditional floor of 3 is lost, which let a mucker-1 program
+    recycle objects upstream refuses it.
+    """
+    parts, depth, start = [], 0, 0
+    i = 0
+    while i < len(cond):
+        if cond[i] == '(':
+            depth += 1
+        elif cond[i] == ')':
+            depth -= 1
+        elif depth == 0 and cond.startswith('||', i):
+            parts.append(cond[start:i])
+            i += 2
+            start = i
+            continue
+        i += 1
+    parts.append(cond[start:])
+    return parts
 
 
 def main():
@@ -148,7 +357,7 @@ def main():
     # list implementations and names in the same order.
     levels = {}
     for module in MODULES:
-        src = show(f"src/{module}.c")
+        src = scrub(show(f"src/{module}.c"))
         # Split into functions: "prim_name(PRIM_PROTOTYPE)\n{ ... }".
         # The return type is normally on its own line, but prim_dump puts it
         # on the same one, so allow it either way — without the "void"
@@ -157,41 +366,56 @@ def main():
                 r'^(?:void\s+)?(prim_\w+)\(PRIM_PROTOTYPE\)\s*\n?\s*\{(.*?)^\}',
                 src, re.M | re.S):
             fname, body = m.group(1), m.group(2)
-            # Only an *unconditional* floor counts. A check written as
+            # Only an *unconditional* floor counts, and three things
+            # can make a "mlev < N" look like one when it is not.
+            #
+            # An escape hatch in the same condition: written
             #   if ((mlev < 3) && !permissions(...)) abort
-            # means "a wizard or the owner", not "level 3 or nothing", and
-            # treating it as a floor would refuse the owner. Those are skipped
-            # by looking for a permission test in the same condition.
+            # it means "a wizard or the owner", not "level 3 or
+            # nothing", and recording it as a floor would refuse the
+            # owner. Those are skipped by looking for a permission,
+            # ownership, flag or type test alongside.
+            #
+            # The other two are structural and are guards() and
+            # _bare_abort()'s business: a check nested inside an
+            # enclosing condition, and a check whose body is not an
+            # abort at all. Both used to be patched name by name --
+            # CONDITIONAL_FLOOR held SETNAME, and the escape list grew
+            # "control_process(" after KILL came out wrong -- and the
+            # two rules together replace that list entirely.
             found = []
-            for cond in conditions(body):
+            for cond, depth, bare in guards(body):
                 if 'mlev' not in cond:
                     continue
-                if re.search(r'permissions\s*\(|controls\s*\(|'
-                             r'control_process\s*\(|'
-                             r'prop_read_perms|prop_write_perms|'
-                             r'Wizard\s*\(|test_lock|already_created|'
-                             r'Typeof\s*\(|FLAGS\s*\(|'
-                             # "unless it's my own pid" — GETPIDINFO's own
-                             # "mlev < 3 && oper1->data.number != fr->pid"
-                             # is this same shape as an ownership escape
-                             # hatch, just against a running process instead
-                             # of an owned object; found the same way KILL's
-                             # control_process gap was, by checking the C
-                             # once a primitive using this table read wrong.
-                             r'fr\s*->\s*pid|'
-                             # STATS/STATS_ARRAY's own "mlev < 3 &&
-                             # OWNER(ref) != player" — the same ownership
-                             # escape hatch as "permissions(...)", just
-                             # spelled directly instead of through that
-                             # helper.
-                             r'OWNER\s*\(', cond):
+                if depth > 0 or not bare:
                     continue
-                for lv in re.findall(r'mlev\s*<\s*(\w+)', cond):
-                    if lv in LEVELS:
-                        found.append(LEVELS[lv])
+                for part in disjuncts(cond):
+                    if 'mlev' not in part:
+                        continue
+                    if re.search(ESCAPE_HATCH, part):
+                        continue
+                    for lv in re.findall(r'mlev\s*<\s*(\w+)', part):
+                        if lv in LEVELS:
+                            found.append(LEVELS[lv])
+                        elif lv in TUNABLE_FLOOR:
+                            # A runtime gate, checked inline by the
+                            # primitive: a map[string]int cannot hold
+                            # one. Listed so a *new* one is a failure
+                            # rather than a silent drop.
+                            continue
+                        else:
+                            raise SystemExit(
+                                f"{module}.c: {fname} compares mlev "
+                                f"against {lv!r}, which is neither a "
+                                f"level nor a known tunable. Add it "
+                                f"to LEVELS or TUNABLE_FLOOR -- do "
+                                f"not let a floor go unrecorded.")
             if found:
-                # The loosest unconditional floor is the level at which the
-                # primitive is definitely callable.
+                # The *loosest* unconditional floor is the level at
+                # which the primitive is definitely callable: with two
+                # of them one path works at the lower level, and
+                # recording the higher would refuse that path here,
+                # before the primitive could check for itself.
                 levels[fname] = min(found)
 
     # Map C function names to MUF primitive names through the FUNCS and NAMES
@@ -214,11 +438,10 @@ def main():
         for fn, nm in zip(flist, nlist):
             name_of[fn] = nm
 
-    table = {}
+    table = dict(HELD_FLOOR)
     for fn, lv in levels.items():
         nm = name_of.get(fn)
-        if nm and nm not in CUSTOM_ABORT_MESSAGE \
-                and nm not in CONDITIONAL_FLOOR:
+        if nm and nm not in CUSTOM_ABORT_MESSAGE:
             table[nm] = lv
 
     q = json.dumps
@@ -235,9 +458,21 @@ def main():
         "// read passwords, change ownership and boot connections, so this is a",
         "// security surface rather than only a compatibility one.",
         "//",
-        "// Where a primitive has several checks, the strictest is recorded: a",
-        "// finer-grained gate would need the arguments, which the dispatcher",
-        "// does not have.",
+        "// Only an *unconditional* floor is recorded. A check written",
+        "// \"(mlev < 4) && !permissions(...)\" means \"a wizard or the",
+        "// owner\", and so does one nested inside a type or flag test, or",
+        "// one whose branch picks a message rather than refusing; a",
+        "// finer-grained gate would need the arguments, which the",
+        "// dispatcher does not have.",
+        "//",
+        "// One entry is not from the C at all: see HELD_FLOOR in",
+        "// gen_mlev.py, which keeps MOVETO gated because this server's",
+        "// implementation of it is not faithful enough to ungate.",
+        "//",
+        "// Where a primitive has several, the *loosest* is recorded: that",
+        "// is the level at which it is definitely callable, and refusing",
+        "// at the strictest would block a path that works before the",
+        "// primitive could check for itself.",
         "var primMLevel = map[string]int{",
     ]
     for nm in sorted(table):

@@ -181,7 +181,7 @@ func init() {
 			return nil, err
 		}
 		for _, line := range strings.Split(msg, "\r") {
-			h.Notify(who, line)
+			h.Notify(who, mlev1Prefix(f, h, line, who))
 		}
 		return nil, nil
 	})

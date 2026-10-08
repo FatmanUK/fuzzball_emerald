@@ -16,6 +16,11 @@ import (
 type Host interface {
 	// Notify sends a line to an object's connections.
 	Notify(who ref.Ref, msg string)
+	// PrefixName is prefix_message with SuppressIfPresent set,
+	// prefixing text with an object's name. The five notify
+	// primitives use it for a mucker-1 program's output; see
+	// mlev1Prefix.
+	PrefixName(text string, who ref.Ref) string
 	// NotifyExcept sends a line to everything in a room, skipping
 	// some.
 	NotifyExcept(room ref.Ref, except []ref.Ref, msg string)
@@ -399,6 +404,23 @@ type Host interface {
 	// error, once it exceeds TESTLOCK's hardcoded recursion
 	// limit.
 	TestLock(descr, level int, testPlayer ref.Ref, lock *boolexp.Expr, trig, caller ref.Ref) (bool, error)
+	// ProgMLevel is find_mlev for a program object: the lower of
+	// its own mucker level and its owner's, read *now* rather
+	// than when the program was compiled. ok is false when the
+	// host cannot answer, and the level carried on the compiled
+	// Program stands in.
+	//
+	// Reading it live is upstream's behaviour and not an
+	// optimisation to skip: the level is taken from the flags
+	// when the frame is made, so "@set prog=1" takes effect on
+	// the program's very next run.
+	ProgMLevel(prog ref.Ref) (mlev int, ok bool)
+	// ChownLockPasses is test_lock against MESGPROP_CHLOCK, which
+	// SETOWN consults below mucker 4. An *unset* lock passes:
+	// GETLOCK answers TRUE_BOOLEXP and eval_boolexp passes that
+	// (boolexp.c:880), so this is not the same default as
+	// test_lock_false_default.
+	ChownLockPasses(descr int, who, what ref.Ref) bool
 	// Locked reports whether player is locked out of thing, the
 	// way LOCKED? does: could_doit's exit-destination rules, then
 	// thing's own lock.
@@ -897,7 +919,23 @@ func (f *Frame) SetReserved(me, loc, trigger ref.Ref, command string) {
 
 // MLevel is the mucker level the program runs at, which bounds what
 // its primitives may do.
-func (f *Frame) MLevel() int { return f.Prog.MLevel }
+func (f *Frame) MLevel() int {
+	// find_mlev is computed per *run*, not per compile. This used
+	// to return the level the compiler was handed, which
+	// Server.programs then cached for the life of the process --
+	// so changing a program's mucker bits did nothing until
+	// something recompiled it, in both directions. Lowering a
+	// mucker-4 program to 1 left it running at 4.
+	if f.host != nil && f.Prog != nil {
+		if mlev, ok := f.host.ProgMLevel(f.Prog.Ref); ok {
+			return mlev
+		}
+	}
+	if f.Prog == nil {
+		return 0
+	}
+	return f.Prog.MLevel
+}
 
 // Push puts a value on the stack.
 func (f *Frame) Push(v Value) error {

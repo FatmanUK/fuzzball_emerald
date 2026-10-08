@@ -61,7 +61,8 @@ func init() {
 			}
 		}
 		for _, line := range strings.Split(msg, "\r") {
-			h.NotifyExcept(room, except, line)
+			h.NotifyExcept(room, except,
+				mlev1Prefix(f, h, line, ref.Nothing))
 		}
 		return nil, nil
 	})

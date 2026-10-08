@@ -1060,14 +1060,46 @@ of them agrees with the others: a command or exit gets the typed verb (as
 **Privileged primitives are gated by mucker level.** `internal/muf/mlev_gen.go`
 is generated from the `mlev <` checks in the C; without it a level-1 program
 could read passwords and change ownership. The table records only
-*unconditional* floors: a check written `(mlev < 4) && !permissions(...)` means
-"a wizard **or** the owner", not a floor, and treating it as one would refuse
-the owner. The extractor is approximate — it skips conditions mentioning
-permissions, ownership, flags or types — so a primitive that behaves oddly at
-low mucker level is worth checking against the C.
+*unconditional* floors, and the whole hazard is that a conditional one looks
+identical: `(mlev < 4) && !permissions(...)` means "a wizard **or** the owner",
+and recording it as a floor refuses the owner.
+
+**All thirty-four entries have been surveyed — nine were floors the C does not
+have and one real floor was missing.** The extractor is no longer a token list
+with a hand-written exception set; it applies two *structural* rules, and both
+are load-bearing:
+
+- **the guarded statement must be a bare `abort_interp(...)`** — any other body
+  means the `mlev <` test picks a *scope*, not a refusal, which is what five
+  notify primitives' `prefix_message` branch does; and
+- **the `if` must sit at brace depth 0** of the function body — a deeper one is
+  reachable only under a condition the extractor never sees, which is how
+  `SETNAME` got through.
+
+A condition is also **split on its top-level `||`** before the escape-hatch
+test, which is what recovers `RECYCLE`'s floor, and an `mlev <` whose
+right-hand side is not a known literal or tunable is now a **generator
+failure** rather than a silent drop. Three tunable floors —
+`addpennies_muf_mlev`, `movepennies_muf_mlev`, `pennies_muf_mlev` — are
+checked inline, because a `map[string]int` cannot hold a gate a world can move
+at runtime. `HELD_FLOOR` holds the one entry that is *not* from the C:
+`MOVETO`, deliberately still gated because this server's version of it is a
+bare `h.MoveTo` with none of `prim_moveto`'s type switch.
 
 **A program runs at its own mucker level**, bounded by its owner's — not at its
-owner's level.
+owner's level — and that level is read **per run**, from `Host.ProgMLevel`.
+It used to be baked into the compiled `Program` and cached for the life of the
+process, so `@set <prog>=1` on a mucker-4 program left it running at 4.
+Invalidating the compile cache is not the fix: the owner's level caps the
+program's, so changing one player's bits would mean finding every program they
+own.
+
+**A fixture compiles at mucker 3, so nothing in the oracle suite runs below
+it** unless a case says so — which is why nine false floors survived every
+golden run. Lowering a program is `@set <prog>=1`; upstream clears both mucker
+bits before applying, so it is an assignment and not an or.
+`internal/golden/mlevfloor_test.go` is the case that runs the same probes at
+two levels.
 
 **`NEWPROGRAM` creates as `ProgUID`, not as the caller**, and it is the one
 primitive that gets this right. `create_program(ProgUID, ...)` — so a program

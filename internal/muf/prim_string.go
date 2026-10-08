@@ -260,10 +260,48 @@ func init() {
 		// A carriage return inside a message separates lines,
 		// which is how MUF writes multi-line output.
 		for _, line := range strings.Split(msg, "\r") {
-			f.host.Notify(who, line)
+			f.host.Notify(who,
+				mlev1Prefix(f, f.host, line, who))
 		}
 		return nil, nil
 	})
+}
+
+// mlev1Prefix is what the five notify primitives do with a mucker-1
+// program's output: prefix it with the player's name.
+//
+// Upstream writes it as
+//
+//	if (tp_force_mlev1_name_notify && mlev < 2
+//	    && player != target)
+//	    prefix_message(buf, msg, NAME(player), BUFFER_LEN, 1);
+//	else
+//	    strcpyn(buf, sizeof(buf), msg);
+//
+// and there is **no abort_interp anywhere on that path** -- the
+// primitive always runs. The generated mucker table recorded the
+// "mlev < 2" as a floor for all five, so a level-1 program could not
+// produce output at all, which is the most basic thing a MUF program
+// does. p_strings.c:2233 (NOTIFY), :2335 (NOTIFY_NOLISTEN), :2386
+// (NOTIFY_EXCLUDE), :2497 (OTELL) and p_array.c:1280 (ARRAY_NOTIFY).
+//
+// exempt is the target to compare against for the "not when notifying
+// yourself" clause, which only NOTIFY and NOTIFY_NOLISTEN have; the
+// other three pass ref.Nothing, since an object is never NOTHING and
+// so the test can never exempt them.
+//
+// The prefix is applied per line rather than to the whole buffer
+// because that is what prefix_message does internally: it prefixes at
+// the start and again after every \r.
+func mlev1Prefix(f *Frame, h Host, line string,
+	exempt ref.Ref) string {
+	if f.MLevel() >= 2 || f.Caller == exempt {
+		return line
+	}
+	if !h.TuneBool("force_mlev1_name_notify") {
+		return line
+	}
+	return h.PrefixName(line, f.Caller)
 }
 
 // cStrcmp compares two strings the way C's strcmp does, returning the

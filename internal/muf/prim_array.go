@@ -203,7 +203,8 @@ func init() {
 				continue
 			}
 			for _, line := range lines.Values() {
-				h.Notify(who.Ref, line.String())
+				h.Notify(who.Ref, mlev1Prefix(f, h,
+					line.String(), ref.Nothing))
 			}
 		}
 		return nil, nil

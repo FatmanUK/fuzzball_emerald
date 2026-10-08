@@ -116,3 +116,15 @@ func TestRowDialectRequiresAField(t *testing.T) {
 		t.Error("a directive with no [field] should be refused")
 	}
 }
+
+// ProgMLevel declines to answer, so Frame.MLevel falls back to the
+// level the test set on the Program itself.
+//
+// Every host here embeds a nil Host, which is deliberate: anything a
+// test does not answer is a programming error rather than a silent
+// zero. Frame.MLevel reads this for *every* mucker gate, though, so
+// without it a primitive with a floor segfaults rather than saying
+// which method it wanted.
+func (h *fmtTestHost) ProgMLevel(ref.Ref) (int, bool) {
+	return 0, false
+}
