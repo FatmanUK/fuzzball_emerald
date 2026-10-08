@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // forceScript exercises FORCE, FORCEDBY and FORCEDBY_ARRAY against
@@ -62,8 +61,7 @@ func TestForceMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, forceScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, forceScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

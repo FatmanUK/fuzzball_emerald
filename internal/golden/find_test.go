@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // findScript covers the four checkflags searches — @find, @owned,
@@ -120,8 +119,7 @@ func TestSearchCommandsMatchFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, findScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, findScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

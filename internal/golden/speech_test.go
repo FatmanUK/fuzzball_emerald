@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // speechScript covers the commands that take upstream's full_command
@@ -67,8 +66,7 @@ func TestSpeechMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, speechScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, speechScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

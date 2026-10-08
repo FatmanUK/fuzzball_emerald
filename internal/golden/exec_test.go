@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // execProgram reports both of the things exec_or_notify hands a
@@ -88,8 +87,7 @@ func TestExecOrNotifyMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, execScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, execScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

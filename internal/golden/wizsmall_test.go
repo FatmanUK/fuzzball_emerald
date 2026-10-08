@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // wizSmallScript covers @examine and @debug, the two small wizard
@@ -56,8 +55,7 @@ func TestWizSmallMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, wizSmallScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, wizSmallScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // mcpScript negotiates MCP and then exchanges a message.
@@ -32,8 +31,7 @@ func TestMCPNegotiationMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, mcpScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, mcpScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

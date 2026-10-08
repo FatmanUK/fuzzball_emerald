@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // helpScript drives the whole help system. Both servers are given the
@@ -82,8 +81,7 @@ func TestHelpMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, helpScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, helpScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

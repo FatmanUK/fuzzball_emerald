@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // sanityScript runs the checker over a clean database, damages it
@@ -66,8 +65,7 @@ func TestSanityMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, sanityScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, sanityScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

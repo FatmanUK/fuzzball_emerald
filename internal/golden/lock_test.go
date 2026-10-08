@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // lockCmdScript exercises the @lock family of commands — set,
@@ -74,8 +73,7 @@ func TestLockCommandsMatchFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, lockCmdScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, lockCmdScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

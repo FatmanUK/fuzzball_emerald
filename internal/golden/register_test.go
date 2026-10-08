@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // registerScript covers @register and @propset, the two commands that
@@ -96,8 +95,7 @@ func TestRegisterMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, registerScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, registerScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

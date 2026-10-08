@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // moveScript covers enter_room, which Emerald used to approximate
@@ -132,8 +131,7 @@ func TestMoveMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, moveScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, moveScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

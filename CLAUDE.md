@@ -231,10 +231,27 @@ Each command is bounded by a marker pose, so the harness knows when a command
 has finished rather than guessing. **A session that holds the input line
 cannot use the marker**: the MUF editor reads `!pose EMERALDDONE` as the
 editor command `x`, and a program waiting on a `READ` eats it outright.
-`RunOracleQuiet` drives the C server without markers, waiting for silence
-instead; it is slower, so it is used only where the marker cannot be
-(`editor_test.go`). `READ` has no such workaround, because the *reply* is what
-the program consumes, and so is covered by unit tests in `internal/game`.
+`RunOracleQuiet` drives the C server without markers, bounding each command
+by a period of **silence** instead. **The marker is the default and the quiet
+path is expensive**: it resets the read deadline per line and returns on the
+first timeout, so every command costs its real output time *plus* a full
+`quiet` — 400ms — and the banner costs a flat 3s. Thirty-one of the
+forty-eight oracle runs had drifted onto it by convention rather than need,
+which was 500 of the suite's 600 seconds; converting twenty-seven back took
+the suite from 602.7s to 203.6s. Reach for `RunOracleSteps` unless the case
+is one of the four that cannot, which fall into two pairs:
+
+- `editor_test.go` and `conditional_test.go` **hold the input line**, the
+  original reason: the editor reads `!pose EMERALDDONE` as the editor
+  command `x`, because only the first character of the last word is looked
+  at.
+- `propqueue_test.go` and `sweep_test.go` set `_listen`/`~olisten`, so the
+  marker pose would **fire the listeners** — and `listenqueue` *queues* an
+  MPI listener a second later, so its output lands against the wrong
+  command.
+
+`READ` has no workaround of either kind, because the *reply* is what the
+program consumes, and so is covered by unit tests in `internal/game`.
 
 The C server writes into its game directory — a dump, and the macro table — so
 it is given a copy of the fixture. Without that, a case defining a macro leaves

@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // wizScript exercises the wizard commands against both servers.
@@ -96,8 +95,7 @@ func TestWizardCommandsMatchFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, wizScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, wizScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

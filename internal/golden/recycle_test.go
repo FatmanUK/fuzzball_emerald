@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // recycleScript covers the half of do_recycle that is not a
@@ -90,8 +89,7 @@ func TestRecycleMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, recycleScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, recycleScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

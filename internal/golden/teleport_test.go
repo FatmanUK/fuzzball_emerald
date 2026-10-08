@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // teleportScript covers wiz.c's do_teleport, which four earlier
@@ -140,8 +139,7 @@ func TestTeleportMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, teleportScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, teleportScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

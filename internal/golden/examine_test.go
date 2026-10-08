@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // examineScript examines one of each type of object, with and without
@@ -63,8 +62,7 @@ func TestExamineMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, examineScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, examineScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

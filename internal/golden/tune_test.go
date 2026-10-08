@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // tuneScript covers do_tune, which an earlier movement case had to
@@ -116,8 +115,7 @@ func TestTuneMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, tuneScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, tuneScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

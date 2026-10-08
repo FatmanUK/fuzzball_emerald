@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // giveScript covers give and @newpassword, and read as a spelling of
@@ -59,8 +58,7 @@ func TestGiveMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, giveScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, giveScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

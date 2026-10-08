@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // mesgScript drives the eleven commands set_standard_property backs.
@@ -97,8 +96,7 @@ func TestMessageSettersMatchFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, mesgScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, mesgScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

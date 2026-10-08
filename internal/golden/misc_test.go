@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // miscScript covers the five commands that needed no new engine:
@@ -60,8 +59,7 @@ func TestMiscCommandsMatchFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, miscScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, miscScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}
@@ -143,8 +141,7 @@ func TestRestrictAndGripeMatchFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, restrictScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, restrictScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

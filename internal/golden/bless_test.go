@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // blessScript covers @bless, @unbless and @relink.
@@ -84,8 +83,7 @@ func TestBlessMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, blessScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, blessScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

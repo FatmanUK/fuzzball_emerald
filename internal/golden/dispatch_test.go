@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 )
 
 // Checking one dispatcher against another is awkward, because what
@@ -115,8 +114,7 @@ func TestDispatchMatchesFuzzball(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, script, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, script, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

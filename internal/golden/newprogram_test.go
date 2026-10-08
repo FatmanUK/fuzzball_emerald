@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // NEWPROGRAM was a stub that aborted "NEWPROGRAM is not implemented
@@ -89,9 +88,8 @@ func TestNewProgramMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
 	script := newProgramScript
-	oracle, err := RunOracleQuiet(ctx, fx, script, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, script, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

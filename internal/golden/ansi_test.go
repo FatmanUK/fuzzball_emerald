@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // ANSI gating: queue_ansi (interface.c:673) runs one of two different
@@ -90,8 +89,7 @@ func TestANSIGatingMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, ansiScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, ansiScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}

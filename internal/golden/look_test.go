@@ -3,7 +3,6 @@ package golden
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 // lookScript pins the shape of do_look_at, which differs by type in
@@ -69,8 +68,7 @@ func TestLookMatchesFuzzball(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const quiet = 400 * time.Millisecond
-	oracle, err := RunOracleQuiet(ctx, fx, lookScript, quiet)
+	oracle, err := RunOracleSteps(ctx, fx, lookScript, nil)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}
