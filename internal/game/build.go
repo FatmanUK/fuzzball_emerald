@@ -174,7 +174,8 @@ func (s *Server) cmdDig(c *ctx) {
 			// The matcher has already said what went
 			// wrong; this says what happened as a result.
 			c.tell("Parent set to default.")
-		case !s.canLinkTo(c.w, c.who, r) || r == o.Ref:
+		case !s.canLinkTo(c.w, c.d.ID, c.who, ref.TypeRoom,
+			r) || r == o.Ref:
 			c.tell("Permission denied.  Parent set to default.")
 		default:
 			if err := c.w.MoveTo(o.Ref, r); err != nil {
@@ -238,7 +239,8 @@ func (s *Server) cmdOpen(c *ctx) {
 				c.w.Tune.String("pennies"))
 			return
 		}
-		if dest, ok := s.resolveLinkTarget(c, destName); ok {
+		if dest, ok := s.resolveExitDest(c, o.Ref,
+			destName); ok {
 			o.Dest = []ref.Ref{dest}
 			c.w.Modified(o.Ref)
 			c.tell("%s", linkedTo(c, dest))
@@ -282,6 +284,73 @@ func defaultRoomParent(w *world.World, who ref.Ref) ref.Ref {
 	return ref.GlobalEnvironment
 }
 
+// exitLoopCheck is `exit_loop_check` (`predicates.c:289`): whether
+// linking source to dest would make a ring of exits. It is the whole
+// recursive walk, not a self-link test — upstream catches A to A, A
+// to B to A, and any depth beyond that.
+//
+// **`@link` does test for this**, which the notes in `CLAUDE.md`
+// twice said it did not. Nothing here checked, and the matcher that
+// made an exit nameable as a destination is what exposed it: before
+// `resolveLinkTarget` ran `match_everything` an exit could not be
+// named as a destination at all, so the loop was unbuildable through
+// `@link` and the missing check could not be seen.
+func exitLoopCheck(w *world.World, source, dest ref.Ref) bool {
+	return exitLoopFrom(w, source, dest, 0)
+}
+
+// exitLoopFrom carries the depth, which upstream does not need: its
+// recursion terminates because a ring already in the database is
+// impossible if every link went through this check, and Emerald
+// cannot assume that of a dump it has been handed.
+func exitLoopFrom(w *world.World, source, dest ref.Ref,
+	depth int) bool {
+
+	if source == dest {
+		return true
+	}
+	o := w.Get(dest)
+	if o == nil || o.Type() != ref.TypeExit ||
+		depth > maxMetalinkDepth {
+		return false
+	}
+	for _, cur := range o.Dest {
+		if !w.Valid(cur) {
+			continue
+		}
+		if cur == source {
+			return true
+		}
+		if w.Get(cur).Type() == ref.TypeExit &&
+			exitLoopFrom(w, source, cur, depth+1) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveExitDest is `_link_exit`'s TYPE_EXIT case (`db.c:2117`):
+// `parse_linkable_dest` and then, when the destination is itself an
+// exit, the loop check. Every site that links an *exit* goes through
+// it; a home or a dropto does not, because upstream applies the check
+// only in that one branch of its switch.
+func (s *Server) resolveExitDest(c *ctx, exit ref.Ref,
+	name string) (ref.Ref, bool) {
+
+	dest, ok := s.resolveLinkTarget(c, exit, name)
+	if !ok {
+		return ref.Nothing, false
+	}
+	if c.w.Valid(dest) &&
+		c.w.Get(dest).Type() == ref.TypeExit &&
+		exitLoopCheck(c.w, exit, dest) {
+		c.tell("Destination %s would create a loop, "+
+			"ignored.", unparse(c.w, c.who, dest))
+		return ref.Nothing, false
+	}
+	return dest, true
+}
+
 // resolveLinkTarget is parse_linkable_dest (db.c:1971): what an exit
 // should point at.
 //
@@ -289,39 +358,59 @@ func defaultRoomParent(w *world.World, who ref.Ref) ref.Ref {
 // match goes through noisy_match_result like every other command's
 // — "I don't understand 'X'." An earlier version said "I don't see
 // that here." and refused without naming anything.
-func (s *Server) resolveLinkTarget(c *ctx, name string) (ref.Ref, bool) {
+func (s *Server) resolveLinkTarget(c *ctx, target ref.Ref,
+	name string) (ref.Ref, bool) {
+
 	// There is no empty-name guard upstream. "Link it to what?"
 	// was invented here, and it shadowed two different real
 	// answers: for an exit, _link_exit's loop never runs on an
 	// empty string, so nothing is matched at all and do_link says
 	// "No destinations linked."; for everything else the empty
 	// name reaches the matcher and noisy_match_result answers.
+	//
+	// The match list is `match_everything`, then home, then nil,
+	// with NOTYPE so there is no preferred type. The chain here
+	// was hand-built and wrong three ways: no `match_registered`,
+	// so `@link w = $tavern` could not resolve a registration the
+	// player had just made; no `match_all_exits`, so the metalink
+	// `trigger` traverses could not be built at all, which is
+	// what hid the missing loop check; and `match_player` taken
+	// unconditionally where `match_everything` gates it on
+	// wizardry. It also preferred a room, which was invented.
 	r := match.New(c.w, c.who, name).
-		PreferType(ref.TypeRoom).
-		Absolute().Me().Here().Home().Nil().
-		Possession().Neighbor().Player().Result()
+		Everything().Home().Nil().Result()
 	if !noisyMatch(c, name, r) {
 		return ref.Nothing, false
 	}
-	if r == ref.Home || r == ref.Nil {
-		return r, true
-	}
-
-	o := c.w.Get(r)
+	// Upstream does **not** short-circuit HOME and NIL. The
+	// player refusal skips NIL explicitly, `can_link` still
+	// applies, and `can_link_to` is what accepts the pair --
+	// returning them early here made its own HOME and NIL cases
+	// dead, which is how a mutation that deleted the NIL case
+	// survived.
+	special := r == ref.Home || r == ref.Nil
 	// Linking to a player is a separate refusal from being unable
 	// to link, and a separate @tune parameter — which nothing
 	// in this server read before.
-	if o.Type() == ref.TypePlayer &&
+	if !special && c.w.Get(r).Type() == ref.TypePlayer &&
 		!c.w.Tune.Bool("teleport_to_player") {
 		c.tell("You can't link to players.  Destination "+
 			"%s ignored.", unparse(c.w, c.who, r))
 		return ref.Nothing, false
 	}
-	// Anyone may link to a room or thing flagged to allow it, or
-	// to anything they control.
-	linkable := o.Flags&ref.LinkOK != 0 ||
-		(o.Type() == ref.TypeRoom || o.Type() == ref.TypeThing) && o.Flags&ref.Abode != 0
-	if !linkable && !s.controls(c.w, c.who, r) {
+	// can_link on the thing being linked *from*, which is its own
+	// refusal and comes before the destination's. Only the exit
+	// path reaches this function, and `linkExit` has already made
+	// the same test, so the guard is unreachable today; it is
+	// upstream's line and goes where upstream has it.
+	if !s.canLink(c.w, c.who, target) {
+		c.tell("You can't link that.")
+		return ref.Nothing, false
+	}
+	// can_link_to on the destination, carrying the type of what
+	// is being linked *from*.
+	if !s.canLinkTo(c.w, c.d.ID, c.who,
+		c.w.Get(target).Type(), r) {
 		c.tell("You can't link to %s.",
 			unparse(c.w, c.who, r))
 		return ref.Nothing, false
@@ -474,7 +563,7 @@ func (s *Server) linkExit(c *ctx, target ref.Ref, destName string) {
 		noneLinked()
 		return
 	}
-	dest, ok := s.resolveLinkTarget(c, destName)
+	dest, ok := s.resolveExitDest(c, target, destName)
 	if !ok {
 		noneLinked()
 		return
@@ -490,12 +579,28 @@ func (s *Server) linkExit(c *ctx, target ref.Ref, destName string) {
 // Its refusal names both halves of what it tested, and the parent
 // loop check is its own separate answer.
 func (s *Server) linkHome(c *ctx, target ref.Ref, destName string) {
-	dest, ok := s.resolveLinkTarget(c, destName)
-	if !ok {
+	// Its **own** matcher, not parse_linkable_dest's: this branch
+	// never calls that function, and the list is different in
+	// five ways -- it prefers a room, has no `match_all_exits`,
+	// no `match_home` and no `match_nil`, and takes
+	// `match_absolute` and `match_registered` without the wizard
+	// gate `match_everything` puts on its player search. So a
+	// thing's home cannot be set to HOME through @link, and a
+	// player elsewhere cannot be named even by a wizard. Sharing
+	// one matcher is what made all five wrong here.
+	m := match.New(c.w, c.who, destName).
+		PreferType(ref.TypeRoom).
+		Neighbor().Absolute().Registered().Me().Here()
+	if c.w.Get(target).Type() == ref.TypeThing {
+		m = m.Possession()
+	}
+	dest := m.Result()
+	if !noisyMatch(c, destName, dest) {
 		return
 	}
 	if !s.controls(c.w, c.who, target) ||
-		!s.canLinkTo(c.w, c.who, dest) {
+		!s.canLinkTo(c.w, c.d.ID, c.who,
+			c.w.Get(target).Type(), dest) {
 		c.tell("Permission denied. (you don't control the " +
 			"thing, or you can't link to dest)")
 		return
@@ -512,13 +617,24 @@ func (s *Server) linkHome(c *ctx, target ref.Ref, destName string) {
 // linkDropto is do_link's TYPE_ROOM branch (create.c:261): a room's
 // drop-to, with a third wording again and a self-link refused as part
 // of the same condition.
-func (s *Server) linkDropto(c *ctx, target ref.Ref, destName string) {
-	dest, ok := s.resolveLinkTarget(c, destName)
-	if !ok {
+func (s *Server) linkDropto(c *ctx, target ref.Ref,
+	destName string) {
+
+	// A third list again, and not the home branch's: this one has
+	// `match_home`, so a dropto may be HOME, and has *neither*
+	// `match_me` nor `match_here`, so the room being linked
+	// cannot be named -- which `thing == dest` would refuse
+	// anyway.
+	dest := match.New(c.w, c.who, destName).
+		PreferType(ref.TypeRoom).
+		Neighbor().Possession().Registered().Absolute().
+		Home().Result()
+	if !noisyMatch(c, destName, dest) {
 		return
 	}
 	if !s.controls(c.w, c.who, target) ||
-		!s.canLinkTo(c.w, c.who, dest) || target == dest {
+		!s.canLinkTo(c.w, c.d.ID, c.who, ref.TypeRoom,
+			dest) || target == dest {
 		c.tell("Permission denied. (you don't control the " +
 			"room, or can't link to the dropto)")
 		return
@@ -1518,17 +1634,69 @@ func (s *Server) controlsLink(w *world.World, who,
 	}
 }
 
-// canLinkTo reports whether someone may attach something to a
-// destination: they control it, or it is open to anyone through its
-// LINK_OK or ABODE flag.
-func (s *Server) canLinkTo(w *world.World, who, where ref.Ref) bool {
+// canLinkTo is `can_link_to` (`predicates.c:117`): whether something
+// of type `what` may be attached to `where`.
+//
+// What stood here was `can_teleport_to`'s rule under this name -- no
+// type argument at all, so **none** of the four type rules existed,
+// `LINK_OK` and `ABODE` were tested the wrong way round, HOME and NIL
+// were not special-cased, and the link lock was not consulted. So a
+// thing's home could be a program, a room's dropto could be an exit,
+// and a program could be linked. Upstream keeps `can_link_to` and
+// `can_teleport_to` apart with a comment saying the rules could
+// diverge; this had collapsed them, and the one it kept was the wrong
+// one.
+//
+// `Linkable` (`db.h:576`) is the flag half, and it is not what the
+// old code said: a **room or thing** is linkable when ABODE is set,
+// and anything else when LINK_OK is. The old test asked for LINK_OK
+// first and then ABODE for everything but a thing, which is right for
+// neither.
+func (s *Server) canLinkTo(w *world.World, descr int, who ref.Ref,
+	what ref.ObjType, where ref.Ref) bool {
+
+	// HOME is always linkable, and an exit may point at NIL. Both
+	// are before the validity check, because neither is an
+	// object.
+	if where == ref.Home {
+		return true
+	}
+	if what == ref.TypeExit && where == ref.Nil {
+		return true
+	}
+	if !w.Valid(where) {
+		return false
+	}
+	to := w.Get(where).Type()
+	switch {
+	case what == ref.TypePlayer && to != ref.TypeRoom:
+		return false
+	case what == ref.TypeRoom && to != ref.TypeThing &&
+		to != ref.TypeRoom:
+		return false
+	case what == ref.TypeThing && (to == ref.TypeExit ||
+		to == ref.TypeProgram):
+		return false
+	case what == ref.TypeProgram:
+		return false
+	}
 	if s.controls(w, who, where) {
 		return true
 	}
+	return linkableFlag(w, where) &&
+		s.lockPasses(w, descr, 1, who, where, propLinkLock,
+			true)
+}
+
+// linkableFlag is the `Linkable` macro's flag test, without its HOME
+// and NIL cases, which `canLinkTo` answers first.
+func linkableFlag(w *world.World, where ref.Ref) bool {
 	o := w.Get(where)
 	if o == nil {
 		return false
 	}
-	return o.Flags&ref.LinkOK != 0 ||
-		o.Type() != ref.TypeThing && o.Flags&ref.Abode != 0
+	if t := o.Type(); t == ref.TypeRoom || t == ref.TypeThing {
+		return o.Flags&ref.Abode != 0
+	}
+	return o.Flags&ref.LinkOK != 0
 }

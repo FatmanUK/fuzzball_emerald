@@ -533,14 +533,34 @@ as a plain move.
 success**, which includes an exit with no destinations reached through a
 metalink.
 
-**The metalink depth bound is a deliberate divergence.** Upstream recurses
-through one with nothing to stop it, so an exit linked to itself — or a ring
-of two — exhausts the C stack and takes the server down, and `@link` does not
-test for it. Emerald refuses past `maxMetalinkDepth` with "Exit aborted because
-of metalink loop.", which is the one answer that is not a crash. The bound
-counts metalinks *only*: a trigger reached through the autolook is a different
-recursion with its own counter, and counting both would make eight ordinary
-moves report a metalink loop.
+**`@link` refuses a ring of exits, and this is not a
+divergence** — these notes twice said it was.
+`exit_loop_check` (`predicates.c:289`) is a full recursive
+walk, and upstream runs it in all three places an exit's
+destination is set, each with its own wording: `_link_exit`
+(`db.c:2117`) says "Destination X would create a loop, ignored.", MUF
+`SETLINK` (`p_db.c:1805`) says "Link would cause a loop.", and
+`SETLINKS_ARRAY` (`p_db.c:3931`) says "Destination would create loop."
+`exitLoopCheck` is the port, reached from `@link`, `@open`'s second
+argument and `@relink`'s dry run through `resolveExitDest`.
+
+**It could not be seen to be missing until the matcher was fixed.**
+`resolveLinkTarget` had a hand-built match chain rather than
+`match_everything`, with neither `match_registered` nor
+`match_all_exits` — so an exit was not nameable as a destination and
+`@link` could not build a loop at all. The missing check was invisible
+behind a missing matcher stage, and `@link w = $tavern` could not
+resolve a registration the player had just made.
+
+**`maxMetalinkDepth` stays, as a backstop rather than the only
+answer.** Upstream's recursion is safe because every link went
+through the check; Emerald is handed dumps it did not write, so
+`trigger` still refuses past the bound with "Exit aborted because of
+metalink loop." — and `exitLoopFrom` carries the same bound for the
+same reason. The bound counts metalinks *only*: a trigger reached
+through the autolook is a different recursion with its own counter,
+and counting both would make eight ordinary moves report a metalink
+loop.
 
 **MOVETO is a type switch, not a move.** `prim_moveto` is the
 primitive form of all of this — it walks a player in through
@@ -571,7 +591,26 @@ is refused with "That would be an undefined operation." rather than entered.
 **Every refusal in `parse_linkable_dest` names its object.** "I don't
 understand 'X'." for a failed match — `noisy_match_result`, like every other
 command — "You can't link to players.  Destination X ignored." (two spaces),
-and "You can't link to X."
+"You can't link that." for a failure of the thing being linked *from*, and
+"You can't link to X." for the destination.
+
+**But only the exit branch calls it.** `do_link`'s home branch
+(`create.c:238`) and dropto branch (`:269`) write their match lists out
+inline, and the two differ from each other as well as from
+`match_everything`: the home branch has no `match_home`, so a thing's home
+cannot be set to HOME, while the dropto branch has one and has neither
+`match_me` nor `match_here`. Sharing one function between the three made all
+three wrong at once.
+
+**`can_link_to` is not `can_teleport_to`**, and upstream says so in a comment
+— the rules could diverge. It carries the type of what is being linked
+*from*, which is where its four type rules come from: a player may only be
+homed to a room, a room's dropto may only be a thing or a room, a thing may
+not be homed to an exit or a program, and a program may not be linked at
+all. HOME is always linkable and an exit may point at NIL, both before the
+validity check. And `Linkable` (`db.h:576`) is **ABODE on a room or a thing,
+LINK_OK on anything else** — not the other way about — with `@linklock`
+tested on top, defaulting to pass.
 
 ## get and drop
 
@@ -1672,9 +1711,9 @@ Worth knowing before "fixing" something that looks wrong:
 - **New code says TLS, never SSL** — but do not apply that rename to `@tune`
   names or primitive names. `DESCRSECURE?`, `NOTIFY_SECURE` and
   `ARRAY_NOTIFY_SECURE` keep their names and change meaning instead.
-- **A self-linked exit is refused rather than fatal.** Upstream recurses
-  through a metalink with nothing to stop it and exhausts its stack; see
-  "Exit traversal".
+- **`maxMetalinkDepth` is a backstop upstream does not need.** Not,
+  as this list said until the walkthrough disproved it, a behaviour
+  upstream lacks: `@link` does refuse a ring. See "Exit traversal".
 - **A regexp using a backreference or lookaround fails to compile.** Go's
   `regexp` is RE2, which has neither, and `compileRegex`
   (`internal/muf/prim_string2.go:319`) lets the compile fail rather than

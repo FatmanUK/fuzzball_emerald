@@ -276,7 +276,8 @@ func (s *Server) cmdRelink(c *ctx) {
 		}
 		// The destinations are all checked before anything is
 		// broken, which is link_exit_dry's whole job.
-		if _, ok := s.resolveLinkTarget(c, destName); !ok {
+		if _, ok := s.resolveExitDest(c, thing,
+			destName); !ok {
 			c.tell("Invalid target.")
 			return
 		}
@@ -292,7 +293,8 @@ func (s *Server) cmdRelink(c *ctx) {
 			return
 		}
 		if !s.controls(c.w, c.who, thing) ||
-			!s.canLinkTo(c.w, c.who, dest) {
+			!s.canLinkTo(c.w, c.d.ID, c.who, o.Type(),
+				dest) {
 			c.tell("Permission denied. (You can't link " +
 				"to where you want to.")
 			return
@@ -311,7 +313,8 @@ func (s *Server) cmdRelink(c *ctx) {
 		}
 		self := thing == dest
 		if self || !s.controls(c.w, c.who, thing) ||
-			!s.canLinkTo(c.w, c.who, dest) {
+			!s.canLinkTo(c.w, c.d.ID, c.who, ref.TypeRoom,
+				dest) {
 			c.tell("Permission denied. (You can't link " +
 				"to the dropto like that)")
 			return

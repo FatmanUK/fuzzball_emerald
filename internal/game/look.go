@@ -226,7 +226,8 @@ func (s *Server) lookAt(w *world.World, descr int,
 	switch o.Type() {
 	case ref.TypeRoom:
 		if me.Location != target &&
-			!s.canLinkTo(w, who, target) {
+			!s.canLinkTo(w, descr, who, ref.TypeRoom,
+				target) {
 			s.notify(w, who, noLookRoom)
 			return
 		}

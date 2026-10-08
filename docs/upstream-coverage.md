@@ -592,28 +592,85 @@ wide, and each needs its own work:
   has the same unconditional `Player()` and several callers whose own
   C was not checked.
 
-### What `@link` still diverges on
+### `@link` was wrong in five ways, and one hid the others
 
-Two things, both found while porting its permission rules and
-neither of them a permission refusal, so neither was folded into that
-commit:
+The walkthrough's first script found it. `btut2` registers a room and
+then links an exit to `$name`, and that answered "I don't understand
+'$ai'." — so the transcription paid for itself on its first page.
+Pulling that thread found four more, each hidden behind the one in
+front of it.
 
-- **`resolveLinkTarget`'s matcher is not `parse_linkable_dest`'s.**
-  Upstream is `init_match(NOTYPE)` plus `match_everything`,
-  `match_home` and `match_nil` (`db.c:1975`). Emerald hand-rolls a
-  list that omits `Exits()` and `Registered()`, asks for
-  `PreferType(TypeRoom)` where upstream passes `NOTYPE`, and carries
-  another unconditional `Player()` of the kind recorded above. It is
-  also missing `parse_linkable_dest`'s own `can_link(player, exit)`
-  refusal, "You can't link that."
-- **`@link` cannot build a multi-destination exit.** `_link_exit`
-  (`db.c:2040`) splits the destination string on `;` up to
-  `MAX_LINKS`, validates each, and returns how many were linked.
-  Emerald resolves one destination and writes a one-element list.
-  `trigger()` already *traverses* a list — that landed with exit
-  traversal — so the gap is only in creating one, and the symptom is
-  that `@link exit=roomA;roomB` silently links the first alone. A
-  world with metalink fan-out cannot be built from inside the game.
+**The matcher was hand-built where upstream calls
+`match_everything`.** `parse_linkable_dest` (`db.c:1971`) is
+`init_match(NOTYPE)` plus `match_everything`, `match_home` and
+`match_nil`. What stood here omitted `match_registered` — the
+reported symptom — and `match_all_exits`, took `match_player`
+unconditionally where `match_everything` gates it on wizardry, and
+asked for a preferred type that upstream does not pass.
+`Matcher.Everything` already *was* `match_everything`; the chain
+beside it was the bug.
+
+**That hid a missing loop check.** With no `match_all_exits` an exit
+could not be named as a destination, so `@link` could not build a
+ring and nothing noticed that nothing checked for one.
+`exit_loop_check` (`predicates.c:289`) is a full recursive walk, and
+upstream runs it in all three places an exit's destination is set,
+each with its own wording: `_link_exit` (`db.c:2117`) says
+"Destination X would create a loop, ignored.", MUF `SETLINK`
+(`p_db.c:1805`) says "Link would cause a loop.", and `SETLINKS_ARRAY`
+(`p_db.c:3931`) says "Destination would create loop."
+`CLAUDE.md` twice said upstream had no such check and that
+`maxMetalinkDepth` was therefore a deliberate divergence. **Both
+claims were wrong** and are corrected; the depth bound stays as a
+backstop, because Emerald is handed dumps it did not write.
+
+**`can_link_to` was `can_teleport_to` under another name.** Upstream
+keeps the two apart with a comment saying the rules could diverge
+(`predicates.c:89` and `:117`); this had collapsed them and kept the
+wrong one. So there was no type argument and therefore none of the
+four type rules — a thing's home could be a program, a room's dropto
+could be an exit, a player could be homed to a thing — HOME and NIL
+were not special-cased, and **`@linklock` was never consulted on the
+link path it is named for**: written by its command, shown by
+`examine` as "Link_OK Key", and read only by `can_teleport_to`.
+`Linkable` (`db.h:576`) was also inverted: a **room or thing** is
+linkable when ABODE is set and anything else when LINK_OK is, where
+the old test asked LINK_OK first and then ABODE for everything but a
+thing — right for neither.
+
+**`parse_linkable_dest`'s own `can_link` refusal was missing**, "You
+can't link that." It is unreachable today, because only the exit path
+reaches that function and `linkExit` has already made the same test;
+it is upstream's line and sits where upstream has it.
+
+**And the three operations were sharing one matcher when upstream
+gives each its own.** `do_link` calls `parse_linkable_dest` from the
+**exit** branch only; the home branch (`create.c:238`) and the dropto
+branch (`:269`) write their lists out inline, and the two differ from
+each other as well as from `match_everything`. The home branch has no
+`match_home`, so a thing's home cannot be set to HOME; the dropto
+branch has one, so a dropto can be, and has neither `match_me` nor
+`match_here`, so the room being linked cannot be named. Sharing one
+function made all of that wrong at once.
+
+One more thing fell out of the mutation pass rather than the reading:
+`resolveLinkTarget` returned HOME and NIL **early**, before the three
+checks, which made `can_link_to`'s own HOME and NIL cases dead code —
+a mutation deleting the NIL case survived until the short-circuit
+went.
+
+Thirteen mutations, all thirteen caught; two need the unit tests,
+because `controls` short-circuits the flag test and the link lock for
+anyone the oracle can be.
+
+**Still divergent: `@link` cannot build a multi-destination exit.**
+`_link_exit` (`db.c:2040`) splits the destination string on `;` up to
+`MAX_LINKS`, validates each, and returns how many were linked.
+Emerald resolves one destination and writes a one-element list.
+`trigger()` already *traverses* a list, so the gap is only in
+creating one, and the symptom is that `@link exit=roomA;roomB`
+silently links the first alone. A world with metalink fan-out cannot
+be built from inside the game.
 
 One invented message was removed rather than recorded: `@link` with
 an empty destination said "Link it to what?", which appears nowhere
@@ -622,6 +679,20 @@ transferred, and told "No destinations linked.", because
 `_link_exit`'s loop never runs and so never matches anything, while
 every other type reaches the matcher and gets
 `noisy_match_result`'s.
+
+### MUF `SETLINK` and `SETLINKS_ARRAY` have almost none of their rules
+
+Noticed while tracing `exit_loop_check`'s three call sites.
+`prim_setlink` (`p_db.c:1780`) runs `prog_can_link_to`, a mucker-or-
+ownership permission test, "Exit is already linked.", the loop check,
+and then a per-type switch — a player's home, a thing's home with
+`parent_loop_check`, a room's dropto. `internal/muf/prim_db.go:1374`
+validates that the destination exists and calls `h.SetLinks`. The
+same is true of `SETLINKS_ARRAY` against `p_db.c:3903`, which also
+enforces "Only one player, room, or program destination allowed."
+Both are reachable at mucker 3, so a program can do what `@link`
+refuses. Not fixed here: it is a primitive apiece, not a branch of
+the command this commit was about.
 
 ### MPI read every number wrongly, in four separate ways
 
