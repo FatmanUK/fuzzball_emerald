@@ -19,6 +19,10 @@ const OracleImage = "localhost/fbmuck-oracle"
 // oraclePort is the port the oracle listens on inside its container.
 const oraclePort = 4201
 
+// oracleLabel marks a container this harness started, so a sweep can
+// recognise one of its own and nothing else.
+const oracleLabel = "fbemerald-golden-oracle"
+
 // Script is what to send a server once connected, one command per
 // entry.
 type Script []string
@@ -89,9 +93,12 @@ func withOracle(ctx context.Context, fx *Fixture,
 
 	// --rm so a crashed run leaves nothing behind; the container
 	// is torn down explicitly as well, in case the server does
-	// not exit on its own.
+	// not exit on its own. Neither covers the process being
+	// killed, which is what the label is for -- see
+	// SweepStaleOracles.
 	run := exec.CommandContext(ctx, "podman", "run", "--rm", "-d",
 		"--name", name,
+		"--label", oracleLabel+"=1",
 		"-p", fmt.Sprintf("127.0.0.1:%d:%d", port, oraclePort),
 		"-v", dir+":/game:z",
 		OracleImage,
@@ -105,7 +112,16 @@ func withOracle(ctx context.Context, fx *Fixture,
 		return nil, fmt.Errorf("starting the oracle: %v: %s", err, out)
 	}
 	defer func() {
-		_ = exec.Command("podman", "rm", "-f", name).Run()
+		// -t 0 because this is reached either after the
+		// script's own @shutdown, when the container is
+		// already gone and this is a no-op, or on an error
+		// path where its dump is written into a temp
+		// directory that no longer exists. Without it a
+		// failing case waits out podman's ten-second stop
+		// timeout, which a container's PID 1 reaches in full
+		// unless it installs a SIGTERM handler.
+		_ = exec.Command("podman", "rm", "-f", "-t", "0",
+			name).Run()
 	}()
 
 	conn, err := dialWithRetry(ctx, fmt.Sprintf("127.0.0.1:%d", port))
@@ -221,6 +237,40 @@ func freePort() (int, error) {
 // OracleAvailable reports whether the oracle image has been built.
 func OracleAvailable() bool {
 	return exec.Command("podman", "image", "exists", OracleImage).Run() == nil
+}
+
+// SweepStaleOracles removes oracle containers an earlier run left
+// behind, and reports how many there were.
+//
+// withOracle's teardown is a defer and "--rm" fires only when the
+// container exits, so neither covers the test binary being *killed*
+// rather than finishing: the fbmuck inside keeps running, holding its
+// published port and its memory for as long as the machine is up. One
+// sat here for 39 hours after the editor driving it was killed, and
+// nothing in the suite would ever have mentioned it.
+//
+// The filter is the label rather than the "fbgold-" name, so this can
+// only remove a container this harness started. It runs once from
+// TestMain, before any case asks for a container -- which is correct
+// while the cases share one process, and would need rethinking only
+// for two concurrent "go test" runs of this package.
+func SweepStaleOracles() int {
+	out, err := exec.Command("podman", "ps", "-aq",
+		"--filter", "label="+oracleLabel+"=1").Output()
+	if err != nil {
+		return 0
+	}
+	ids := strings.Fields(string(out))
+	if len(ids) == 0 {
+		return 0
+	}
+	// -t 0: measured at 10.1s against 0.07s, because podman sends
+	// SIGTERM and a container's PID 1 ignores it, so the stop
+	// timeout runs out before SIGKILL. An abandoned oracle has
+	// nothing worth flushing and its game directory is long gone.
+	args := append([]string{"rm", "-f", "-t", "0"}, ids...)
+	_ = exec.Command("podman", args...).Run()
+	return len(ids)
 }
 
 // driveQuiet runs a script with no markers, taking a pause in the
