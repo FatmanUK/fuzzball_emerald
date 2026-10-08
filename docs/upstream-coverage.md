@@ -1111,6 +1111,77 @@ the transcript said so: two traps called `dup1` and `dup2` are not
 ambiguous, because the match is exact — two can only collide through
 a **shared alias**, which is what makes that branch reachable.
 
+### `prim_moveto` is a type switch, not a move
+
+`internal/muf`'s MOVETO was `h.MoveTo(victim, dest)` -- the raw store
+move, which refuses only self-containment -- with a mucker floor of 3
+in the generated table standing in for everything else. The floor was
+not real: its `if ((mlev < 3))` at `p_db.c:234` opens a block of
+extra mortal-only restrictions rather than refusing. So **every M1
+and M2 program was refused outright, and every M3 and M4 one got an
+unvalidated move**, and the primitive had no test of any kind.
+
+Missing: the whole type switch; `enter_room` for a player, so no
+announcement, no autolook and no arrive propqueue; `parent_loop_check`;
+exit re-sourcing with its priority reset; room reparenting;
+`secure_thing_movement`; the "Bad destination." validations; and
+**thirteen** mlev-conditional refusals, none of which is a floor.
+
+Four Host methods were added for it -- `EnterRoom`,
+`ParentLoopCheck`, `CanTeleportTo` and `LastUsed` -- and the fifth
+turned out not to be needed: **`World.MoveTo` already is
+`unset_source` plus `set_source` for an exit**, because `chainHead`
+picks the Exits list rather than Contents. `SetMLevel(victim, 0)` goes
+with that branch: an exit's mucker bits are its *priority*, so
+re-pointing one resets how hard it competes, the same reset `@unlink`
+reports as "Action priority Level reset to 0."
+
+`ts_lastuseobject` (`fbtime.c:70`) is **not** `ts_useobject`: it sets
+the timestamp and leaves the use count alone, and walks up a room's
+parents. Upstream's own comment calls which is used where "a little
+arbitrary". `World.Used` was the only one this server had, so
+`World.LastUsed` is new -- bounded, where upstream's recursion is not,
+since a cycle in a damaged parent chain would take the server down.
+
+Three structural details are upstream's and are reproduced as
+written:
+
+- **Two fall-throughs are load-bearing.** A PLAYER falls into the
+  THING case for the loop check and the mortal-only block, then
+  leaves through `enter_room` before the PROGRAM case; a THING falls
+  into the PROGRAM case for the matchroom rule and the move itself.
+- **The matchroom rule assigns twice without an `else`**, so the
+  *victim's location* wins when both it and the destination are
+  controlled.
+- **The vehicle and zombie refusals read oddly.**
+  `(FLAGS(dest) & VEHICLE) && Typeof(dest) != TYPE_THING` can only
+  hold for a **room** flagged VEHICLE, which is how upstream spells
+  "a vehicle room".
+
+`internal/golden/moveto_test.go` runs sixteen probes at mucker 1 and
+again at 3. Nine mutations; six were caught at once and **three
+survived**, each because the probe did not set up the shape it
+claimed to test:
+
+- the vehicle clause needed a vehicle thing moved into *another
+  vehicle thing*, where the refusal does not apply;
+- the matchroom rule needed the victim's location and the
+  destination to be **different** rooms, both controlled, differing
+  in JUMP_OK, with the victim owned by somebody else;
+- and `can_teleport_to` is **not reachable from any transcript**,
+  because it goes through `controls()` and the oracle drives a wizard,
+  who passes it for everything. `permissions()` is pure ownership with
+  no wizard escape (`interp.c:2706`), which is why the other
+  mortal-only refusals *are* visible to the oracle while this one is
+  not. `internal/game/movetoroom_test.go` runs a mucker-1 program
+  owned by a mortal instead.
+
+The strongest single probe is the player move: at mucker 1 Bob's
+vault is refused with "Destination not JUMP_OK." and the hall
+produces `Hall(#11R)` -- the autolook, so `enter_room` ran -- and at
+mucker 3 both succeed, with the contents listing matching byte for
+byte.
+
 ### The six `_sys` values on `#0`
 
 `SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream
@@ -1287,17 +1358,8 @@ running program, and `unset_source` on an exit before recycling.
 "Cannot recycle active program." cannot be reproduced at all, because
 `Frame` has no caller-program stack.
 
-**`MOVETO`'s floor is deliberately kept**, in `gen_mlev.py`'s
-`HELD_FLOOR`, and that entry is the thing to delete rather than a
-list to add to. The floor is wrong -- its real gate is conditional --
-but `internal/muf`'s MOVETO is a bare `h.MoveTo(what, dest)`: none of
-`prim_moveto`'s type switch, no `enter_room` for a player, no
-`parent_loop_check`, no exit re-sourcing, no room reparenting, no
-`secure_thing_movement`, and none of its **thirteen**
-mlev-conditional refusals. Ungating it would hand a mucker-1 program
-an unvalidated raw move of any object. A faithful port needs five
-Host methods that do not exist and is its own piece of work,
-comparable to `@teleport`.
+**`MOVETO` was ungated by porting it** -- `HELD_FLOOR` held it for
+one commit and is gone. See below.
 
 **No golden case could have caught any of this, and the reason is
 worth keeping.** A fixture compiles at mucker 3, so **nothing in the

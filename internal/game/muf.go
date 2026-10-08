@@ -99,6 +99,27 @@ func (h *mufHost) MoveTo(what, dest ref.Ref) error {
 	return h.w.MoveTo(what, dest)
 }
 
+// EnterRoom implements muf.Host for MOVETO, which is the one
+// primitive that moves something the noisy way.
+func (h *mufHost) EnterRoom(descr int, who, loc, trig ref.Ref) {
+	h.s.enterRoom(h.w, descr, who, loc, trig)
+}
+
+// ParentLoopCheck implements muf.Host for MOVETO's two loop tests.
+func (h *mufHost) ParentLoopCheck(source, dest ref.Ref) bool {
+	return parentLoopCheck(h.w, source, dest)
+}
+
+// CanTeleportTo implements muf.Host for MOVETO's room branch.
+func (h *mufHost) CanTeleportTo(descr int, who,
+	where ref.Ref) bool {
+
+	return h.s.canTeleportToFor(h.w, descr, who, where)
+}
+
+// LastUsed implements muf.Host for ts_lastuseobject.
+func (h *mufHost) LastUsed(obj ref.Ref) { h.w.LastUsed(obj) }
+
 // progMLevel is find_mlev: a program runs at the lower of its own
 // mucker level and its owner's.
 //

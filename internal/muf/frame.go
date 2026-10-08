@@ -43,6 +43,22 @@ type Host interface {
 	Exits(obj ref.Ref) []ref.Ref
 	// MoveTo relocates an object.
 	MoveTo(what, dest ref.Ref) error
+	// EnterRoom is move.c's enter_room: a move that announces
+	// itself, runs the autolook and fires the arrive propqueues.
+	// MOVETO uses it for a player always, and for a thing when
+	// secure_thing_movement is set or the thing is a ZOMBIE —
+	// everything else is the silent MoveTo.
+	EnterRoom(descr int, who, loc, trig ref.Ref)
+	// ParentLoopCheck is move.c's parent_loop_check, which is two
+	// walks rather than one: locations, and getparent.
+	ParentLoopCheck(source, dest ref.Ref) bool
+	// CanTeleportTo is predicates.c:89's can_teleport_to, which
+	// MOVETO's room branch consults where its player branch
+	// demands outright control.
+	CanTeleportTo(descr int, who, where ref.Ref) bool
+	// LastUsed is fbtime.c:70's ts_lastuseobject: the timestamp
+	// without the use count, walking up a room's parents.
+	LastUsed(obj ref.Ref)
 
 	// Valid reports whether a ref names a live object, ObjType
 	// gives its type, and Flags its flag word.

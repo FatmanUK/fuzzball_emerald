@@ -100,27 +100,6 @@ TUNABLE_FLOOR = {
     "tp_mcp_muf_mlev",
 }
 
-# A floor the C does not have, kept deliberately because this
-# server's implementation is not yet faithful enough to drop it.
-#
-# MOVETO's real gate is conditional: "if ((mlev < 3))" at p_db.c:234
-# opens a block of extra mortal-only restrictions, on top of two
-# genuinely conditional tests at :213 and :217, so this table should
-# not hold it at all. But internal/muf's MOVETO is a bare
-# h.MoveTo(what, dest) -- none of prim_moveto's type switch, no
-# enter_room for a player, no parent_loop_check, no exit re-sourcing,
-# no room reparenting, and none of its thirteen mlev-conditional
-# refusals. Dropping the floor would hand a mucker-1 program an
-# unvalidated raw move of any object in the database.
-#
-# So the floor stays until prim_moveto is ported, which needs five
-# Host methods that do not exist yet. Recorded in
-# docs/upstream-coverage.md, and this entry is the thing to delete
-# when it lands -- not a name to add to.
-HELD_FLOOR = {
-    "MOVETO": 3,
-}
-
 CUSTOM_ABORT_MESSAGE = {
     "FORCE", "FORCEDBY", "FORCEDBY_ARRAY", "GETPIDS", "WATCHPID",
     # src/p_connects.c: every mlev floor in this module has its own wording,
@@ -438,7 +417,7 @@ def main():
         for fn, nm in zip(flist, nlist):
             name_of[fn] = nm
 
-    table = dict(HELD_FLOOR)
+    table = {}
     for fn, lv in levels.items():
         nm = name_of.get(fn)
         if nm and nm not in CUSTOM_ABORT_MESSAGE:
@@ -464,10 +443,6 @@ def main():
         "// one whose branch picks a message rather than refusing; a",
         "// finer-grained gate would need the arguments, which the",
         "// dispatcher does not have.",
-        "//",
-        "// One entry is not from the C at all: see HELD_FLOOR in",
-        "// gen_mlev.py, which keeps MOVETO gated because this server's",
-        "// implementation of it is not faithful enough to ungate.",
         "//",
         "// Where a primitive has several, the *loosest* is recorded: that",
         "// is the level at which it is definitely callable, and refusing",

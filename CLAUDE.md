@@ -541,6 +541,29 @@ counts metalinks *only*: a trigger reached through the autolook is a different
 recursion with its own counter, and counting both would make eight ordinary
 moves report a metalink loop.
 
+**MOVETO is a type switch, not a move.** `prim_moveto` is the
+primitive form of all of this — it walks a player in through
+`enter_room`, puts a thing or a program, re-sources an exit, and
+reparents a room — and **thirteen** of its tests are conditional on
+mucker level without any of them being a floor. Two fall-throughs are
+load-bearing: a PLAYER falls into the THING case for the loop check
+and the mortal-only block and then leaves before the PROGRAM case,
+and a THING falls into the PROGRAM case for the move itself. Its
+exit branch is `World.MoveTo` plus a priority reset, because
+`MoveTo` already is `unset_source`/`set_source` for an exit —
+`chainHead` picks the Exits list.
+
+**`ts_lastuseobject` is not `ts_useobject`.** `World.LastUsed` sets
+the timestamp and leaves the use count alone, walking up a room's
+parents; `World.Used` does both. Upstream's own comment calls which
+is used where "a little arbitrary", and MOVETO wants the first.
+
+**`permissions()` has no wizard escape and `controls()` does.**
+`interp.c:2706` is pure ownership — which is why a mortal-only
+refusal built on `permissions` is visible to the oracle, while one
+built on `controls` (through `can_teleport_to`) is not: the oracle
+drives a wizard, who passes `controls` for everything.
+
 **`HOME` as a destination is resolved per player**, and a home that is a THING
 is refused with "That would be an undefined operation." rather than entered.
 

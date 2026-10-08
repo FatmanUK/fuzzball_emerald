@@ -501,12 +501,23 @@ func (s *Server) canLink(w *world.World, who, what ref.Ref) bool {
 // too, and @teleport's room branch uses it where its player branch
 // demands outright control.
 func (s *Server) canTeleportTo(c *ctx, where ref.Ref) bool {
-	if s.controls(c.w, c.who, where) {
+	return s.canTeleportToFor(c.w, c.d.ID, c.who, where)
+}
+
+// canTeleportToFor is the same test without a ctx, for the callers
+// that have a world and a player but no command — MOVETO's room
+// branch is one, and upstream's can_teleport_to takes exactly these
+// arguments.
+func (s *Server) canTeleportToFor(w *world.World, descr int,
+	who, where ref.Ref) bool {
+
+	if s.controls(w, who, where) {
 		return true
 	}
-	o := c.w.Get(where)
+	o := w.Get(where)
 	if o == nil ||
-		!s.lockPasses(c.w, c.d.ID, 1, c.who, where, propLinkLock, true) {
+		!s.lockPasses(w, descr, 1, who, where, propLinkLock,
+			true) {
 		return false
 	}
 	return o.Flags&ref.LinkOK != 0 ||

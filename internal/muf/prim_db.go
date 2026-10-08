@@ -164,7 +164,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		what, err := f.popRef()
+		victim, err := f.popRef()
 		if err != nil {
 			return nil, err
 		}
@@ -172,10 +172,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		if err := h.MoveTo(what, dest); err != nil {
-			return nil, errf("%s", err.Error())
-		}
-		return nil, nil
+		return nil, moveTo(f, h, victim, dest)
 	})
 
 	register("DBTOP", func(f *Frame) (*Result, error) {
@@ -849,6 +846,252 @@ func penniesRange(h Host, have, add int64) error {
 	}
 	if have+add < 0 {
 		return errf("Result would be negative.")
+	}
+	return nil
+}
+
+// moveTo is prim_moveto (p_db.c:150), and it is a type switch rather
+// than a move.
+//
+// This server used to be a bare h.MoveTo(victim, dest) -- the raw
+// store move, which refuses only self-containment -- with a floor of
+// 3 in the generated mucker table standing in for all of it. The
+// floor was not even real: its "if ((mlev < 3))" at p_db.c:234 opens
+// a block of extra mortal-only restrictions rather than refusing. So
+// every M1 and M2 program was refused outright, and every M3 and M4
+// one got an unvalidated move: no enter_room for a player, so no
+// announcement, no autolook and no arrive propqueue; no loop check;
+// no exit re-sourcing; no room reparenting.
+//
+// Thirteen of its tests are conditional on mucker level and none of
+// them is a floor. The structure is upstream's, including two
+// fall-throughs that are load-bearing: a PLAYER falls into the THING
+// case for the loop check and the mortal-only block, then leaves
+// through enter_room before the PROGRAM case; and a THING falls into
+// the PROGRAM case for the matchroom rule and the move itself.
+func moveTo(f *Frame, h Host, victim, dest ref.Ref) error {
+	if f.Level > h.MaxInterpRecursion() {
+		return errf("Interp call loops not allowed.")
+	}
+	if !h.Valid(victim) {
+		return errf("Non-object argument. (2)")
+	}
+	// HOME is a legal destination and not an object.
+	if !h.Valid(dest) && dest != ref.Home {
+		return errf("Non-object argument. (1)")
+	}
+	if h.ObjType(dest) == ref.TypeExit {
+		return errf("Destination argument is an exit.")
+	}
+	mlev := f.MLevel()
+	uid := f.progUID(h)
+
+	// Two conditional tests before the switch. Neither is a
+	// floor: the first is a *type* test and the second an
+	// ownership escape hatch, which is why gen_mlev.py skips both
+	// and why the block at :234 was the one it misread.
+	if h.ObjType(victim) == ref.TypeExit && mlev < 3 {
+		return errf("Permission denied.")
+	}
+	if h.Flags(victim)&ref.JumpOK == 0 &&
+		!f.permissions(h, uid, victim) && mlev < 3 {
+		return errf("Object can't be moved.")
+	}
+
+	switch h.ObjType(victim) {
+	case ref.TypePlayer, ref.TypeThing:
+		if err := moveToCreature(f, h, victim, dest, mlev,
+			uid); err != nil {
+			return err
+		}
+		if h.ObjType(victim) == ref.TypePlayer {
+			h.EnterRoom(f.Descr, victim, dest, f.Prog.Ref)
+			return nil
+		}
+		h.LastUsed(victim)
+		return moveToContained(f, h, victim, dest, mlev, uid)
+
+	case ref.TypeProgram:
+		return moveToContained(f, h, victim, dest, mlev, uid)
+
+	case ref.TypeExit:
+		return moveToExit(f, h, victim, dest, mlev, uid)
+
+	case ref.TypeRoom:
+		return moveToRoom(f, h, victim, dest, mlev, uid)
+	}
+	return nil
+}
+
+// moveToCreature is the PLAYER and THING head of the switch: the
+// destination test a player gets, the loop check both get, and the
+// block of mortal-only restrictions that the false floor was taken
+// from.
+func moveToCreature(f *Frame, h Host, victim, dest ref.Ref,
+	mlev int, uid ref.Ref) error {
+
+	if h.ObjType(victim) == ref.TypePlayer {
+		if h.ObjType(dest) != ref.TypeRoom &&
+			!(h.ObjType(dest) == ref.TypeThing &&
+				h.Flags(dest)&ref.Vehicle != 0) {
+			return errf("Bad destination.")
+		}
+	}
+	if h.ParentLoopCheck(victim, dest) {
+		return errf("Things can't contain themselves.")
+	}
+	if mlev >= 3 {
+		return nil
+	}
+	// p_db.c:234. Four refusals, each with its own sentence, and
+	// every one of them unreachable while the table carried a
+	// floor of 3.
+	if h.Flags(h.Location(victim))&ref.JumpOK == 0 &&
+		!f.permissions(h, uid, h.Location(victim)) {
+		return errf("Source not JUMP_OK.")
+	}
+	if dest != ref.Home && h.Flags(dest)&ref.JumpOK == 0 &&
+		!f.permissions(h, uid, dest) {
+		return errf("Destination not JUMP_OK.")
+	}
+	if h.ObjType(dest) == ref.TypeThing &&
+		h.Location(victim) != h.Location(dest) {
+		return errf("Not in same location as vehicle.")
+	}
+	if h.Flags(victim)&ref.Guest != 0 &&
+		h.Flags(dest)&ref.Guest != 0 &&
+		h.ObjType(dest) == ref.TypeRoom {
+		return errf("Destination doesn't accept guests.")
+	}
+	return nil
+}
+
+// moveToContained is the THING tail and the PROGRAM case, which a
+// thing reaches by falling through.
+//
+// The vehicle and zombie refusals are a thing's alone -- a player has
+// already left through enter_room -- and both read oddly:
+// "(FLAGS(dest) & VEHICLE) && Typeof(dest) != TYPE_THING" can only
+// hold for a *room* flagged VEHICLE, which is how upstream spells "a
+// vehicle room". Reproduced as written.
+func moveToContained(f *Frame, h Host, victim, dest ref.Ref,
+	mlev int, uid ref.Ref) error {
+
+	if h.ObjType(victim) == ref.TypeThing {
+		if mlev < 3 && h.Flags(victim)&ref.Vehicle != 0 &&
+			h.Flags(dest)&ref.Vehicle != 0 &&
+			h.ObjType(dest) != ref.TypeThing {
+			return errf("Destination doesn't accept " +
+				"vehicles.")
+		}
+		if mlev < 3 && h.Flags(victim)&ref.Zombie != 0 &&
+			h.Flags(dest)&ref.Zombie != 0 &&
+			h.ObjType(dest) != ref.TypeThing {
+			return errf("Destination doesn't accept " +
+				"zombies.")
+		}
+	}
+	t := h.ObjType(dest)
+	if t != ref.TypeRoom && t != ref.TypePlayer &&
+		t != ref.TypeThing {
+		return errf("Bad destination.")
+	}
+	if mlev < 3 {
+		// matchroom is the *last* of the two tests that
+		// holds, not the first: upstream assigns twice
+		// without an else, so the victim's location wins when
+		// both are controlled.
+		matchroom := ref.Nothing
+		if f.permissions(h, uid, dest) {
+			matchroom = dest
+		}
+		if f.permissions(h, uid, h.Location(victim)) {
+			matchroom = h.Location(victim)
+		}
+		if matchroom != ref.Nothing &&
+			h.Flags(matchroom)&ref.JumpOK == 0 &&
+			!f.permissions(h, uid, victim) {
+			return errf("Permission denied.")
+		}
+	}
+	// A thing moves noisily when the world has asked for it or
+	// when it is a puppet; everything else is the silent move.
+	if h.ObjType(victim) == ref.TypeThing &&
+		(h.TuneBool("secure_thing_movement") ||
+			h.Flags(victim)&ref.Zombie != 0) {
+		h.EnterRoom(f.Descr, victim, dest, f.Prog.Ref)
+		return nil
+	}
+	if err := h.MoveTo(victim, dest); err != nil {
+		return errf("%s", err.Error())
+	}
+	return nil
+}
+
+// moveToExit re-sources an exit, which is the one branch that is not
+// a move at all: unset_source then set_source, which World.MoveTo
+// already is for an exit because chainHead picks the Exits list.
+//
+// SetMLevel(victim, 0) goes with it. An exit's mucker bits are its
+// *priority*, so re-pointing one resets how hard it competes -- which
+// is the same reset @unlink reports as "Action priority Level reset
+// to 0."
+func moveToExit(f *Frame, h Host, victim, dest ref.Ref,
+	mlev int, uid ref.Ref) error {
+
+	if mlev < 3 && (!f.permissions(h, uid, victim) ||
+		!f.permissions(h, uid, dest)) {
+		return errf("Permission denied.")
+	}
+	t := h.ObjType(dest)
+	if (t != ref.TypeRoom && t != ref.TypeThing &&
+		t != ref.TypePlayer) || dest == ref.Home {
+		return errf("Bad destination object.")
+	}
+	if err := h.MoveTo(victim, dest); err != nil {
+		return errf("%s", err.Error())
+	}
+	h.SetFlags(victim, h.Flags(victim).SetMLevel(0))
+	return nil
+}
+
+// moveToRoom reparents a room, and its two permission rules differ:
+// reparenting to #0 wants control of the room **or** of its parent,
+// where reparenting anywhere else wants control of the room **and**
+// somewhere it can link to.
+//
+// The first test is upstream's and is not about mucker level at all:
+// without secure_thing_movement a room may only be reparented to
+// another room, and with it anywhere the later tests allow.
+func moveToRoom(f *Frame, h Host, victim, dest ref.Ref,
+	mlev int, uid ref.Ref) error {
+
+	if !h.TuneBool("secure_thing_movement") &&
+		h.ObjType(dest) != ref.TypeRoom {
+		return errf("Bad destination.")
+	}
+	if victim == ref.GlobalEnvironment {
+		return errf("Permission denied.")
+	}
+	if dest == ref.Home {
+		if mlev < 3 && !f.permissions(h, uid, victim) &&
+			!f.permissions(h, uid, h.Location(victim)) {
+			return errf("Permission denied.")
+		}
+		dest = ref.GlobalEnvironment
+	} else {
+		if mlev < 3 && (!f.permissions(h, uid, victim) ||
+			!h.CanTeleportTo(f.Descr, uid, dest)) {
+			return errf("Permission denied.")
+		}
+		if h.ParentLoopCheck(victim, dest) {
+			return errf("Parent room would create a " +
+				"loop.")
+		}
+	}
+	h.LastUsed(victim)
+	if err := h.MoveTo(victim, dest); err != nil {
+		return errf("%s", err.Error())
 	}
 	return nil
 }

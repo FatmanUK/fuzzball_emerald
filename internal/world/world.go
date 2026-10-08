@@ -152,6 +152,33 @@ func (w *World) Used(r ref.Ref) {
 	}
 }
 
+// LastUsed is ts_lastuseobject (fbtime.c:70): the last-used timestamp
+// *alone*, without the use count that Used bumps. Upstream's own
+// comment calls which of the two is used where "a little arbitrary";
+// MOVETO wants this one.
+//
+// For a room it walks up to the parent as well, and only for a room.
+// The walk is bounded, where upstream's recursion is not: a cycle in
+// a damaged parent chain would take the server down rather than
+// return.
+func (w *World) LastUsed(r ref.Ref) {
+	for i := 0; r != ref.Nothing && i <= lastUsedMaxDepth; i++ {
+		o := w.objs[r]
+		if o == nil {
+			return
+		}
+		o.LastUsed = w.now()
+		w.dirty[r] = struct{}{}
+		if o.Type() != ref.TypeRoom {
+			return
+		}
+		r = o.Location
+	}
+}
+
+// lastUsedMaxDepth bounds LastUsed's walk up the parent chain.
+const lastUsedMaxDepth = 128
+
 // Create allocates a new object and marks it dirty. It does not place
 // the object anywhere; use MoveTo for that.
 //

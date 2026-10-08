@@ -253,6 +253,21 @@ func (h *fakeHost) Now() time.Time {
 func (h *fakeHost) Uptime() time.Duration { return time.Hour }
 func (h *fakeHost) Version() string       { return "test" }
 
+// The four MOVETO needs. Nothing in this package drives MOVETO, so
+// these answer the way an empty world would: no loop, no permission
+// to teleport anywhere, and the two side effects do nothing.
+func (h *fakeHost) EnterRoom(int, ref.Ref, ref.Ref, ref.Ref) {}
+
+func (h *fakeHost) ParentLoopCheck(ref.Ref, ref.Ref) bool {
+	return false
+}
+
+func (h *fakeHost) CanTeleportTo(int, ref.Ref, ref.Ref) bool {
+	return false
+}
+
+func (h *fakeHost) LastUsed(ref.Ref) {}
+
 // ProgMLevel declines to answer, so a frame uses the level its
 // compile recorded -- which is what every test in this package sets
 // up directly.

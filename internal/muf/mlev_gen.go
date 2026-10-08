@@ -17,10 +17,6 @@ package muf
 // finer-grained gate would need the arguments, which the
 // dispatcher does not have.
 //
-// One entry is not from the C at all: see HELD_FLOOR in
-// gen_mlev.py, which keeps MOVETO gated because this server's
-// implementation of it is not faithful enough to ungate.
-//
 // Where a primitive has several, the *loosest* is recorded: that
 // is the level at which it is definitely callable, and refusing
 // at the strictest would block a path that works before the
@@ -36,7 +32,6 @@ var primMLevel = map[string]int{
 	"DUMP":                 4,
 	"ENTRANCES_ARRAY":      3,
 	"FORK":                 3,
-	"MOVETO":               3,
 	"NEWEXIT":              3,
 	"NEWPASSWORD":          4,
 	"NEWPLAYER":            4,
