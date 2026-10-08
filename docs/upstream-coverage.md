@@ -1352,11 +1352,45 @@ level check anywhere. **A mucker-1 program could recycle objects
 upstream refuses it.** The floor is back and the second disjunct is
 inline.
 
-Its other refusals are **still missing** and are a separate gap:
-`#0`, a player, an object named by a dbref @tune parameter, the
-running program, and `unset_source` on an exit before recycling.
-"Cannot recycle active program." cannot be reproduced at all, because
-`Frame` has no caller-program stack.
+**Its other refusals are now ported, and one of them was
+catastrophic.** This entry previously said they were "still missing
+and are a separate gap", which under-rated what was missing: with
+none of them, a **mucker-4 program could `#0 recycle`** and turn the
+global environment into garbage, or recycle a player. The primitive
+went straight to `World.Recycle`, which guards only nil-and-garbage
+and which even removes a player from the name index on the way.
+`@recycle`, the command, refuses both — so the command was safe and
+the primitive was not.
+
+Four of the five are reproduced in upstream's order (`p_db.c:2206`):
+`#0`, a player, anything a dbref `@tune` parameter names, and the
+running program. The `@tune` scan is shared with `do_recycle` as
+`tuneNamesObject` but **the wording is not** — the command says "That
+object cannot currently be @recycled." and the primitive "Cannot
+currently recycle that object.", two spellings of one guard.
+
+Every one of the six dbref parameters defaults to `#0` or `#1`, which
+the first two refusals reach first — the same shadowing `do_recycle`
+has — so reaching that branch at all needs a parameter pointed
+somewhere else first.
+
+**"Cannot recycle active program." is not reproducible.** Upstream
+walks `fr->caller`, whose entries are the program dbrefs execution
+has passed through (`interp.c:690-692`); Emerald's `f.calls` holds
+`{pc, scopeBase}` — return addresses within one program, with no
+program refs on it. The running-program check covers what it would
+for any run not nested through INTERP, because upstream's own stack
+holds the running program at index 1; what is lost is a program
+recycling one further out in an INTERP chain. Same cause as the
+sticky+haven+nested `ProgUID` case.
+
+`unset_source` on an exit is incidentally covered: `World.Recycle`
+calls `removeFromChain`, which is what it does.
+
+It runs at **mucker 4** in `internal/golden/recycleprim_test.go`,
+because below that the `(mlev < 4) && !permissions(...)` clause
+refuses anything the program does not own and masks the whole set.
+Four mutations, all caught.
 
 **`MOVETO` was ungated by porting it** -- `HELD_FLOOR` held it for
 one commit and is gone. See below.

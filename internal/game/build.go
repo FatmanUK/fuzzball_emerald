@@ -908,6 +908,25 @@ const noRecycleRoot = "If you want to do that, why don't you " +
 	"just delete the database instead?  Room #0 contains " +
 	"everything, and is needed for database sanity."
 
+// tuneNamesObject reports whether any dbref-typed @tune parameter
+// currently points at obj.
+//
+// Both do_recycle and prim_recycle make this test and **they word
+// their refusals differently** — "That object cannot currently be
+// @recycled." against "Cannot currently recycle that object." — so
+// what is shared is the scan and not the message.
+func tuneNamesObject(w *world.World, obj ref.Ref) bool {
+	for _, p := range tune.Params() {
+		if p.Type != tune.TypeDbref {
+			continue
+		}
+		if v, _ := w.Tune.Get(p.Name); v.Ref == obj {
+			return true
+		}
+	}
+	return false
+}
+
 // noRecycleTuned is do_recycle's guard on anything a dbref @tune
 // parameter points at.
 const noRecycleTuned = "That object cannot currently be @recycled."
@@ -952,14 +971,9 @@ func (s *Server) cmdRecycle(c *ctx) {
 	// refusal below them. Recycling a parameter's target would
 	// leave the server pointing at garbage with nothing to say
 	// about it.
-	for _, p := range c.w.Tune.Params() {
-		if p.Type != tune.TypeDbref {
-			continue
-		}
-		if v, _ := c.w.Tune.Get(p.Name); v.Ref == target {
-			c.tell("%s", noRecycleTuned)
-			return
-		}
+	if tuneNamesObject(c.w, target) {
+		c.tell("%s", noRecycleTuned)
+		return
 	}
 
 	// **Each type then demands actual ownership, and that is

@@ -117,6 +117,12 @@ func (h *mufHost) CanTeleportTo(descr int, who,
 	return h.s.canTeleportToFor(h.w, descr, who, where)
 }
 
+// TuneNamesObject implements muf.Host for RECYCLE's @tune guard,
+// sharing do_recycle's scan but not its wording.
+func (h *mufHost) TuneNamesObject(obj ref.Ref) bool {
+	return tuneNamesObject(h.w, obj)
+}
+
 // LastUsed implements muf.Host for ts_lastuseobject.
 func (h *mufHost) LastUsed(obj ref.Ref) { h.w.LastUsed(obj) }
 

@@ -56,6 +56,10 @@ type Host interface {
 	// MOVETO's room branch consults where its player branch
 	// demands outright control.
 	CanTeleportTo(descr int, who, where ref.Ref) bool
+	// TuneNamesObject reports whether a dbref-typed @tune
+	// parameter points at obj, which RECYCLE refuses: recycling
+	// one would leave the server pointing at garbage.
+	TuneNamesObject(obj ref.Ref) bool
 	// LastUsed is fbtime.c:70's ts_lastuseobject: the timestamp
 	// without the use count, walking up a room's parents.
 	LastUsed(obj ref.Ref)

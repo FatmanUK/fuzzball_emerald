@@ -1288,6 +1288,47 @@ func init() {
 			!f.permissions(h, f.progUID(h), obj) {
 			return nil, errf("Permission denied.")
 		}
+		// Five refusals follow the permission test
+		// (p_db.c:2206-2232), and until now this primitive
+		// made **none** of them: it went straight to
+		// World.Recycle, which guards only nil-and-garbage.
+		// So a mucker-4 program could recycle the global
+		// environment and turn the whole world into garbage,
+		// or recycle a player -- both of which @recycle, the
+		// command, refuses. The last tranche recorded these
+		// as "still missing" without noticing that one of
+		// them is catastrophic.
+		if obj == ref.GlobalEnvironment {
+			return nil, errf("Cannot recycle the " +
+				"global environment.")
+		}
+		if h.ObjType(obj) == ref.TypePlayer {
+			return nil, errf("Cannot recycle a player.")
+		}
+		// Recycling what a dbref parameter names would leave
+		// the server pointing at garbage. do_recycle makes
+		// the same test and words it differently.
+		if h.TuneNamesObject(obj) {
+			return nil, errf("Cannot currently recycle " +
+				"that object.")
+		}
+		if obj == f.Prog.Ref {
+			return nil, errf("Cannot recycle currently " +
+				"running program.")
+		}
+		// The fifth, "Cannot recycle active program.", is
+		// **not reproducible**. Upstream walks fr->caller,
+		// whose entries are the program dbrefs execution has
+		// passed through (interp.c:690-692); Emerald's
+		// f.calls is {pc, scopeBase} -- return addresses
+		// within one program, with no program refs on it at
+		// all. The check above covers what it would for any
+		// run that is not nested through INTERP, because
+		// upstream's own stack holds the running program at
+		// index 1; what is lost is a program recycling one
+		// further out in an INTERP chain. Recorded in
+		// docs/upstream-coverage.md with the ProgUID case
+		// that has the same cause.
 		if err := h.Recycle(obj); err != nil {
 			return nil, errf("%s", err.Error())
 		}

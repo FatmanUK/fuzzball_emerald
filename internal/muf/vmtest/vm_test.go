@@ -268,6 +268,10 @@ func (h *fakeHost) CanTeleportTo(int, ref.Ref, ref.Ref) bool {
 
 func (h *fakeHost) LastUsed(ref.Ref) {}
 
+// TuneNamesObject answers false: this package has no @tune table, so
+// RECYCLE's parameter guard is never what refuses here.
+func (h *fakeHost) TuneNamesObject(ref.Ref) bool { return false }
+
 // ProgMLevel declines to answer, so a frame uses the level its
 // compile recorded -- which is what every test in this package sets
 // up directly.
