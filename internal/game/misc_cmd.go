@@ -2,6 +2,7 @@ package game
 
 import (
 	"strings"
+	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -33,18 +34,24 @@ func (s *Server) cmdScore(c *ctx) {
 	c.tell("You have %d %s.", n, unit)
 }
 
-// cmdUptime is do_uptime (look.c:994).
+// cmdUptime is do_uptime (look.c:994), which reads the start time
+// back out of _sys/startuptime on #0 rather than consulting a clock.
 //
-// Upstream reads the start time back out of a property on #0,
-// _sys/startuptime, which it writes at boot and which MUF can read
-// too. Emerald has the time on the server and does not write that
-// property — so this agrees, and a program asking #0 does not.
-// Worth closing, along with the other three _sys values upstream sets
-// beside it.
+// Reading the property rather than Server.started is the point: a
+// program and this command now agree, where before the command had
+// the truth and #0 had nothing. Engine.Run writes the property, so
+// anything with a running world has it; the field is the fallback for
+// a world that somehow does not, which keeps `uptime` from reporting
+// 1970.
 func (s *Server) cmdUptime(c *ctx) {
-	up := int(c.w.Now().Sub(s.started).Seconds())
+	started := s.started
+	if v, ok := c.w.GetProp(ref.GlobalEnvironment,
+		world.SysStartupTime); ok && v.Num > 0 {
+		started = time.Unix(v.Num, 0)
+	}
+	up := int(c.w.Now().Sub(started).Seconds())
 	c.tell("Up %s since %s", timefmt.Long(up),
-		timefmt.Format("%c %Z", s.started))
+		timefmt.Format("%c %Z", started))
 }
 
 // cmdTrace is do_trace (look.c:1660): the environment chain from an

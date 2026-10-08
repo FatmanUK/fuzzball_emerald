@@ -202,6 +202,15 @@ func (e *Engine) Flush(ctx context.Context) error {
 func (e *Engine) Run(ctx context.Context) error {
 	defer e.stop()
 
+	// The _sys values upstream writes once the database is loaded
+	// (game.c:487). This is the place because an Engine is what a
+	// *server* has: the tools that load a world without serving
+	// it -- the importer, the configurator, fbemerald tune --
+	// never make one, and "startup time" would mean nothing to
+	// them. Running it here rather than in a caller also means it
+	// cannot be forgotten by a new one.
+	e.world.WriteBootProps(e.world.now())
+
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
 
@@ -265,6 +274,14 @@ func (e *Engine) flush(ctx context.Context) error {
 	if e.persister == nil {
 		return nil
 	}
+	// _sys/lastdumptime has to be stamped before the snapshot is
+	// taken, or it misses the write it is recording -- and only
+	// when there is something to write, or an idle world would
+	// flush for ever to record that it had flushed.
+	if !e.world.HasPending() {
+		return nil
+	}
+	e.world.RecordLastDump(e.world.now())
 	s := e.world.TakeSnapshot()
 	if s.Empty() {
 		return nil
@@ -296,6 +313,13 @@ func (e *Engine) shutdown() error {
 		case op := <-e.ops:
 			e.apply(op)
 		default:
+			// _sys/shutdowntime, written before the last
+			// flush so it is in the snapshot that flush
+			// takes (interface.c:4600). It also makes the
+			// snapshot non-empty, which is why this
+			// server always writes once on a clean exit
+			// where upstream always dumps.
+			e.world.RecordShutdown(e.world.now())
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := e.flush(ctx); err != nil {

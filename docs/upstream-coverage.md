@@ -1035,6 +1035,88 @@ floor would look exactly like a deliberate one.
 `STRCAT`'s "Non-string argument." agrees exactly, which is why the
 ANSI case uses it to produce an error report.
 
+### The six `_sys` values on `#0`
+
+`SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream
+keeps six values there that this server wrote **none** of. The one
+that was visible is `do_uptime` (`look.c:994`), which reads
+`_sys/startuptime` back rather than consulting a clock — so `uptime`
+agreed with upstream while a program asking `#0` got nothing, which
+`cmdUptime`'s own comment already said.
+
+| property | C | when |
+|---|---|---|
+| `_sys/startuptime` | `game.c:487` | the world goroutine starts |
+| `_sys/maxpennies` | `game.c:488` | ditto, from `max_pennies` |
+| `_sys/dumpinterval` | `game.c:489` | ditto, from `dump_interval` |
+| `_sys/max_connects` | `game.c:490`, `interface.c:4585` | zero, then the peak |
+| `_sys/lastdumptime` | `events.c:99` | per dump |
+| `_sys/shutdowntime` | `interface.c:4600` | at shutdown |
+
+They are **integers** — `add_property` is called with a NULL string
+and a value — so a program reads them with `getpropval`, and the
+golden case checks `getpropstr` comes back empty to pin that.
+
+**`Engine.Run` is the hook**, not a loader and not a caller. An Engine
+is what a *server* has: `internal/store`'s loader, the importer, the
+configurator and `fbemerald tune` all build a world without one, and
+"startup time" means nothing to them. Writing it there also means a
+new server entry point cannot forget it.
+
+Three needed a decision rather than a port, and each is recorded in
+the code:
+
+- **`dumpinterval` names an inert parameter.** The `dump_*` family is
+  a declared divergence, since persistence is write-behind rather
+  than a dump cycle. The value is written anyway — a program asking
+  is entitled to an answer — and it describes nothing.
+- **`lastdumptime`'s analogue is a flush**, and it is stamped only
+  when the flush has something to carry. Stamping it unconditionally
+  would make the snapshot never empty, so an **idle world would write
+  to Postgres on every tick for ever**, just to record that it had
+  written. `World.HasPending` is that test, and it mirrors
+  `Snapshot.Empty` rather than `DirtyCount`, because a snapshot can
+  be non-empty on a `@tune` change alone.
+- **`shutdowntime` has to be written before the final flush** takes
+  its snapshot, or it never reaches the database. `@armageddon`
+  deliberately does not come this way at all — it exits without
+  dumping, so upstream leaves the property at whatever the last clean
+  shutdown wrote.
+
+**`max_connects` written as zero at boot is a no-op, and faithfully
+so.** `add_prop_nofetch` (`property.c:285`) is
+
+```c
+if (strval && *strval) { ... } else if (value) { ... }
+```
+
+so a NULL string with a zero value takes neither branch and the
+property is *removed* rather than created. `props.Value.IsEmpty`
+treats a zero `Int` the same way, so this server arrives at the same
+place by its own rule — an incidental confirmation that the two agree
+about empty properties. The call is kept because it is upstream's
+line; what it does is nothing until a connection raises the mark.
+Upstream raises the mark from its descriptor sweep, where the count
+can only have grown since the last pass; the one moment it can grow
+here is a login finishing.
+
+Three of the six are exactly comparable and are compared
+(`internal/golden/sysprops_test.go`): `maxpennies`, `dumpinterval`
+and `max_connects`. `startuptime` cannot be — two servers boot
+seconds apart — so it is compared as a *plausibility*, non-zero and
+within a day of the clock, which is enough to catch the bug that
+mattered: the property not being there at all. The other two are
+unit-tested, including that an idle flush does **not** restamp
+`lastdumptime` and that `shutdowntime` reaches the persister rather
+than only memory.
+
+One thing the unit tests found about the harness rather than the
+server: `World.New` starts with no `#0`, and `SetProp` on an object
+that is not there does nothing at all — so the first version of every
+assertion was reading a missing property and measuring the harness.
+A real world always has `#0`, which is why `withRoomZero` is a test
+helper and not a guard in `WriteBootProps`.
+
 ### The mucker table surveyed: nine false floors and one missing
 
 `internal/muf/mlev_gen.go` is generated from the `mlev <` checks in

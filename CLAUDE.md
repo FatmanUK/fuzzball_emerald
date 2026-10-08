@@ -189,6 +189,30 @@ rewrite to make visible. `World.SetSource` is the
 loading path and marks nothing; `World.SaveSource` is the editor's and marks
 the source for writing.
 
+**Six values live on `#0` under `_sys`**, and `internal/world/sysprops.go` is
+them. Four are written when the world goroutine starts (`game.c:487`) —
+`startuptime`, `maxpennies`, `dumpinterval`, `max_connects` — one per flush
+and one on the way out. `Engine.Run` is the hook because an **Engine is what
+a server has**: the importer, the configurator and `fbemerald tune` all load
+a world without making one, and "startup time" would mean nothing to them.
+
+Three of them need a decision rather than a port. `dumpinterval` names a
+parameter that is **inert** here and is written anyway, because a program
+asking is entitled to an answer; the number describes nothing.
+`lastdumptime` has no dump cycle to record, so it is stamped on a **flush**
+— and only when the flush has something to carry, which is what
+`World.HasPending` is for: stamping it unconditionally makes the snapshot
+never empty, so an idle world would write to Postgres for ever just to record
+that it had. And `shutdowntime` must be written **before** the final flush
+takes its snapshot, or it never reaches the database.
+
+`max_connects` is written as zero at boot and that is a **no-op on both
+servers**: `add_prop_nofetch` (`property.c:285`) takes neither its string
+nor its integer branch for a NULL string with a zero value, so upstream
+removes the property rather than creating it — and `props.Value.IsEmpty`
+treats a zero `Int` the same way. The call is kept because it is upstream's
+line.
+
 Containment chains are stored as upstream keeps them, because MUF can observe
 their order, with each object's `Location` as a redundant cross-check.
 `World.RepairChains` rebuilds any chain that disagrees, comparing *membership*

@@ -301,6 +301,15 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 	s.hub.Bind(d, player, w.Now())
 	w.Used(player)
 
+	// _sys/max_connects is a high-water mark of *connections*,
+	// not of distinct players and not of sockets — upstream's
+	// con_players_max against its con_players_curr
+	// (interface.c:4583). Upstream raises it from its descriptor
+	// sweep, where the count can only have grown since the last
+	// pass; the one moment it can grow here is a login finishing,
+	// so this is the same mark reached from the other side.
+	w.RecordMaxConnects(len(s.hub.Connected()))
+
 	s.securityLog().Info("connected",
 		"descriptor", d.ID,
 		"player", player.String(),
