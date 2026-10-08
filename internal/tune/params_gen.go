@@ -1015,7 +1015,7 @@ var params = []Param{
 		Label:     "Name of the MUCK",
 		Group:     "Misc",
 		Type:      TypeString,
-		Default:   Value{Str: "TygryssMUCK"},
+		Default:   Value{Str: "Emerald"},
 		ReadMLev:  0,
 		WriteMLev: 4,
 	},

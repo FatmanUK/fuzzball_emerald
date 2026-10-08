@@ -7,11 +7,21 @@
 // what lets a world boot with working help before anyone has typed
 // anything, without needing the game directory Emerald does not have.
 //
-// The content is Emerald's own rather than upstream's. Fuzzball's
-// .raw files are GPLv3 and Emerald declares no licence, so vendoring
-// them would settle that question by accident; and upstream's help
-// documents about fifty commands Emerald does not implement, which
-// would be worse than saying nothing.
+// The content is Emerald's own rather than upstream's, and the reason
+// is not the licence. That argument used to run "Fuzzball's .raw
+// files are GPLv3 and Emerald declares no licence", which was true
+// when it was written and is not now: this project is
+// GPL-3.0-or-later, so vendoring them would be *permitted*. The real
+// reason is the one that still holds — upstream's help documents
+// about fifty commands this server does not implement, and a help
+// system that confidently describes commands you cannot type is worse
+// than one that says nothing.
+//
+// One file is upstream's: content/motd.txt is byte-identical to
+// fuzzball/game/data/motd.txt. It is a single dashed rule, so there
+// is nothing in it to have written differently, but "the content is
+// Emerald's own" is not quite true and it is cheaper to say so than
+// to pretend.
 package help
 
 import (

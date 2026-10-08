@@ -55,6 +55,22 @@ DROPPED = {
 # looks parameters up by string at runtime.
 RENAMED = {"smtp_ssl_type": "smtp_tls_mode"}
 
+# Defaults this server answers differently. The parameter *name* is a runtime
+# API that MUF reads by string and must never change; a default is a value,
+# and a world that sets the parameter itself never sees ours.
+#
+# muckname: upstream's compiled-in default is "TygryssMUCK", the name of the
+# MUCK it was written for -- so a fresh Emerald world introduced itself as
+# somebody else's. VERSION already diverges from upstream's string
+# (include/config.h:24 is "Muck2.2fb7.21"), so this breaks no compatibility
+# that is not already broken.
+#
+# Keep this table tiny. Every entry is a deliberate difference that somebody
+# reading a .db against both servers has to know about.
+DEFAULT_OVERRIDE = {
+    "muckname": "Emerald",
+}
+
 # Inert: kept so MUF `sysparm` lookups keep working, but no longer steering
 # anything, because write-behind persistence replaced dump-and-pause.
 # Why every file_* parameter the help system replaces is inert.
@@ -193,6 +209,9 @@ def parse(text):
 
 def go_default(e):
     t, d = e["type"], e["default"]
+    if e["name"] in DEFAULT_OVERRIDE:
+        assert t == "String", (e["name"], t)   # only shape handled
+        return f"Value{{Str: {json.dumps(DEFAULT_OVERRIDE[e['name']])}}}"
     if t == "String":
         return f"Value{{Str: {json.dumps(c_string(d))}}}"
     if t == "Boolean":

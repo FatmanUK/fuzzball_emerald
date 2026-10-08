@@ -1,8 +1,11 @@
 # Fuzzball Emerald
 #
-# Quick start:
-#   make certs db-up import run      run on the host
+# Quick start, with a world of our own:
+#   make certs db-up init run        run on the host
 #   make pod-build pod-run           run in a container
+#
+# Or load an existing Fuzzball world instead of "init":
+#   make import DUMP=path/to.db
 #
 # Override any variable on the command line, e.g.
 #   make pod-run LINE_PORT=5202
@@ -57,8 +60,17 @@ CFG_CONTAINER := fbeconfig
 NONROOT_UID := 65532
 USERNS      ?= keep-id:uid=$(NONROOT_UID),gid=$(NONROOT_UID)
 
-# A world to import when none is given. The muf/ sources sit beside the dump,
-# so a container gets the whole directory mounted rather than the one file.
+# The world "make init" builds, which is the path for a fresh install.
+WIZ_NAME    ?= Wizard
+WIZ_ROOM    ?= Nexus
+WIZ_PW      ?= potrzebie
+
+# The world "make import" reads instead, for loading somebody else's.
+# testdata/starterdb is a byte-identical copy of upstream's starter
+# database, kept as a fixture for the *importer* -- you cannot test
+# reading a Fuzzball dump without one -- and not as this project's own
+# content. The muf/ sources sit beside the dump, so a container gets
+# the whole directory mounted rather than the one file.
 DUMP        ?= testdata/starterdb/starterdb.db
 DUMP_DIR     = $(patsubst %/,%,$(dir $(abspath $(DUMP))))
 DUMP_BASE    = $(notdir $(DUMP))
@@ -303,6 +315,12 @@ psql: db-up ## Open a psql shell
 .PHONY: import
 import: build db-up ## Import a legacy world (override with DUMP=path/to.db)
 	FBE_DATABASE_URL="$(DB_URL)" ./$(BINARY) import -force $(DUMP)
+
+.PHONY: init
+init: build db-up ## Create a minimal world of our own (WIZ_PW=secret)
+	@printf '%s\n' "$(WIZ_PW)" | FBE_DATABASE_URL="$(DB_URL)" \
+		./$(BINARY) init -force -password-stdin \
+		-wizard "$(WIZ_NAME)" -room "$(WIZ_ROOM)"
 
 .PHONY: run
 run: build certs db-up ## Run the server on the host

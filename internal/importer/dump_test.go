@@ -148,16 +148,55 @@ func TestMinimalDatabaseParameters(t *testing.T) {
 	if got := rep.ParamsSet + rep.ParamsReset + rep.ParamsDropped; got != 169 {
 		t.Errorf("accounted for %d parameters, want 169", got)
 	}
+	// A dump marks every parameter still at its built-in value,
+	// and the importer compares those against ours so an operator
+	// is told where the two servers will read differently.
+	// Exactly one such difference is deliberate -- muckname,
+	// whose upstream default names the MUCK Fuzzball was written
+	// for -- so that one warning is expected and any other is a
+	// drift nobody decided on.
+	drifted := map[string]bool{}
 	for _, warn := range rep.Warnings {
 		if strings.Contains(warn, "unknown parameter") {
 			t.Errorf("unexpected unknown parameter: %s", warn)
 		}
 		if strings.Contains(warn, "default") &&
 			strings.Contains(warn, "differs") {
-			t.Errorf("our default has drifted from Fuzzball's: %s", warn)
+			for _, name := range deliberateDefaults {
+				q := `"` + name + `"`
+				if strings.Contains(warn, q) {
+					drifted[name] = true
+				}
+			}
+			if len(drifted) == 0 {
+				t.Errorf("a default drifted and "+
+					"nobody decided to: %s",
+					warn)
+			}
+		}
+	}
+	for _, name := range deliberateDefaults {
+		if !drifted[name] {
+			t.Errorf("%s is a deliberate override "+
+				"but the import warned about "+
+				"nothing: either the override is "+
+				"gone or the importer stopped "+
+				"reporting", name)
 		}
 	}
 }
+
+// deliberateDefaults names the parameters whose compiled-in default
+// this server answers differently, and so the ones whose import
+// warning is expected rather than a fault.
+//
+// It is the third copy of this list -- gen_params.py's
+// DEFAULT_OVERRIDE and tune_test.go's ownDefaults are the others --
+// and each is checked against a different thing: the generator emits
+// the value, tune_test compares it against minimal.db's own header,
+// and this asserts the *operator* is told. Three lists that must
+// agree is three chances to notice a change nobody intended.
+var deliberateDefaults = []string{"muckname"}
 
 // TestStarterDatabase reads the full starter world, which exercises
 // every object type, every property type and a blessed property.

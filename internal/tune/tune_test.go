@@ -176,6 +176,25 @@ func TestTypedAccessorPanicsOnWrongType(t *testing.T) {
 	NewSet().String("wiz_vehicles")
 }
 
+// ownDefaults are the parameters whose compiled-in default this
+// server answers differently from upstream.
+//
+// It deliberately duplicates gen_params.py's DEFAULT_OVERRIDE, which
+// is Python and cannot be read from here. Two lists that must agree
+// is not a redundancy to remove: changing the generator without
+// changing this fails the test and says which parameter moved, where
+// a single list would have let the divergence through unremarked.
+//
+// Everything *not* named here must still match the dump's own
+// defaults exactly, which is what stops an accidental divergence
+// hiding behind a deliberate one.
+var ownDefaults = map[string]string{
+	// Upstream ships "TygryssMUCK", the name of the MUCK it was
+	// written for, so a fresh world here introduced itself as
+	// somebody else's.
+	"muckname": "Emerald",
+}
+
 // TestAgainstRealDumpHeader parses the parameter block of the shipped
 // minimal database. It is the real compatibility check: every name
 // must resolve and every value must parse.
@@ -208,6 +227,7 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 	}
 
 	s := NewSet()
+	ownSeen := map[string]bool{}
 	var seen, dropped int
 	for _, line := range lines[4 : 4+nparams] {
 		// A leading '%' means the value is still the server
@@ -234,8 +254,20 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 			continue
 		}
 		// Where the dump says a value is the default, ours
-		// must agree.
+		// must agree -- except for the handful this server
+		// answers differently on purpose, whose values are
+		// pinned here rather than skipped.
 		if isDefault {
+			if want, mine := ownDefaults[name]; mine {
+				got := p.Format(p.Default)
+				if got != want {
+					t.Errorf("%s override: "+
+						"want %q, got %q",
+						name, want, got)
+				}
+				ownSeen[name] = true
+				continue
+			}
 			if got := p.Format(s.vals[p.Name]); got != p.Format(p.Default) {
 				t.Errorf("%s: dump default %q, our default %q",
 					name, got, p.Format(p.Default))
@@ -248,6 +280,18 @@ func TestAgainstRealDumpHeader(t *testing.T) {
 	if dropped != 8 {
 		t.Errorf("skipped %d dropped parameters, want 8", dropped)
 	}
+	// Every deliberate override must have been reached, or the
+	// list above has gone stale -- a parameter renamed or dropped
+	// upstream would otherwise sit here unnoticed, excusing a
+	// divergence that no longer exists.
+	for name := range ownDefaults {
+		if !ownSeen[name] {
+			t.Errorf("%s is listed as an override "+
+				"but the dump never marked it "+
+				"default", name)
+		}
+	}
+
 	// minimal.db sets two parameters explicitly, without the '%'
 	// default marker: default_room_parent and player_start.
 	if s.IsDefault("default_room_parent") {

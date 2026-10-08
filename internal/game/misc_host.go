@@ -16,6 +16,15 @@ import (
 // own SYSTEM_PROPDIR_NOREAD.
 const ignoreProp = "@__sys__/ignore/def"
 
+// NameOK reports whether a name may be given to a new object, which
+// is ok_object_name's rule.
+//
+// It is exported for "fbemerald init", which creates the first room
+// and the first wizard outside the game and must apply the same rule
+// — a world initialised with a name no command can refer to would
+// be unusable from the moment it booted.
+func NameOK(name string) bool { return !nameForbidden(name) }
+
 // nameForbidden is upstream's ok_object_name: characters and whole
 // names no object may be created with, regardless of type.
 func nameForbidden(name string) bool {

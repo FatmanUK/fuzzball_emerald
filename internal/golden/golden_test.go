@@ -1062,7 +1062,12 @@ public foo
   "{commas:{mklist:a,b}, or }" show
   "{escape:plain text}" show
   "{with:n,7,{v:n}}" show
-  "{muckname}" show
+  ( {muckname} and {sysparm:muckname} are the same parameter, so
+    comparing them proves {muckname} reads it without naming the
+    value -- which this server answers differently by design, its
+    compiled-in default being "Emerald" where upstream ships
+    "TygryssMUCK". )
+  "{if:{eq:{muckname},{sysparm:muckname}},agrees,DIFFERS}" show
   "{sysparm:penny}" show
   "{pronouns:%s likes %p stuff.}" show
   "{attr:bold,red,hi}" strlen 0 > t

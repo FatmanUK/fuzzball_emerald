@@ -1,0 +1,25 @@
+# The build context is "COPY . ." from the repository root, so
+# anything here is sent to the daemon. The submodule alone is ~110k
+# lines of C that the build never reads: the generators run from
+# "make generate" on a developer's machine and their output is
+# committed, so a container build needs none of it.
+#
+# Nothing here reaches the final image either way -- that is
+# distroless and receives only the two Go binaries -- so this is
+# about the size of the context, not about what ships.
+fuzzball/
+
+# Build and test artefacts.
+build/
+fbemerald
+fbeconfig
+*.test
+coverage.out
+
+# Local certificates and scratch state.
+certs/
+.git/
+.github/
+
+# The vendored dumps are importer fixtures, not container content.
+testdata/

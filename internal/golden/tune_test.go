@@ -2,6 +2,7 @@ package golden
 
 import (
 	"context"
+	"regexp"
 	"testing"
 )
 
@@ -106,6 +107,28 @@ var tuneScript = Script{
 }
 
 // TestTuneMatchesFuzzball checks do_tune against the C server.
+// maskDefaultMuckname blanks muckname's value on a line that carries
+// the [default] marker.
+//
+// muckname is the one parameter whose compiled-in default this server
+// answers differently on purpose -- "Emerald" where upstream ships
+// "TygryssMUCK", because a fresh world introducing itself as somebody
+// else's MUCK is a leak of a different kind. The [default] marker
+// itself still compares, which is the half that proves a reset
+// worked, and a value this script *sets* has no marker and so
+// compares in full.
+func maskDefaultMuckname(s string) string {
+	return muckDefaultRe.ReplaceAllString(s, "${1}<default>${2}")
+}
+
+// No "$" anchor: the oracle's transcript still has its CRLF line
+// endings at this point, because Normalize runs inside Compare and so
+// after the mask. Anchoring to end-of-line matched Emerald's side and
+// not upstream's, which is a mask that hides a divergence in one
+// direction only -- the worst possible failure for one of these.
+var muckDefaultRe = regexp.MustCompile(
+	`(?m)^(\(str\)\s+muckname\s+= ).*?( \[default\])`)
+
 func TestTuneMatchesFuzzball(t *testing.T) {
 	requireOracle(t)
 	ctx := context.Background()
@@ -132,7 +155,8 @@ func TestTuneMatchesFuzzball(t *testing.T) {
 		if i < len(emerald) {
 			got = emerald[i]
 		}
-		if diffs := Compare(want, got); len(diffs) > 0 {
+		if diffs := Compare(maskDefaultMuckname(want),
+			maskDefaultMuckname(got)); len(diffs) > 0 {
 			t.Errorf("%q\n%s", cmd, Render(diffs))
 		}
 	}

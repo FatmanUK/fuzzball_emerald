@@ -61,6 +61,7 @@ make golden           # diff this server against it
 make build-config     # build ./fbeconfig, the web configurator
 make config           # run it against the local database
 
+printf 'secret\n' | ./fbemerald init -password-stdin   # a world of our own
 ./fbemerald help-seed          # write the built-in help into the database
 ./fbemerald help-seed -force   # ...replacing topics edited in-game
 
@@ -1644,6 +1645,18 @@ afterwards.
 
 Worth knowing before "fixing" something that looks wrong:
 
+- **The default `muckname` is `Emerald`**, where upstream's compiled-in
+  default is `TygryssMUCK` — the name of the MUCK it was written for, so a
+  fresh world here introduced itself as somebody else's. It is the **only**
+  parameter whose default differs, and the difference is pinned in two
+  places that must agree: `DEFAULT_OVERRIDE` in `gen_params.py` and
+  `ownDefaults` in `tune_test.go`. That duplication is deliberate —
+  `TestAgainstRealDumpHeader` compares every other default against
+  `minimal.db`'s own, so changing the generator without the test fails and
+  names the parameter, where one list would have let a *second* divergence
+  through unremarked. A parameter *name* is a runtime API MUF reads by
+  string and must never change; a default is a value, and a world that sets
+  it never sees ours.
 - **TLS only.** No cleartext listener, no STARTTLS. The eight `ssl_*` and
   `starttls_allow` parameters are gone, replaced by `FBE_TLS_*` environment
   variables, because a TLS-only server cannot read its listener configuration

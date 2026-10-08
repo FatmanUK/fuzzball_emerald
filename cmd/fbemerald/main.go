@@ -37,6 +37,7 @@ usage: fbemerald <command> [flags]
 commands:
   serve     run the server
   import    load a legacy Fuzzball database dump into Postgres
+  init      write a minimal world of this server's own, then exit
   migrate   create or update the Postgres schema, then exit
   tune      print the @tune parameter table
   help-seed write the built-in help texts into the database
@@ -56,6 +57,8 @@ func run(args []string) error {
 	switch cmd {
 	case "serve":
 		return cmdServe(rest)
+	case "init":
+		return cmdInit(rest)
 	case "import":
 		return cmdImport(rest)
 	case "migrate":

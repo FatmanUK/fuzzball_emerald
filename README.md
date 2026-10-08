@@ -74,22 +74,41 @@ make build
 ## Quick start
 
 ```bash
-make pod-import pod-run
+make certs db-up init
+make pod-build pod-run
 ```
 
-That builds the image, starts Postgres, imports the starter world, and runs the
-server in a container with the uid mapping described below. Import a different
-world with `make pod-import DUMP=path/to/world.db` — the `muf/` directory
-beside it is picked up the same way. Then:
+That makes a world of this server's own — one room and one wizard — starts
+Postgres, builds the image and runs the server in a container with the uid
+mapping described below. Then:
 
 ```bash
 make connect
 ```
 
-and `connect One potrzebie`. `make pod-logs` follows the server's output and
-`make pod-stop` shuts it down.
+and `connect Wizard potrzebie`. Change the wizard, the room or the password
+with `make init WIZ_NAME=... WIZ_ROOM=... WIZ_PW=...`, or call the binary
+directly, which is the only way to keep the password out of your shell
+history:
 
-To run on the host instead, `make import run`.
+```bash
+printf 'secret\n' | ./fbemerald init -password-stdin
+```
+
+`make pod-logs` follows the server's output and `make pod-stop` shuts it
+down. To run on the host instead of in a container, `make init run`.
+
+### Importing an existing world
+
+Reading a Fuzzball database is a feature of this server, not a dependency of
+it: `make import DUMP=path/to/world.db` loads one, picking up the `muf/`
+directory beside it the same way. `make pod-import` does it through the
+container image.
+
+`testdata/starterdb/` and `testdata/minimal.db` are byte-identical copies of
+upstream's databases, kept as **fixtures for the importer** — you cannot
+test reading a Fuzzball dump without a Fuzzball dump — and not as this
+project's own content. `make init` is what a fresh install wants.
 
 ## Connecting
 
