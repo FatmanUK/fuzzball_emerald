@@ -1193,14 +1193,53 @@ no transcript with one player can see it. Left alone.
 `do_tune` is ported, and two details of its permission model are not,
 both invisible to the oracle because its player is `#1`:
 
-- **`TUNE_MLEV` gives God 255**, not 4, and `GOD_PRIV` — which
-  upstream `#define`s by default — raises the fourteen `file_*`
-  parameters to that level. The generator collapsed `MLEV_GOD` to
-  `MLEV_WIZARD` and recorded `GodOnly` beside each one; nothing reads
-  that field yet, so a plain wizard here can read and write
-  parameters upstream reserves for God. Closing it means teaching the
-  MUF side `TUNE_MLEV` too, since `SETSYSPARM` and `SYSPARM_ARRAY`
-  share the rule.
+- **`TUNE_MLEV` — fixed, and it was hiding a leak.** The recorded
+  complaint was that God gets 255 rather than 4 and that a plain
+  wizard could therefore read what upstream reserves to `#1`. Both
+  halves were true, and the count was wrong in the recording: it is
+  not "the fourteen `file_*` parameters" but **36 gated on writing**
+  and **10 gated on reading** — `max_force_level`, `strict_god_priv`
+  and the whole smtp family, `smtp_password` included. There are
+  also **six** call sites, not the three this entry assumed:
+  `do_tune` (`tune.c:674`), `SYSPARM` (`p_misc.c:1217`),
+  `SETSYSPARM` (`:1322`), `SYSPARM_ARRAY` (`:1413`), MPI's
+  `{sysparm}` (`mfuns.c:4141`) and the MCP simpleedit handler
+  (`mcppkgs.c:388`).
+
+  **The leak was `{sysparm}`.** `mufHost.TuneGet` is
+  `tune_get_parmstring` *minus its own mlev gate* — its doc comment
+  said so — and `{sysparm}` called it with no level at all. Since
+  `mfn_sysparm` reads at the **triggering** player, any mortal could
+  put `{sysparm:smtp_password}` in their own description, look at
+  themselves, and read any of the 55 parameters gated at wizard
+  level or above. `TuneGetParm` is the gated form now;
+  `TuneGet` stays, ungated, for the parameters upstream keeps in C
+  globals — `tp_gender_prop` (`fbstrings.c:307`) and the
+  server-policy values MPI's `tuneBool` and `tuneInt` ask for.
+  Gating those would have invented a refusal upstream does not make.
+
+  `GodOnly` turned out **not** to be unread after all: the
+  configurator renders a "god" tag from it (`internal/web/tune.go`).
+  It is a method on `Param` now, derived from `WriteMLev`, so it
+  cannot drift from the levels it describes.
+
+  **One more divergence came out of reading `SYSPARM_ARRAY`.**
+  `tune_parms_array` filters with `equalstr`, which is `smatch`
+  (`tune.c:267`), where `TuneList` used `strings.EqualFold` — the
+  wrong comparison, and the function `CLAUDE.md` forbids, since
+  upstream folds only A–Z. So `"file_*"` matched **nothing** here and
+  twenty-six entries upstream. `tuneDisplay` had it right all along,
+  which is why `@tune file_*` worked and `SYSPARM_ARRAY` did not.
+
+  Most of this is oracle-visible after all, contrary to the note
+  above: `SYSPARM_ARRAY` reports each parameter's levels verbatim and
+  the numbers do not depend on who asks, so
+  `internal/golden/tunemlev_test.go` compares them directly — 255
+  against 4, and 26 against 0. The two halves that genuinely need
+  the asker to be a mortal are unit-tested in
+  `internal/game/tunemlev_test.go`, against `strict_god_priv`
+  rather than `smtp_password`, because the latter's default is empty
+  and an empty answer cannot tell a refusal from a blank.
 - **`SETSYSPARM` — fixed, and it was using the wrong setter.** The
   recorded complaint was that it could not tell bad syntax from a
   bad value: `tune_setparm` has six result codes and

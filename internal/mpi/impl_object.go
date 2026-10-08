@@ -246,9 +246,17 @@ func init() {
 	})
 	register("SYSPARM", func(env *Env, _ *Func, args []string) (string, error) {
 		// An unknown parameter reads as empty rather than
-		// failing, which is what tune_get_parmstring gives
-		// for one the reader may not see.
-		v, _ := env.Host.TuneGet(strings.TrimSpace(args[0]))
+		// failing, and so does one the reader may not see:
+		// tune_get_parmstring answers "" in both cases.
+		//
+		// mfn_sysparm passes TUNE_MLEV(player) and player is
+		// the *triggering* player, so an unblessed message
+		// property is read at whoever looked at it. Calling
+		// the ungated TuneGet here let a mortal read every
+		// wizard-level parameter there is.
+		name := strings.TrimSpace(args[0])
+		v, _ := env.Host.TuneGetParm(name,
+			env.Host.TuneMLevel(env.Who))
 		return v, nil
 	})
 	register("PRONOUNS", func(env *Env, _ *Func, args []string) (string, error) {

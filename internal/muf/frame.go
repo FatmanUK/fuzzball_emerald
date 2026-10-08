@@ -208,6 +208,18 @@ type Host interface {
 	// (upstream's TUNE_MLEV(player) macro), not the calling
 	// program's. ok is false for an unknown parameter name.
 	TuneGet(name string) (value string, ok bool)
+	// TuneGetParm is tune_get_parmstring (tune.c:341): the
+	// formatted value, or the empty string when the parameter's
+	// read level is above mlev. TuneGet is the ungated form, for
+	// the parameters upstream keeps in C globals.
+	TuneGetParm(name string, mlev int) (string, bool)
+	// TuneMLevel is TUNE_MLEV (include/db.h:669): the mucker
+	// level a player gets *for @tune purposes only*, which is 255
+	// for God and their ordinary level for everybody else. Every
+	// one of upstream's six @tune permission sites uses it rather
+	// than MLevel, which is what puts the parameters marked
+	// MLEV_GOD beyond a plain wizard.
+	TuneMLevel(who ref.Ref) int
 	// TuneReadMLevel and TuneWriteMLevel are one parameter's own
 	// read/write floor. ok is false for an unknown parameter
 	// name.

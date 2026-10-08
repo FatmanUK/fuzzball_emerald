@@ -88,6 +88,13 @@ const (
 	MLevJourneyman = 2
 	MLevMaster     = 3
 	MLevWizard     = 4
+	// MLevGod is upstream's MLEV_GOD under GOD_PRIV, which
+	// include/config.h defines by default. It is reached only
+	// through TUNE_MLEV, which hands #1 an overkill level so the
+	// @tune parameters marked MLEV_GOD are beyond a plain wizard
+	// (include/db.h:659). Nothing else in the mucker system goes
+	// above 4.
+	MLevGod = 255
 )
 
 // Type returns the object type encoded in the flag word.

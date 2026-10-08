@@ -287,6 +287,15 @@ func (h *stubHost) Height(Ref) int { return 0 }
 func (h *stubHost) TuneGet(string) (string, bool) {
 	return "", false
 }
+
+// TuneGetParm and TuneMLevel are tune_get_parmstring and TUNE_MLEV.
+// Nothing here reads a parameter, so the gated form answers as the
+// ungated one does; a level of 0 is a mortal, which is the shape
+// {sysparm}'s gate exists for.
+func (h *stubHost) TuneGetParm(string, int) (string, bool) {
+	return "", false
+}
+func (h *stubHost) TuneMLevel(Ref) int { return 0 }
 func (h *stubHost) MuckName() string {
 	return "Test"
 }

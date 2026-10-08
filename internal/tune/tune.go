@@ -129,14 +129,10 @@ type Param struct {
 	Default Value
 
 	// ReadMLev and WriteMLev are the mucker levels needed to see
-	// and to change the parameter.
+	// and to change the parameter. Either may be MLevGod, which
+	// only TUNE_MLEV ever hands out.
 	ReadMLev  int
 	WriteMLev int
-
-	// GodOnly marks parameters that upstream gated behind
-	// MLEV_GOD, which collapses to MLEV_WIZARD unless the server
-	// is built with GOD_PRIV.
-	GodOnly bool
 
 	// Nullable marks string parameters that accept an empty
 	// value.
@@ -589,6 +585,20 @@ func FormatTimespan(d time.Duration) string {
 	secs %= 86400
 	return fmt.Sprintf("%3dd %2d:%02d:%02d", days, secs/3600, (secs%3600)/60, secs%60)
 }
+
+// MLevGod is upstream's MLEV_GOD under GOD_PRIV, which
+// include/config.h defines by default: an overkill level that only
+// TUNE_MLEV hands out, and then only to #1.
+const MLevGod = 255
+
+// GodOnly reports whether a plain wizard may not write a parameter,
+// which upstream expresses as MLEV_GOD on its write level.
+//
+// This was a generated field, back when the generator collapsed
+// MLEV_GOD to MLEV_WIZARD and had to record the distinction
+// somewhere. The levels carry it now, so deriving it is the one
+// spelling that cannot disagree with them.
+func (p Param) GodOnly() bool { return p.WriteMLev >= MLevGod }
 
 // Groups lists the distinct parameter groups, ordered.
 func Groups() []string {

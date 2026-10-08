@@ -387,6 +387,13 @@ func (h *fakeHost) SetUser(int, ref.Ref) bool {
 func (h *fakeHost) TuneGet(string) (string, bool) {
 	return "", false
 }
+
+// TuneGetParm and TuneMLevel are tune_get_parmstring and TUNE_MLEV.
+// No test here reads a parameter, and 0 is a mortal's level.
+func (h *fakeHost) TuneGetParm(string, int) (string, bool) {
+	return "", false
+}
+func (h *fakeHost) TuneMLevel(ref.Ref) int { return 0 }
 func (h *fakeHost) TuneReadMLevel(string) (int, bool) {
 	return 0, false
 }

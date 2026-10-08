@@ -74,7 +74,7 @@ func (s *Server) tuneData(r *http.Request) (tuneData, error) {
 			Type:    def.Type.String(),
 			Default: def.Format(def.Default),
 			Inert:   def.Inert,
-			GodOnly: def.GodOnly,
+			GodOnly: def.GodOnly(),
 		}
 		if v, ok := stored[def.Name]; ok {
 			row.Value = v

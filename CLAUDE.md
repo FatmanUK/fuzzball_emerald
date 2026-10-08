@@ -671,13 +671,27 @@ and the configurator are where that is said.
 **A `@tune` cannot be forced**, which is the only permission check `do_tune`
 makes for itself and is not about who is asking.
 
-Two things are not reproduced, both invisible to the oracle because its player
-is `#1`. `TUNE_MLEV` gives God 255 rather than 4, and `GOD_PRIV` — which
-upstream defines by default — puts the fourteen `file_*` parameters beyond a
-plain wizard; the generator collapsed `MLEV_GOD` to `MLEV_WIZARD` and recorded
-`GodOnly` beside it, and nothing reads that field yet. And `SETSYSPARM` reports
-"Bad parameter value." where upstream distinguishes it from "Bad parameter
-syntax."
+**`TUNE_MLEV` is @tune's own mucker level**, and nothing else in the server
+goes above 4. `GOD_PRIV` is defined in upstream's default build, so
+`MLEV_GOD` is **255** and `TUNE_MLEV` hands it to `#1` alone — which is what
+reserves the parameters marked that way. There are **36 gated on writing** and
+**10 on reading**, the ten being `max_force_level`, `strict_god_priv` and the
+smtp family, `smtp_password` included. `mufHost.TuneMLevel` is the rule, and
+upstream applies it at **six** sites: `do_tune`, `SYSPARM`, `SETSYSPARM`,
+`SYSPARM_ARRAY`, MPI's `{sysparm}` and the MCP simpleedit handler. The
+generator used to collapse `MLEV_GOD` to 4 and record a `GodOnly` field
+beside it; `Param.GodOnly()` is derived from `WriteMLev` now, so it cannot
+disagree with the levels.
+
+**`TuneGet` is ungated and `TuneGetParm` is `tune_get_parmstring`**, and the
+difference is a security surface. Upstream keeps `tp_gender_prop` and the
+server-policy parameters in **C globals**, read with no check at all, so
+`TuneGet` is right for `PRONOUN_SUB` and MPI's `tuneBool`/`tuneInt`. Only
+`SYSPARM` and `{sysparm}` go through `tune_get_parmstring`, which answers the
+**empty string** when the read level is too high — so a program cannot tell
+"not for you" from "no such parameter". `{sysparm}` called the ungated form,
+and since `mfn_sysparm` reads at the *triggering* player, any mortal could
+read all 55 wizard-level parameters out of their own description.
 
 ## Actions, clones and blessing
 

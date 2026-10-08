@@ -1,10 +1,11 @@
 package game
 
 import (
-	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"strings"
 	"time"
 
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/muf"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
@@ -28,9 +29,12 @@ func objTypeName(t ref.ObjType) string {
 	return "unknown"
 }
 
-// TuneGet implements muf.Host for SYSPARM (and PRONOUN_SUB's own
-// gender_prop lookup), upstream's tune_get_parmstring minus its own
-// mlev gate.
+// TuneGet implements muf.Host for the parameters upstream keeps in C
+// globals — PRONOUN_SUB's gender_prop, and the server-policy values
+// MPI's tuneBool and tuneInt ask for. It is deliberately **not**
+// gated: `tp_gender_prop` is read as a plain global
+// (fbstrings.c:307), never through tune_get_parmstring, so putting a
+// mucker test here would invent a refusal upstream does not make.
 func (h *mufHost) TuneGet(name string) (string, bool) {
 	p, ok := tune.Lookup(name)
 	if !ok {
@@ -38,6 +42,42 @@ func (h *mufHost) TuneGet(name string) (string, bool) {
 	}
 	v, _ := h.w.Tune.Get(p.Name)
 	return p.Format(v), true
+}
+
+// TuneGetParm is tune_get_parmstring (tune.c:341), gate included: a
+// parameter whose read level is above mlev answers the empty string
+// rather than refusing, which is how a program tells "not for you"
+// from "no such parameter" — it cannot.
+//
+// It also strips the reset prefix first, as upstream does, so
+// "%muckname" reads back like "muckname".
+func (h *mufHost) TuneGetParm(name string, mlev int) (string, bool) {
+	name = strings.TrimPrefix(name, string(tune.ResetFlag))
+	p, ok := tune.Lookup(name)
+	if !ok {
+		return "", false
+	}
+	if p.ReadMLev > mlev {
+		return "", true
+	}
+	v, _ := h.w.Tune.Get(p.Name)
+	return p.Format(v), true
+}
+
+// TuneMLevel is TUNE_MLEV (include/db.h:669), and it is @tune's alone
+// — nothing else in the mucker system goes above 4.
+//
+// GOD_PRIV is defined in upstream's default build, so God gets 255
+// and the ten parameters whose *read* level is MLEV_GOD —
+// smtp_password, the rest of the smtp family, max_force_level and
+// strict_god_priv — are beyond a plain wizard. Emerald collapsed
+// MLEV_GOD to 4 in the generator and recorded a GodOnly field beside
+// it; the levels carry it properly now.
+func (h *mufHost) TuneMLevel(who ref.Ref) int {
+	if who == ref.God {
+		return tune.MLevGod
+	}
+	return h.Flags(who).MLevel()
 }
 
 // TuneReadMLevel and TuneWriteMLevel implement muf.Host for the mlev
@@ -139,8 +179,12 @@ func (h *mufHost) TuneList(pattern string, mlevel int) []muf.TuneEntry {
 		if p.ReadMLev > mlevel {
 			continue
 		}
-		if pattern != "" &&
-			!strings.EqualFold(pattern, p.Name) {
+		// equalstr, which is smatch -- so "file_*" matches
+		// twenty-six parameters where an exact fold matched
+		// none (tune.c:267). strings.EqualFold was wrong
+		// twice over: the wrong comparison, and the function
+		// CLAUDE.md forbids, since upstream folds only A-Z.
+		if pattern != "" && !ascii.SMatch(p.Name, pattern) {
 			continue
 		}
 		v, _ := h.w.Tune.Get(p.Name)

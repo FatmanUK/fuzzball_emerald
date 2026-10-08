@@ -18,7 +18,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		playerMLevel := h.Flags(f.Caller).MLevel()
+		// TUNE_MLEV, not MLevel. All three primitives here
+		// use it -- p_misc.c:1217, :1322 and :1413 -- and so
+		// do do_tune, MPI's {sysparm} and the MCP simpleedit
+		// handler. God gets 255, which is what puts the ten
+		// parameters marked MLEV_GOD on their *read* level --
+		// smtp_password among them -- beyond a plain wizard.
+		playerMLevel := h.TuneMLevel(f.Caller)
 		if name == "" {
 			return nil, f.Push(Str(""))
 		}
@@ -65,7 +71,7 @@ func init() {
 		// values tune_setparm refuses -- and report every
 		// failure as a bad value.
 		switch h.TuneSet(nameV.Str, valueV.Str,
-			h.Flags(f.Caller).MLevel()) {
+			h.TuneMLevel(f.Caller)) {
 		case TuneSetUnknown:
 			return nil, errf("Unknown parameter. (1)")
 		case TuneSetSyntax:
@@ -87,7 +93,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		playerMLevel := h.Flags(f.Caller).MLevel()
+		playerMLevel := h.TuneMLevel(f.Caller)
 
 		entries := h.TuneList(pattern, playerMLevel)
 		vals := make([]Value, len(entries))

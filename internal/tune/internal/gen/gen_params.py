@@ -94,8 +94,16 @@ UPSTREAM_COUNT = 169
 
 # --- parsing --------------------------------------------------------------
 
+# MLEV_GOD is 255, not 4. include/config.h:36 defines GOD_PRIV by
+# default, so include/db.h:659 makes MLEV_GOD 255 and TUNE_MLEV hands
+# #1 that level -- which is the whole point of the value, since it is
+# what puts the parameters marked MLEV_GOD beyond a plain wizard.
+#
+# Collapsing it to 4 used to be papered over with a GodOnly field that
+# nothing read. The real number carries the same information and
+# cannot drift from it, so the field is gone.
 MLEV = {"0": 0, "MLEV_APPRENTICE": 1, "MLEV_JOURNEYMAN": 2, "MLEV_MASTER": 3,
-        "MLEV_WIZARD": 4, "MLEV_GOD": 4}
+        "MLEV_WIZARD": 4, "MLEV_GOD": 255}
 TYPEMAP = {"TP_TYPE_STRING": "String", "TP_TYPE_TIMESPAN": "Timespan",
            "TP_TYPE_INTEGER": "Integer", "TP_TYPE_DBREF": "Dbref",
            "TP_TYPE_BOOLEAN": "Boolean"}
@@ -176,7 +184,6 @@ def parse(text):
             group=c_string(f[2]), module=c_string(f[3]),
             type=TYPEMAP[f[4]], default=f[5].split("=", 1)[1].strip(),
             readmlev=MLEV[rest[0]], writemlev=MLEV[rest[1]],
-            god_only=(rest[1] == "MLEV_GOD"),
             # rest[2] is isdefault, always true in the source table
             nullable=len(rest) > 3 and rest[3] == "true",
             objtype=OBJTYPE[rest[4]] if len(rest) > 4 else None,
@@ -242,8 +249,6 @@ def main():
         out.append(f"\t\tDefault: {go_default(e)},")
         out.append(f"\t\tReadMLev:  {e['readmlev']},")
         out.append(f"\t\tWriteMLev: {e['writemlev']},")
-        if e["god_only"]:
-            out.append("\t\tGodOnly:   true,")
         if e["nullable"]:
             out.append("\t\tNullable:  true,")
         if e["objtype"]:

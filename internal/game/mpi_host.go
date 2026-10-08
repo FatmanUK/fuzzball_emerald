@@ -187,6 +187,14 @@ func (h *mpiHost) TuneGet(name string) (string, bool) {
 	return (&mufHost{s: h.s, w: h.w}).TuneGet(name)
 }
 
+func (h *mpiHost) TuneGetParm(name string, mlev int) (string, bool) {
+	return (&mufHost{s: h.s, w: h.w}).TuneGetParm(name, mlev)
+}
+
+func (h *mpiHost) TuneMLevel(who mpi.Ref) int {
+	return (&mufHost{s: h.s, w: h.w}).TuneMLevel(ref.Ref(who))
+}
+
 func (h *mpiHost) MuckName() string {
 	return h.w.Tune.String("muckname")
 }

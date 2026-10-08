@@ -168,7 +168,9 @@ func (s *Server) cmdTune(c *ctx) {
 	// space. It cannot begin with one.
 	value = strings.TrimLeft(value, " \t")
 
-	mlev := c.w.Get(c.who).Flags.MLevel()
+	// TUNE_MLEV (tune.c:674), not MLevel: God gets 255, which is
+	// what reserves the ten MLEV_GOD-read parameters to them.
+	mlev := (&mufHost{s: s, w: c.w}).TuneMLevel(c.who)
 
 	resetting := strings.HasPrefix(name, string(tune.ResetFlag))
 	switch {

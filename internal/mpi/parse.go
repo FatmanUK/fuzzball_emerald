@@ -203,9 +203,23 @@ type Host interface {
 	DescrWidth(descr int) int
 
 	// TuneGet reads an @tune parameter as its formatted string,
-	// and MuckName is the server's name — {sysparm} and
-	// {muckname}.
+	// **ungated**, which is how upstream reads the ones it keeps
+	// in C globals: tp_gender_prop and the server-policy
+	// parameters tuneBool and tuneInt ask for. It is not
+	// tune_get_parmstring and must not be used for {sysparm}.
 	TuneGet(name string) (string, bool)
+	// TuneGetParm is tune_get_parmstring (tune.c:341), which
+	// answers the empty string when the parameter's read level is
+	// above mlev. {sysparm} is its only caller here, and used to
+	// call TuneGet instead -- so a mortal could read all 55
+	// parameters gated at wizard level or above, smtp_password
+	// among them, by putting {sysparm:smtp_password} in their own
+	// description and looking at themselves.
+	TuneGetParm(name string, mlev int) (string, bool)
+	// TuneMLevel is TUNE_MLEV (include/db.h:669): 255 for God and
+	// the player's own level otherwise. mfn_sysparm passes it
+	// (mfuns.c:4141).
+	TuneMLevel(who Ref) int
 	MuckName() string
 	// PronounSub substitutes the pronoun directives in a string
 	// for an object's gender.
