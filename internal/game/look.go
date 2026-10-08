@@ -1,6 +1,8 @@
 package game
 
 import (
+	"strings"
+
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -45,27 +47,130 @@ func getMesg(w *world.World, r ref.Ref, path string) string {
 	return v.Str
 }
 
-// cmdLook shows the room, or an object in it.
+// cmdLook shows the room, an object in it, or a look trap.
+//
+// do_look_at takes two arguments, arg1 and arg2, and this server
+// passed only the first — so "look <thing>=<detail>" was a syntax
+// it did not accept at all. The split is upstream's: arg1 is trimmed
+// both ends and arg2 is **left-trimmed only**, which is
+// skip_whitespace_var against remove_ending_whitespace
+// (game.c:701-709).
 func (s *Server) cmdLook(c *ctx) {
-	if c.arg == "" {
+	name, detail, _ := strings.Cut(c.arg, "=")
+	name = strings.TrimSpace(name)
+	detail = strings.TrimLeft(detail, " \t")
+
+	// Upstream tests *name* alone here and never looks at the
+	// detail, so "look =foo" shows the room.
+	if name == "" || ascEqual(name, "here") {
 		s.lookHere(c.w, c.d.ID, c.who)
 		return
 	}
 	// do_look_at's own matcher, which is *narrower* than
 	// match_everything: no registrations, so "look $thing" finds
 	// nothing even when a program could resolve the name. And a
-	// failed match says what match_msg_nomatch says, which is
-	// where the look-trap branch ends up.
-	m := match.New(c.w, c.who, c.arg).Exits().Neighbor().
+	// failed match no longer reports itself — it falls into the
+	// look-trap branch, which has match_msg_nomatch at the end of
+	// it.
+	m := match.New(c.w, c.who, name).Exits().Neighbor().
 		Possession()
 	if isWizard(c.w, ownerOf(c.w, c.who)) {
 		m = m.Absolute().Player()
 	}
 	target := m.Here().Me().Result()
-	if !noisyMatch(c, c.arg, target) {
+
+	switch {
+	case target != ref.Nothing && target != ref.Ambiguous &&
+		detail == "":
+		s.lookAt(c.w, c.d.ID, c.who, target)
+
+	case target == ref.Nothing ||
+		(detail != "" && target != ref.Ambiguous):
+		s.lookDetail(c, target, name, detail)
+
+	default:
+		// Upstream passes **detail** here, not name
+		// (look.c:438), so an ambiguous name with no detail
+		// reports an empty one: "I don't know which '' you
+		// mean!" That reads like a mistake and is reproduced,
+		// because a program matching on the line would see
+		// it.
+		c.tell("I don't know which '%s' you mean!", detail)
+	}
+}
+
+// detailsPropdir is DETAILS_PROPDIR (game.h:64), the propdir a look
+// trap lives in.
+const detailsPropdir = "_details"
+
+// lookDetail is do_look_at's second branch (look.c:369-439), the one
+// this server did not have: the _details propdir, which is how a
+// world describes a part of something.
+//
+// It is reached two ways, and which one decides what is searched and
+// what is searched *for*:
+//
+//   - nothing matched, so the details of the room the player is
+//     standing in are searched for what they typed; or
+//   - something matched and a detail was given, so that object's
+//     details are searched for the detail.
+//
+// Upstream's own @TODO at look.c:380 flags the consequence as "kind
+// of ... technically wrong maybe": a trap called "feh" on the room is
+// found by "look feh", but "look feh=whatever" matches feh as an
+// object and then searches *its* details, so the trap is bypassed.
+// That is reproduced rather than improved.
+//
+// The walk is in nextprop order and stops at the **second** match, so
+// two traps that both answer are ambiguous rather than resolved. Only
+// a string-valued property runs; anything else falls through to the
+// no-match messages below, which is why a propdir with a dbref-valued
+// detail reads as if the detail were not there.
+func (s *Server) lookDetail(c *ctx, target ref.Ref,
+	name, detail string) {
+
+	thing, typed := target, detail
+	if target == ref.Nothing {
+		thing = c.w.Get(c.who).Location
+		typed = name
+	}
+
+	o := c.w.Get(thing)
+	if o == nil {
+		c.tell("I don't understand '%s'.", typed)
 		return
 	}
-	s.lookAt(c.w, c.d.ID, c.who, target)
+
+	var found string
+	ambiguous := false
+	for _, kid := range o.Props.Children(detailsPropdir) {
+		if !detailMatches(kid, typed) {
+			continue
+		}
+		if found != "" {
+			found, ambiguous = "", true
+			break
+		}
+		found = kid
+	}
+
+	path := detailsPropdir + "/" + found
+	v, ok := c.w.GetProp(thing, path)
+	switch {
+	case found != "" && ok && v.Type == props.String:
+		// exec_or_notify with "(@detail)" as the caller
+		// context, and the property's own blessing — so
+		// @bless on a trap makes its MPI wizardly, like any
+		// other message property.
+		s.execOrNotify(c.w, c.d.ID, c.who, thing, v.Str,
+			"(@detail)", v.Blessed)
+	case ambiguous:
+		c.tell("I don't know which '%s' you mean!", typed)
+	case detail != "":
+		c.send(c.w.Tune.String("description_default"))
+	default:
+		c.tell("I don't understand '%s'.", typed)
+	}
 }
 
 // lookHere shows what the player is standing in, which is look_room

@@ -1292,8 +1292,42 @@ the test it failed. A room with **no** description prints nothing, where
 anything else gets the nothing-special message. `look.c`'s own `can_see` is
 also not `controls`: a program shows only to whoever controls it or if it is
 a VEHICLE, exits and rooms are never listed, and a STICKY player sees nothing
-extra in the dark. Look traps — the `_details` propdir — are not ported, but
-the LOOK propqueue is: `_lookq` runs after everything else a look does.
+extra in the dark. The LOOK propqueue runs after everything else a look
+does: `_lookq`.
+
+**`look` takes two arguments**, and this server passed only the first — so
+`look <thing>=<detail>` was a syntax it did not accept. `arg1` is trimmed
+both ends and `arg2` is **left-trimmed only** (`game.c:701-709`), and the
+empty-or-"here" test is made on `arg1` **alone**, so `look =foo` shows the
+room.
+
+**Look traps are the `_details` propdir**, and which object is searched for
+which word depends on how the branch was reached: nothing matched, so the
+*room*'s details are searched for what was typed; or something matched and a
+detail was given, so *that object*'s details are searched for the detail. An
+object of the same name therefore beats a trap outright, which is the shape
+of upstream's own `@TODO` at `look.c:380`. Only a **string**-valued property
+runs, through `exec_or_notify` with `(@detail)` as the caller context and the
+property's own blessing; the walk stops at the **second** match, so two traps
+that both answer are ambiguous rather than chosen between — and since the
+match is exact, two can only collide through a shared alias.
+
+**`exit_prefix` (`fbstrings.c:120`) is not a prefix test**, which its name
+says and its one caller relies on. It walks the `;`-separated aliases of the
+property name and wants the typed word to equal one of them whole, folded:
+`look feh` matches `feh` and `feh;foo`, and `look fe` matches neither. Its
+whitespace rules fall out of where the C leaves its cursor rather than from
+intent — trailing space is skipped, *leading* space is not, so `"feh "`
+matches and `" feh"` matches nothing — so `detailMatches` is a direct port
+of the pointer walk and its table in `exitprefix_test.go` was produced by
+**compiling the C and running it**. `internal/match`'s `matchAlias` is
+deliberately not reused: it splits an argument off at a space, because an
+exit may take one, and sharing one function would make one of the two wrong.
+
+**An ambiguous name reports upstream's empty quotes.** `look.c:438` passes
+the *detail* to `match_msg_ambiguous`, not the name, so an ambiguous name
+with no detail says `I don't know which '' you mean!` That reads like a
+mistake and is reproduced, because a program matching on the line sees it.
 
 **`inventory` ends with `score`.** `do_inventory` finishes by calling
 `do_score`, so the money line is part of the command — including when there

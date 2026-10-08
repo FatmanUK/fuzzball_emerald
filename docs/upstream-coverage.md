@@ -488,10 +488,9 @@ live rather than latent:
   pins the shape; before it, nothing in the harness looked at
   anything but a room.
 
-One thing `do_look_at` does is still missing, and it is recorded
-rather than hidden: look traps, the `_details` propdir consulted when
-the match finds nothing. The other two have landed — `@teleport`'s
-wording, and the LOOK propqueue, which is tranche three.
+All three of `do_look_at`'s recorded gaps have now landed:
+`@teleport`'s wording, the LOOK propqueue, and **look traps** — see
+below.
 
 ### The permission refusals, half fixed
 
@@ -1034,6 +1033,83 @@ floor would look exactly like a deliberate one.
 
 `STRCAT`'s "Non-string argument." agrees exactly, which is why the
 ANSI case uses it to produce an error report.
+
+### Look traps, and a function whose name is a lie
+
+`do_look_at`'s second branch (`look.c:369-439`) is the `_details`
+propdir, and this server did not have it. Two things came with it.
+
+**`look` takes two arguments and this server passed one.** Upstream's
+`do_look_at(descr, player, arg1, arg2)` means
+`look <thing>=<detail>` is a syntax Emerald simply did not accept.
+`arg1` is trimmed both ends and `arg2` is **left-trimmed only** —
+`remove_ending_whitespace` against `skip_whitespace_var`
+(`game.c:701-709`) — and the empty-or-`here` test is made on `arg1`
+alone, so `look =foo` shows the room and ignores the detail.
+
+**Which object is searched, and for which word, depends on how the
+branch was reached.** Nothing matched, so the *room*'s details are
+searched for what was typed; or something matched and a detail was
+given, so *that object*'s details are searched for the detail. An
+object of the same name therefore beats a trap outright — the match
+is tried first and only a failed one reaches the details — which is
+the shape of upstream's own `@TODO` at `look.c:380`, flagged there as
+"kind of ... technically wrong maybe" and reproduced rather than
+improved.
+
+Only a **string**-valued property runs, through `exec_or_notify` with
+`(@detail)` as the caller context and the property's own blessing —
+so `@bless` on a trap makes its MPI wizardly like any other message
+property. A non-string trap falls through to the no-match messages,
+so a dbref-valued detail reads as if it were not there at all. The
+walk is in nextprop order and stops at the **second** match rather
+than choosing between them.
+
+**`exit_prefix` (`fbstrings.c:120`) is not a prefix test.** That is
+the single most misleading name in that file, and `look.c:411` is its
+only caller. It walks the `;`-separated aliases of the property name
+and wants the typed word to equal one of them **whole**, folded: so
+`look feh` matches a trap called `feh` or `feh;foo`, and `look fe`
+matches neither.
+
+Its whitespace rules fall out of where the C happens to leave its
+cursor and are not what anybody would write deliberately — so
+`detailMatches` is a direct port of the pointer walk rather than a
+split-and-compare, and the thirty-one expectations in
+`internal/game/exitprefix_test.go` were produced by **compiling
+`exit_prefix` and running it**, the way the ANSI filters and
+`env_distance` had to be. Three of them are worth stating:
+
+- whitespace *after* an alias is skipped, so `"feh ;foo"` matches
+  `feh`; whitespace *before* one is skipped only when a delimiter has
+  just been consumed, so `"feh; foo"` matches `foo` but `" feh"`
+  matches nothing at all;
+- a trailing space in what the player typed defeats the match, which
+  in practice never happens because `arg1` arrives trimmed; and
+- an empty alias matches an empty typed string, so `"a;;b"` does and
+  `"feh;"` does not — the outer loop stops at the end of the name and
+  so never reaches a trailing empty alias.
+
+`internal/match`'s `matchAlias` is deliberately not reused. It splits
+an argument off at a space and compares against the whole typed line,
+because an exit may take one; sharing a single function between the
+two would make one of them wrong, for the same reason the two ANSI
+filters are kept apart.
+
+**An ambiguous name reports upstream's empty quotes.** `look.c:438`
+passes the *detail* to `match_msg_ambiguous` rather than the name, so
+an ambiguous name with no detail says
+`I don't know which '' you mean!` Reproduced, because a program
+matching on the line sees it — and reachable from a transcript where
+an ambiguous *object* is not, since `choose_thing` tosses a coin for
+two exact matches while two half-matching names are reported as
+ambiguous deterministically.
+
+`internal/golden/looktrap_test.go` is thirty-odd steps over the lot;
+five mutations, all caught. One of its probes was wrong at first and
+the transcript said so: two traps called `dup1` and `dup2` are not
+ambiguous, because the match is exact — two can only collide through
+a **shared alias**, which is what makes that branch reachable.
 
 ### The six `_sys` values on `#0`
 
