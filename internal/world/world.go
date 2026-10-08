@@ -143,12 +143,30 @@ func (w *World) Modified(r ref.Ref) {
 	}
 }
 
-// Used bumps an object's use count and last-used timestamp.
+// Used is ts_useobject (fbtime.c:47): an object's use count and
+// last-used timestamp, and **for a room its parent's as well**, all
+// the way up. Upstream's own comment says so — "Room parent rooms
+// will be 'used' if their child rooms are 'used'" — and only
+// LastUsed had the walk, so a parent room's use count stopped
+// counting what happened beneath it. The composition case found it:
+// twelve uses upstream against six here, in a world two rooms deep.
+//
+// The walk is bounded, where upstream's recursion is not: a cycle in
+// a damaged parent chain would take the server down rather than
+// return.
 func (w *World) Used(r ref.Ref) {
-	if o := w.objs[r]; o != nil {
+	for i := 0; r != ref.Nothing && i <= lastUsedMaxDepth; i++ {
+		o := w.objs[r]
+		if o == nil {
+			return
+		}
 		o.LastUsed = w.now()
 		o.UseCount++
 		w.dirty[r] = struct{}{}
+		if o.Type() != ref.TypeRoom {
+			return
+		}
+		r = o.Location
 	}
 }
 

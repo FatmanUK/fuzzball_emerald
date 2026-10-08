@@ -1663,6 +1663,62 @@ Eleven mutations across the five findings, all eleven caught. Two
 needed rewriting first: one did not compile, and one had an anchor
 that occurred twice.
 
+### A parent room's use count stopped counting
+
+Found by the composition case, which is the first in this suite that
+builds a world two rooms deep and then uses it for forty commands.
+`ts_useobject` (`fbtime.c:47`) bumps an object's use count and
+last-used timestamp and, **for a room, its parent's as well**, all
+the way up — upstream's own comment says "Room parent rooms will be
+'used' if their child rooms are 'used'". Only `World.LastUsed` had
+that walk; `World.Used` stopped at the object, so a parent room's
+use count did not count what happened beneath it: twelve uses
+upstream against six here.
+
+### The `@o*` family, heard at last
+
+`notify_except` excludes the actor and the harness drives one
+player, so every `@osucc`, `@ofail`, `@odrop` and every "has
+arrived" in a golden run reached **nobody**.
+`internal/golden/getdrop_test.go:56` is the proof: it sets
+`@odrop widget=lets the widget fall.`, drops the widget, and that
+text reaches no stream at all.
+
+The plan's answer was a puppet as an *observer*, and that is the
+wrong way round — a puppet relays a public line to its owner only
+when the two are in different rooms, so a puppet beside its owner
+shows nothing new. **The puppet is the actor and the owner is the
+audience**: `notify_except` excludes the puppet, so the player
+standing in the room receives what the puppet's actions broadcast,
+exactly as another player would. `@force $mime = get widget` is the
+whole technique.
+
+What that makes comparable for the first time: all six halves of the
+message properties on a thing, including that the **room's** `@odrop`
+is prefixed with the *thing's* name and not the actor's; `say` and
+`pose` as heard, with the four separators `do_pose` omits its space
+before; and the five conditions under which a move announces itself
+— `quiet_moves`, a DARK mover, a DARK exit, a DARK room, and a plain
+THING against a ZOMBIE or a VEHICLE. All five were already right.
+
+### Three more probes that tested nothing
+
+The composition case, before its transcript was read. Its container
+section probed four conlock states and every one of them answered
+"I don't understand 'map'.", because the map was lying in the cellar
+while the probes ran in the courtyard. Moving the probes failed
+differently: `drop satchel` in the courtyard was **swallowed by the
+drop-to** built thirty commands earlier, so every line then said
+"I don't understand 'satchel'." Both agreed on both servers. Doing
+the work in the cellar — which is STICKY, so what is dropped there
+stays — is what told the four states apart, including the one worth
+having: **clearing a conlock does not re-open a container**, because
+an unset one defaults to false.
+
+And `@owned me` answers "I couldn't find that player.": the
+command's matcher has no `match_me`. That one is kept, with the
+reason written down.
+
 ### The six `_sys` values on `#0`
 
 `SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream
