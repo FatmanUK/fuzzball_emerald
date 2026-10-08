@@ -1,6 +1,7 @@
 package game
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
@@ -720,38 +721,205 @@ var wizardOnlyFlags = map[ref.Flags]bool{
 	ref.XForcible: true, ref.Overt: true,
 }
 
-// cmdSet changes a flag or a property.
-func (s *Server) cmdSet(c *ctx) {
-	name, rest, ok := strings.Cut(c.arg, "=")
-	if !ok {
-		c.tell("Usage: @set <object>=[!]<flag>  or  @set <object>=<prop>:<value>")
+// setProperty is do_set's property branch (set.c:763-842), which is
+// most of a second command inside @set and had almost none of its
+// rules.
+//
+// What it gained: the restricted-property guard that @propset has
+// always had, ":clear", integer values, the trailing-'/' trim, and
+// upstream's wording in place of three invented messages.
+func (s *Server) setProperty(c *ctx, target ref.Ref,
+	path, value string) {
+
+	wizard := isWizard(c.w, ownerOf(c.w, c.who))
+
+	// Upstream left-trims the name and then asks whether what is
+	// left begins with the colon, so ":clear" is recognised
+	// before anything else and " :clear" is too.
+	if strings.TrimLeft(path, " \t") == "" {
+		// Only "clear" is accepted after a bare colon, and
+		// the refusal quotes the syntax rather than
+		// describing it.
+		if !ascEqual(strings.TrimSpace(value), "clear") {
+			c.tell("Use '@set <obj>=:clear' to " +
+				"clear all props on an object")
+			return
+		}
+		n := s.clearProperties(c.w, target, wizard)
+		_ = n
+		// "All properties removed." for a wizard and "All
+		// user-owned properties removed." for anybody else,
+		// because the two clear different amounts.
+		if wizard {
+			c.tell("All properties removed.")
+		} else {
+			c.tell("All user-owned properties removed.")
+		}
 		return
 	}
+
+	// Two trims, and the *order* is the whole of it. Upstream
+	// right-trims whitespace first and only then strips trailing
+	// '/' (set.c:805-809) — so a name ending "b /" meets the
+	// whitespace loop, which sees the '/' and stops at once, and
+	// the two spaces SURVIVE. The property really is called
+	// "_test/b ", and "_test/b" does not exist. Doing the two in
+	// the other order gives "_test/b" and is a different
+	// property; the golden case pins both.
+	//
+	// The '/' strip is unobservable on its own, because
+	// props.split drops empty segments and so resolves "_test/b
+	// /" to the same node as "_test/b " — a mutation removing
+	// just this line survives, correctly. It is kept because it
+	// is upstream's step and because it is what makes the order
+	// above matter.
+	path = strings.TrimRight(path, " \t")
+	path = strings.TrimRight(path, "/")
+	path = strings.TrimLeft(path, " \t")
+	if path == "" {
+		c.tell("%s", noFlagGiven)
+		return
+	}
+
+	// A value of "^" followed by a number is an integer property.
+	// It is the only way to make one from the command line, and
+	// look traps care: a non-string trap does not run.
+	var v props.Value
+	if n, ok := caretInt(value); ok {
+		v = props.Value{Type: props.Int, Num: n}
+	} else {
+		v = props.Value{Type: props.String, Str: value}
+	}
+
+	// The guard @propset has and this did not. A system property
+	// is out of bounds to everybody and a hidden or see-only one
+	// to anybody who is not a wizard, so @set could write what
+	// @propset refused.
+	if propRestricted(path, wizard) {
+		c.tell("Permission denied. (The property is " +
+			"restricted.)")
+		return
+	}
+
+	if value == "" {
+		c.w.Get(target).Props.Delete(path)
+		c.w.Modified(target)
+		c.tell("Property removed.")
+		return
+	}
+	c.w.SetProp(target, path, v)
+	c.tell("Property set.")
+}
+
+// caretInt reads upstream's "^N" integer value: a caret followed by
+// what number() accepts, which is an optional sign and then digits
+// and nothing else.
+func caretInt(value string) (int64, bool) {
+	if !strings.HasPrefix(value, "^") {
+		return 0, false
+	}
+	rest := value[1:]
+	if rest == "" {
+		return 0, false
+	}
+	body := rest
+	if body[0] == '-' || body[0] == '+' {
+		body = body[1:]
+	}
+	if body == "" {
+		return 0, false
+	}
+	for i := 0; i < len(body); i++ {
+		if body[i] < '0' || body[i] > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// clearProperties is remove_property_list (property.c:327), which
+// clears less for a non-wizard than for a wizard: the '@' and '~'
+// properties and the whole "_/" propdir are left alone, because those
+// are not the asker's to remove.
+func (s *Server) clearProperties(w *world.World, target ref.Ref,
+	wizard bool) int {
+
+	o := w.Get(target)
+	if o == nil {
+		return 0
+	}
+	var doomed []string
+	o.Props.Walk(func(e props.Entry) bool {
+		if !wizard && !userOwnedProp(e.Path) {
+			return true
+		}
+		doomed = append(doomed, e.Path)
+		return true
+	})
+	for _, path := range doomed {
+		o.Props.Delete(path)
+	}
+	if len(doomed) > 0 {
+		w.Modified(target)
+	}
+	return len(doomed)
+}
+
+// userOwnedProp reports whether a non-wizard's ":clear" may remove a
+// property: anything but a hidden or see-only one and anything
+// outside the "_/" propdir, which holds the message properties the
+// verbs write.
+func userOwnedProp(path string) bool {
+	if isHiddenProp(path) || propSegmentStartsWith(path, '~') {
+		return false
+	}
+	return !ascii.HasPrefix(path, "_/")
+}
+
+// noFlagGiven is do_set's answer to an empty flag, and to the two
+// cases this server used to answer with invented usage text: there is
+// no usage message in do_set at all, so a missing '=' and an empty
+// value both arrive here.
+const noFlagGiven = "You must specify a flag to set."
+
+// cmdSet changes a flag or a property.
+func (s *Server) cmdSet(c *ctx) {
+	// No usage message: do_set has none. It matches, checks God's
+	// property, and then an empty flag reaches "You must specify
+	// a flag to set." — so a missing '=' and an empty value
+	// give the same answer, where this server invented three
+	// different ones.
+	name, rest, _ := strings.Cut(c.arg, "=")
 	target, ok := s.matchControlled(c, strings.TrimSpace(name))
 	if !ok {
 		return
 	}
-	rest = strings.TrimSpace(rest)
-	if rest == "" {
-		c.tell("Set what?")
+	// set.c:752. Note the wording: do_set says "God's property"
+	// where wiz.c:429 and :469 say "God's stuff" for the same
+	// idea, and this command had neither.
+	if c.w.Tune.Bool("strict_god_priv") && c.who != ref.God &&
+		ownerOf(c.w, target) == ref.God {
+		c.tell("Only God may touch God's property.")
+		return
+	}
+	// arg2 is left-trimmed only (game.c:709), and do_set then
+	// skips leading '!' and whitespace together when it looks for
+	// the flag.
+	rest = strings.TrimLeft(rest, " \t")
+	if strings.TrimSpace(rest) == "" {
+		c.tell("%s", noFlagGiven)
 		return
 	}
 
-	// A ':' means a property rather than a flag.
+	// A ':' anywhere in the argument means a property rather than
+	// a flag, which is strchr(flag, PROP_DELIMITER) and so splits
+	// on the *first* colon (set.c:763).
 	if path, value, isProp := strings.Cut(rest, ":"); isProp {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			c.tell("Set which property?")
-			return
-		}
-		if value == "" {
-			c.w.Get(target).Props.Delete(path)
-			c.w.Modified(target)
-			c.tell("Property cleared.")
-			return
-		}
-		c.w.SetProp(target, path, props.Value{Type: props.String, Str: value})
-		c.tell("Property set.")
+		s.setProperty(c, target, path, value)
 		return
 	}
 

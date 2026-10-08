@@ -1182,6 +1182,75 @@ produces `Hall(#11R)` -- the autolook, so `enter_room` ran -- and at
 mucker 3 both succeed, with the contents listing matching byte for
 byte.
 
+### `@set` is two commands, and its property form had no rules
+
+The MUCK Manual's looktrap examples use
+`@set here=_details/sign;plaque:...` rather than `@propset`, which is
+how this came up at all: it is the form nobody had checked.
+`do_set`'s property branch (`set.c:763-842`) is most of a second
+command inside `@set`, and `cmdSet` had almost none of it.
+
+**The one that mattered: no restricted-property guard.**
+`propRestricted` (`internal/game/propset.go:32`) refuses a system
+property to everybody and a hidden or see-only one — a path with a
+segment starting `@` or `~` — to anybody who is not a wizard.
+`@propset` has consulted it since it was written and `@set` never
+did, so **`@set` wrote what `@propset` refused**. The system half
+refuses a wizard too and so is oracle-visible; the other half needs
+a mortal and is unit-tested.
+
+**`@set <obj>=:clear` was missing entirely.** It removes every
+property, and removes *less* for a non-wizard: `remove_property_list`
+with `allp == 0` leaves the `@` and `~` properties and the whole
+`_/` propdir alone, because those are not the asker's to remove. The
+replies differ to match — "All properties removed." against "All
+user-owned properties removed." — and anything but `clear` after the
+bare colon is refused by quoting the syntax.
+
+**`^N` is the only way to make an integer property from the command
+line**, and look traps care, because a non-string detail does not
+run. `^-7` works; `^abc` is not a number and falls through to being
+the literal string `^abc`.
+
+**Three invented messages are gone.** `do_set` has **no usage
+message at all** — it matches, checks God's property, and an empty
+flag arrives at "You must specify a flag to set." So a missing `=`
+and an empty value give the same answer, where this server had
+"Usage: @set ...", "Set what?" and "Set which property?". And
+"Property cleared." is "Property removed."
+
+**The two name trims, and their order, are the surprising part.**
+Upstream right-trims whitespace *first* and only then strips a
+trailing `/` — so a name ending `b  /` meets the whitespace loop,
+which sees the `/` and stops at once, and **the two spaces
+survive**. The property really is called `_test/b  ` and `_test/b`
+does not exist. Doing the two in the other order gives `_test/b`,
+a different property, and the golden case pins both; a transcript
+reading each name back is what settled it, because the first version
+of that probe looked for the wrong one and read empty.
+
+The `/` strip is **unobservable on its own**: `props.split` drops
+empty segments, so `_test/b  /` resolves to the same node as
+`_test/b  `. A mutation removing just that line survives, correctly,
+and the line is kept because it is upstream's step and because it is
+what makes the order matter.
+
+**One claimed divergence was not one.** I counted a seventh — that
+`do_set` checks `strict_god_priv` itself (`set.c:752`) and answers
+"Only God may touch God's property.", a wording upstream uses nowhere
+else, where `wiz.c:429` and `:469` say "God's stuff". The guard is
+**unreachable**, in upstream as much as here: `controls()` already
+contains the same condition, and `do_set` calls `match_controlled`
+before its own check, so every case it would catch has already been
+refused with `match_controlled`'s wording. The observable behaviour
+was correct before the guard was added. The line is kept because it
+is upstream's and because `controls()` could change;
+`TestSetPropGodGuardIsUnreachable` pins the fact rather than the
+hope, so a change that makes it reachable is noticed.
+
+Seven mutations, six caught, one a correct survivor — the `/` strip
+above.
+
 ### The six `_sys` values on `#0`
 
 `SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream
