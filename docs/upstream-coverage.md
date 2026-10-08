@@ -1251,6 +1251,142 @@ hope, so a change that makes it reachable is noticed.
 Seven mutations, six caught, one a correct survivor — the `/` strip
 above.
 
+### ...and its flag form had no permission model at all
+
+The other half of `@set`, and the worse half. `unable_to_set_flag`
+(`set.c:537`) is a force-level guard, two mucker-bit rules that
+interpolate the level into their message, and a per-flag, per-type
+switch covering ABODE, GUEST, YIELD, OVERT, ZOMBIE, VEHICLE, DARK,
+QUELL, BUILDER, WIZARD and XFORCIBLE. This server had
+`wizardOnlyFlags`, a **six-entry map** of flag to "needs a wizard",
+and `cmdSet` put every mucker level behind a blanket
+`requireWizard`.
+
+The answer depends on the object's **type** as much as on the flag,
+on whether the flag is being set or cleared, on three `@tune`
+parameters, and on whether a `@force` is running — none of which a
+map can express. What was wrong:
+
+**`@set me=!W` worked.** The only wizard in a world could strip its
+own bit, with nothing to put it back; upstream answers "You cannot
+make yourself mortal." Disabling the port makes the rest of the
+golden script collapse into "Only builders are allowed to
+@create.", "You are not allowed to @tune." and "Permission denied:
+forced object not @set Xforcible.", which is what that one line
+costs.
+
+**YIELD, ABODE, ZOMBIE, VEHICLE and DARK were unguarded.** So the
+restriction a wizard applies by setting ZOMBIE or VEHICLE *on a
+player* — "this player may not use puppets" — did nothing at all,
+`exit_darking` and `thing_darking` had no reader anywhere in the
+server, and a mortal could make a program AUTOSTART.
+
+**Three were guarded too tightly**, a divergence the other way.
+XFORCIBLE is restricted on an **exit** and nowhere else, so a mortal
+may make their own thing or program forcible; BUILDER on a program
+is BOUND and asks `mlev < 2` rather than wizardry; and QUELL is a
+God rule, not a wizard one — a mortal may set it on their own
+things, and a plain wizard may *not* quell a colleague.
+
+**`wiz_vehicles`, `exit_darking` and `thing_darking` gained their
+only reader**, three of the 69 `@tune` parameters read nowhere.
+
+**The force guard had no equivalent.** WIZARD and the mucker bits
+may never be forced; XFORCIBLE may be forced on an exit and nowhere
+else, which is exactly the type the switch refuses to a mortal —
+the two guards are complementary rather than inconsistent.
+
+**The generic refusal is "Permission denied. (restricted flag)"**,
+where this server said "Permission denied."
+
+Three smaller things in `cmdSet` itself. **`!` is read twice and the
+two readings disagree**: upstream takes `negated` from the *first
+character alone* and then skips every leading `!` and space to find
+the name, so `!!W` **clears** the wizard bit — `has_flag`'s
+"!!x = x" rule is a different function. **A bare `!` is an empty
+flag name**, and this server read it as a mucker level, because the
+empty string is a prefix of "mucker": `@set me=!` answered "Mucker
+level reset." instead of "You must specify a flag to set."
+**INTERACTIVE was missing from the flag table** (`db.c:2379` has
+it), so `@set x=interactive` answered "I don't recognize that
+flag." And the **guest guard** was absent: a guest may `@set` a
+property, since the check sits after the property branch returns,
+and exactly one flag — its own GUEST bit, and only while it is also
+a wizard, which is how a world lets a guest stop being one.
+
+**A quelled wizard is a mortal** for every `Wizard(OWNER(player))`
+test in the function, which is what makes nearly all of it
+comparable from the oracle's single God seat: the golden script
+quells `#1` halfway through and the rest of the ladder runs as a
+mortal. Quelling does *not* reach ABODE, which asks `TrueWizard`,
+QUELL, which asks `God`, or BUILDER-on-a-program, which asks
+`MLevel` — and the script checks those three stay permitted rather
+than assuming it.
+
+**Three probes in the first draft of that script tested nothing**,
+all three passing because both servers agreed on a refusal that
+arrived earlier:
+
+- every `@force me=...` answered "You cannot force God to do
+  anything." (`wiz.c:553`), so the force guard was never entered. A
+  **thing** is a valid victim and a wizard needs neither XFORCIBLE
+  nor a flock to force one; a ZOMBIE thing relays what it is told
+  back to its owner, which is the only way the forced command's
+  output is visible;
+- behind that, `strict_god_priv` refused the forced thing with
+  "Only God may touch God's property.", because God owns every
+  object in the fixture;
+- and `@set car=!V` from *inside* the car answered "I don't
+  understand 'car'.", because the victim search is
+  `match_everything`, which has no stage for the searcher's own
+  location. Naming it `here` is what reaches "That vehicle still
+  has players in it!"
+
+Sixteen mutations, all sixteen caught; five of them need the unit
+tests, because the rule they break is one a God-only transcript
+cannot see.
+
+### Two routes past `controls()` that this server does not read
+
+Found while deciding whether the mucker rules'
+`OWNER(player) != OWNER(thing)` clause can fire. `controls()`
+(`db.c:1822`) has three ways to control something you do not own: a
+wizard, `tp_realms_control`'s walk up the environment for a
+W-flagged room you own, and an **ownership lock** —
+`MESGPROP_OWNLOCK`, tested false-by-default. `Server.controls`
+(`look.go:422`) reads only the first.
+
+`realms_control` defaults off and is one of the 69 unread `@tune`
+parameters, so nothing diverges today. The **ownlock does diverge**:
+`@ownlock` writes `@/olk`, `examine` displays it as "Ownership
+Key", and nothing in the server consults it — the same shape as
+`_/oecho`. A world that hands out an ownlock finds it inert. The
+immediate consequence for `@set` is that the ownership clause in
+both mucker rules cannot fire here while upstream can reach it, and
+the refusal a player sees is `match_controlled`'s wording instead;
+`TestSetFlagMuckerOwnershipClauseIsUnreachable` pins that so the
+change is noticed when `controls` is fixed.
+
+### A trailing space on a second argument is lost
+
+Also found by a probe, and wider than the command that found it.
+Upstream answers `@set widget=kill_ok ` with "I don't recognize that
+flag.": `string_prefix` (`fbstrings.c`) cannot match past the space,
+and nothing right-trims `arg2` — `game.c:706` right-trims `arg1`
+only, after the `=` split, and `process_command` does not touch the
+line it is given.
+
+This server trims the **whole line** at intake
+(`command.go:153`), so the second argument of every `=`-taking
+command loses its trailing whitespace. For most of the forty-odd
+such commands it is invisible; for `@set`'s flag form it changes the
+answer, and for `@propset` — where a value may deliberately begin or
+end with a space — it changes what is stored. Fixing it means
+left-trimming at intake and right-trimming each `arg1` at the split,
+then auditing every command that reads `ctx.arg`, so it is recorded
+here rather than folded into the `@set` work. There is deliberately
+no golden probe for it: one would be a case that cannot pass.
+
 ### The six `_sys` values on `#0`
 
 `SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream

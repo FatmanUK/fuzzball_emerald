@@ -684,6 +684,7 @@ var settableFlags = []struct {
 	{[]string{"dark", "debug"}, ref.Dark},
 	{[]string{"guest"}, ref.Guest},
 	{[]string{"haven", "hide", "harduid"}, ref.Haven},
+	{[]string{"interactive"}, ref.Interactive},
 	{[]string{"jump_ok"}, ref.JumpOK},
 	{[]string{"kill_ok"}, ref.KillOK},
 	{[]string{"link_ok"}, ref.LinkOK},
@@ -715,10 +716,196 @@ func strToFlag(name string) (ref.Flags, bool) {
 	return 0, false
 }
 
-// wizardOnlyFlags may only be changed by a wizard.
-var wizardOnlyFlags = map[ref.Flags]bool{
-	ref.Wizard: true, ref.Builder: true, ref.Guest: true, ref.Quell: true,
-	ref.XForcible: true, ref.Overt: true,
+// unableToSetFlag is `unable_to_set_flag` (`set.c:537`): whether this
+// asker may change this flag on this object. It answers with a
+// message and true when refused, and an empty message means the
+// caller's own "Permission denied. (restricted flag)".
+//
+// What stood here was `wizardOnlyFlags`, a six-entry map, and the
+// shape is what a map cannot express. The answer depends on the
+// object's **type** as much as on the flag, on whether the flag is
+// being set or cleared, on three `@tune` parameters that had no
+// reader anywhere in this server, and on whether a `@force` is
+// running. The map left YIELD, ABODE, ZOMBIE, VEHICLE and DARK
+// unguarded altogether, and was too strict for three others.
+//
+// `mlev` is the asker's owner's effective mucker level, which only
+// the BUILDER case reads.
+func (s *Server) unableToSetFlag(c *ctx, mlev int, thing ref.Ref,
+	flag ref.Flags, value bool) (string, bool) {
+
+	w, player := c.w, c.who
+	owner := ownerOf(w, player)
+	wiz := isWizard(w, owner)
+	typ := w.Get(thing).Type()
+	mucker := flag&(ref.Mucker|ref.SMucker) != 0
+
+	// A @force may not touch the flags that would let it grant
+	// itself more. XFORCIBLE is exempt **on an exit**, which is
+	// exactly the type the switch below refuses to a mortal, so
+	// the two guards are complementary rather than inconsistent.
+	if s.forceDepth > 0 && (flag == ref.Wizard || mucker ||
+		(flag == ref.XForcible && typ != ref.TypeExit)) {
+		return "That flag cannot be forced.", true
+	}
+
+	// Clearing a mucker level and setting one are two rules, not
+	// one, and each interpolates the level into its message. A
+	// non-wizard may change only a program they own, and may not
+	// set one above their own **raw** level, so the wizard bit
+	// does not lend the level it would otherwise give.
+	if !value && mucker {
+		if !wiz && (owner != ownerOf(w, thing) ||
+			typ != ref.TypeProgram) {
+			return "Permission denied. " +
+				"(You can't set that M0)", true
+		}
+		return "", false
+	}
+	if mucker {
+		want := 0
+		if flag&ref.Mucker != 0 {
+			want += 2
+		}
+		if flag&ref.SMucker != 0 {
+			want++
+		}
+		if !wiz && (owner != ownerOf(w, thing) ||
+			typ != ref.TypeProgram ||
+			w.Get(player).Flags.RawMLevel() < want) {
+			return "Permission denied. (You can't " +
+				"set that M" + itoa(want) + ")", true
+		}
+		return "", false
+	}
+
+	switch flag {
+	case ref.Abode:
+		// ABODE on a program is AUTOSTART, which runs code at
+		// boot. It takes `TrueWizard` rather than `Wizard`,
+		// so a quelled wizard may still set one.
+		return "", !hasFlag(w, owner, ref.Wizard) &&
+			typ == ref.TypeProgram
+
+	case ref.Guest:
+		return "", !wiz
+
+	case ref.Yield, ref.Overt:
+		// These two decide env-chain matching, so a wizard
+		// only — and only on the two types the walk
+		// consults. An exit or a program is refused even to
+		// God, which makes this the one rule here a
+		// transcript can see.
+		if !wiz {
+			return "", true
+		}
+		return "", typ != ref.TypeThing && typ != ref.TypeRoom
+
+	case ref.Zombie:
+		// On a player the flag is a **restriction** — "may
+		// not use zombies" — so applying it takes a wizard.
+		// On a thing it is the puppet itself, and is refused
+		// to an asker who has been restricted that way.
+		if typ == ref.TypePlayer {
+			return "", !wiz
+		}
+		if typ == ref.TypeThing &&
+			hasFlag(w, owner, ref.Zombie) {
+			return "", !wiz
+		}
+		return "", false
+
+	case ref.Vehicle:
+		if typ == ref.TypePlayer {
+			return "", !wiz
+		}
+		// A vehicle with somebody inside may not stop being
+		// one: its passengers would be sitting in a thing
+		// that nothing can leave.
+		if !value && typ == ref.TypeThing {
+			for _, o := range w.Contents(thing) {
+				if w.Get(o).Type() ==
+					ref.TypePlayer {
+					return "That vehicle " +
+						"still has players " +
+						"in it!", true
+				}
+			}
+		}
+		if w.Tune.Bool("wiz_vehicles") {
+			if typ == ref.TypeThing {
+				return "", !wiz
+			}
+			return "", false
+		}
+		// Note this one reads the **asker's** own flag where
+		// every other test here reads the owner's.
+		if typ == ref.TypeThing &&
+			hasFlag(w, player, ref.Vehicle) {
+			return "", !wiz
+		}
+		return "", false
+
+	case ref.Dark:
+		// A room or a program may be darked by anybody — on
+		// a program DARK is the debugger. A player may not,
+		// and an exit or a thing only while the matching
+		// `@tune` parameter allows it. Both parameters
+		// default true and this is their only reader.
+		if !wiz {
+			if typ == ref.TypePlayer {
+				return "", true
+			}
+			if !w.Tune.Bool("exit_darking") &&
+				typ == ref.TypeExit {
+				return "", true
+			}
+			if !w.Tune.Bool("thing_darking") &&
+				typ == ref.TypeThing {
+				return "", true
+			}
+		}
+		return "", false
+
+	case ref.Quell:
+		// Only God may quell or unquell another wizard, which
+		// is both narrower and wider than a wizard-only rule:
+		// a mortal may set QUELL on their own things freely,
+		// and a plain wizard may not touch a colleague's.
+		return "", hasFlag(w, thing, ref.Wizard) &&
+			thing != player && owner != ref.God &&
+			typ == ref.TypePlayer
+
+	case ref.Builder:
+		// BUILDER on a program is BOUND, which the owner of a
+		// mucker-2 program may set without being a wizard —
+		// the one place `mlev` is read.
+		if typ == ref.TypeProgram {
+			return "", mlev < 2
+		}
+		return "", !wiz
+
+	case ref.Wizard:
+		if !wiz {
+			return "", true
+		}
+		if !value && thing == player {
+			return "You cannot make yourself " +
+				"mortal.", true
+		}
+		// Under GOD_PRIV, which upstream defines by default,
+		// only God may make or unmake a wizard.
+		return "", typ == ref.TypePlayer && player != ref.God
+
+	case ref.XForcible:
+		// Restricted on an **exit** only. The map this
+		// replaces made it wizard-only for every type, a
+		// divergence the other way: upstream lets a mortal
+		// make their own thing or program forcible.
+		return "", !wiz && typ == ref.TypeExit
+	}
+	// No other flag is restricted.
+	return "", false
 }
 
 // setProperty is do_set's property branch (set.c:763-842), which is
@@ -910,10 +1097,6 @@ func (s *Server) cmdSet(c *ctx) {
 	// skips leading '!' and whitespace together when it looks for
 	// the flag.
 	rest = strings.TrimLeft(rest, " \t")
-	if strings.TrimSpace(rest) == "" {
-		c.tell("%s", noFlagGiven)
-		return
-	}
 
 	// A ':' anywhere in the argument means a property rather than
 	// a flag, which is strchr(flag, PROP_DELIMITER) and so splits
@@ -923,8 +1106,39 @@ func (s *Server) cmdSet(c *ctx) {
 		return
 	}
 
+	// Two readings of the same argument, and they disagree.
+	// `negated` is the *first character* alone, so "!!W" clears
+	// the wizard bit rather than setting it — `has_flag`'s "!!x
+	// = x" rule is not this one. `p` skips every leading '!' and
+	// space together, so "! W" and "!!!W" both name W. The tail
+	// is deliberately not trimmed, because upstream's p runs to
+	// the end of arg2 and `string_prefix` fails on a trailing
+	// space; nothing can observe it here, since ctx.arg arrives
+	// trimmed at both ends.
 	clear := strings.HasPrefix(rest, "!")
-	flagName := ascii.Fold(strings.TrimSpace(strings.TrimPrefix(rest, "!")))
+	flagName := ascii.Fold(strings.TrimLeft(rest, "! \t"))
+
+	// A guest may use @set on a *property* — this check sits
+	// after the property branch — and on exactly one flag: a
+	// guest who is also a wizard may clear its own GUEST bit,
+	// which is how a world lets one stop being a guest. Note it
+	// reads the asker's own wizardry rather than its owner's, and
+	// that it comes before the empty-flag message.
+	if isGuest(c.w, c.who) &&
+		(!c.w.Get(c.who).Flags.IsWizard() || !clear ||
+			!ascii.HasPrefix("guest", flagName)) {
+		c.tell("Guests are not allowed to @set.")
+		return
+	}
+
+	// Upstream tests the flag *name*, not the whole argument, so
+	// a bare "!" reaches this rather than being read as a mucker
+	// level: "mucker" has the empty string as a prefix, and `@set
+	// me=!` used to clear both mucker bits.
+	if flagName == "" {
+		c.tell("%s", noFlagGiven)
+		return
+	}
 
 	// Mucker levels are named where a flag would be, and are read
 	// before the flag table so "M2" is a level rather than a
@@ -935,9 +1149,6 @@ func (s *Server) cmdSet(c *ctx) {
 	}
 	bit, isLevel := parseMLevel(flagName, clear)
 	if isLevel {
-		if !s.requireWizard(c) {
-			return
-		}
 		// Level zero, and clearing any level, both come to
 		// the same thing: remove both bits.
 		if flagName == "0" || flagName == "m0" ||
@@ -958,11 +1169,20 @@ func (s *Server) cmdSet(c *ctx) {
 			c.tell("I don't recognize that flag.")
 			return
 		}
-		if wizardOnlyFlags[bit] &&
-			!c.w.Get(c.who).Flags.IsWizard() {
-			c.tell("Permission denied.")
-			return
+	}
+
+	// One function decides every flag, including the mucker
+	// levels, which this server used to put behind a blanket
+	// wizard test: upstream lets a mortal set their own program
+	// up to their own level.
+	mlev := c.w.Get(ownerOf(c.w, c.who)).Flags.MLevel()
+	if msg, no := s.unableToSetFlag(c, mlev, target, bit,
+		!clear); no {
+		if msg == "" {
+			msg = "Permission denied. (restricted flag)"
 		}
+		c.tell("%s", msg)
+		return
 	}
 
 	o := c.w.Get(target)
