@@ -135,7 +135,7 @@ func (s *Server) cmdGet(c *ctx) {
 				return
 			}
 		} else if !s.canDoit(c.w, c.d.ID, c.who, thing,
-			"You can't pick that up.") {
+			"You can't pick that up.", mesgArgs{}) {
 			return
 		}
 		s.moveThing(c.w, c.d.ID, thing, c.who, o.Location)
@@ -254,17 +254,17 @@ func (s *Server) cmdDrop(c *ctx) {
 	// have no fallback.
 	if hasMesg(c.w, thing, propDrop) {
 		s.execOrNotifyProp(c.w, c.d.ID, c.who, thing,
-			propDrop, "(@Drop)")
+			propDrop, "(@Drop)", mesgArgs{})
 	} else {
 		c.tell("Dropped.")
 	}
 	if hasMesg(c.w, loc, propDrop) {
 		s.execOrNotifyProp(c.w, c.d.ID, c.who, loc, propDrop,
-			"(@Drop)")
+			"(@Drop)", mesgArgs{})
 	}
 	if hasMesg(c.w, thing, propODrop) {
 		s.parseOProp(c.w, c.d.ID, c.who, loc, thing,
-			propODrop, me.Name, "(@Odrop)")
+			propODrop, me.Name, "(@Odrop)", mesgArgs{})
 	} else {
 		s.notifyRoomFrom(c.w, c.who, loc, []ref.Ref{c.who},
 			"%s drops %s.", me.Name, o.Name)
@@ -274,7 +274,7 @@ func (s *Server) cmdDrop(c *ctx) {
 	// something on arrival.
 	if hasMesg(c.w, loc, propODrop) {
 		s.parseOProp(c.w, c.d.ID, c.who, loc, loc, propODrop,
-			o.Name, "(@Odrop)")
+			o.Name, "(@Odrop)", mesgArgs{})
 	}
 }
 

@@ -266,6 +266,171 @@ var lockScript = Script{
 	"bank",
 }
 
+// multiActionScript is §4.2, "Making a Multi-Action": one action
+// carrying many names, which answers differently for each because
+// `{exec:{&cmd}}` looks up a property named after the alias that was
+// typed. It is the manual's own demonstration that `&cmd` holds the
+// **verb as typed** rather than the action's own first name.
+var multiActionScript = Script{
+	// The manual links its action to $nothing, a std-db
+	// do-nothing program; the fixture's own program stands in.
+	"@register #2 = nothing",
+
+	// One action, four names, attached to the player -- @action,
+	// not @open, because it hangs on a named object.
+	"@act ref;note;watch = me", // #4
+	"@link ref = $nothing",
+
+	// A lock nobody passes, so using it always reaches @fail --
+	// which is where the dispatch lives. The exit is linked all
+	// the same, which is §2.3.2's advice about not leaving one
+	// unsecured.
+	"@lock ref = me&!me",
+	"@fail ref = {exec:{&cmd}}",
+
+	// One property per alias, on the action itself.
+	"@set ref = ref:This is the reference action.",
+	"@set ref = note:A note from {name:me}.",
+	"@set ref = watch:You glance at your watch.",
+
+	// And each name answers with its own.
+	"ref",
+	"note",
+	"watch",
+
+	// A name the action carries with no property behind it
+	// evaluates to nothing, which is what makes a typo silent.
+	"@name ref = ref;note;watch;clock;full",
+	"clock",
+	"@set ref = clock:The clock says {name:this}.",
+	"clock",
+
+	// {name} and {fullname} differ in exactly one line, and an
+	// exit is the only place it shows: NAME cuts the name at the
+	// first ';' and FULLNAME does not, so the same action reports
+	// one alias through one and the whole list through the other.
+	"@set ref = full:[{name:this}][{fullname:this}]",
+	"full",
+
+	// An abbreviation of an alias reaches it too, because exit
+	// matching is by alias and not by whole word -- and the
+	// *typed* text is what `&cmd` holds, so the property looked
+	// up is the abbreviation and finds nothing.
+	"wat",
+
+	"examine ref",
+	"examine ref=/",
+}
+
+// puppetScript is §4.3 ("Making Puppets") and §4.4 ("Making
+// Vehicles"), which the manual builds the same way: a thing, a flag,
+// an action attached to it, and `{force:...,{&arg}}` to drive it.
+//
+// This is the transcription half only: what a **third party** sees of
+// the `@o*` messages reaches nobody in a one-seat transcript and is
+// the next step's work. A vehicle's exterior output turned out *not*
+// to need a second seat -- the driver is inside while the car speaks
+// in the room -- which is how the `@oecho` gap was found here rather
+// than there.
+var puppetScript = Script{
+	"@register #2 = nothing",
+
+	// §4.3. "== pup" is an empty cost and a registration, which
+	// is @create's third argument.
+	"@create Squiggy == pup", // #4
+
+	// The two flags, by prefix on two different spellings of the
+	// name, which is the manual's own way of writing it.
+	"@set squig = Z",
+	"@set squiggy = X",
+	"@flock squiggy = me",
+	"drop squiggy",
+
+	// Forcing it to pose. The relay prefixes what the puppet is
+	// told with its name, which is the only reason the owner sees
+	// anything at all.
+	"@force $pup = :jumps!",
+
+	// And the prefix is settable.
+	"@pecho squiggy = *",
+	"@force $pup = :jumps again!",
+
+	// The action that drives it without a @force each time:
+	// locked shut so @fail is what runs, and @fail is MPI that
+	// forces the puppet with whatever followed the verb.
+	"@act z = me", // #5
+	"@link z = $nothing",
+	"@lock z = me&!me",
+	"@fail z = {force:$pup,{&arg}}",
+	"z :bounces!",
+	"z look",
+	"examine squiggy",
+
+	// §4.4. The same shape with VEHICLE instead of ZOMBIE, and a
+	// boarding exit -- which must hang on the vehicle, so only
+	// @action can make it.
+	"@create 1967 Corvette Sting Ray == vette", // #6
+	"@set $vette = V",
+	"@act getin = $vette", // #7
+	"@link getin = $vette",
+
+	// `drop` cannot take a registration: do_drop's matcher is
+	// match_possession and match_me only, with no
+	// match_registered, so "$vette" reaches nothing. That is
+	// upstream's and both servers agree -- it is here as a probe
+	// rather than a mistake, because the next line only works by
+	// name and the reason is worth recording.
+	"drop $vette",
+	"drop Corvette",
+	"getin",
+
+	// @idescribe is what a vehicle's occupants see, and `here`
+	// from inside is the vehicle.
+	"@idesc here = The interior is pristine: gleaming chrome " +
+		"and smooth blue vinyl.",
+	"look",
+
+	// Driving it from inside, the same way the puppet is driven.
+	"@set $vette = X",
+	"@flock $vette = me",
+	"@act drive = $vette", // #8
+
+	// The manual omits this and the action does not work without
+	// it: an **unlinked** exit cannot partial-match, so "drive
+	// :vroom" never reaches the action at all and both servers
+	// answer "Huh?" -- a case that passes while testing nothing.
+	// match_exits allows a partial match only when the exit runs
+	// a program or is NIL-linked, which is `exitprog`
+	// (`match.c:551`).
+	"@link drive = $nothing",
+	"@lock drive = me&!me",
+	"@fail drive = {force:$vette,{&arg}}",
+	"drive :vroom vrooOOOOmms!",
+
+	// @oecho is the prefix a vehicle's occupants see on output
+	// from **outside** it -- and one seat *can* produce it,
+	// because the driver is inside while the car speaks in the
+	// room. The line above showed the default, "Outside>"; these
+	// show the property being read, which nothing in this server
+	// did.
+	"@oecho $vette = >>>",
+	"drive :vroom vrooOOOOmms!",
+
+	// An MPI prefix, evaluated with the speaker as the viewer and
+	// the vehicle as the object carrying it.
+	"@oecho $vette = [{name:this}]",
+	"drive :idles.",
+
+	// And cleared, which puts the default back rather than
+	// leaving an empty prefix.
+	"@oecho $vette =",
+	"drive :stalls.",
+
+	"examine here",
+	"leave",
+	"examine $vette",
+}
+
 // TestWalkthroughMatchesFuzzball drives the manual's own scenarios
 // through both servers.
 func TestWalkthroughMatchesFuzzball(t *testing.T) {
@@ -277,6 +442,8 @@ func TestWalkthroughMatchesFuzzball(t *testing.T) {
 		{"BuildAnInn", buildInnScript},
 		{"FurnishIt", furnishScript},
 		{"LockIt", lockScript},
+		{"OneActionManyNames", multiActionScript},
+		{"PuppetsAndVehicles", puppetScript},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			compareWalkthrough(t, tc.script)

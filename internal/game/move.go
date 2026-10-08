@@ -23,9 +23,14 @@ func (s *Server) useExit(c *ctx, exit ref.Ref) {
 	// "That exit doesn't go anywhere.", which was invented here.
 	// Upstream does not special-case it at all: the destination
 	// count is could_doit's own first check, so an unlinked exit
-	// gets the one default that every other failure gets.
+	// gets the one default that every other failure gets. The
+	// pair is live here and only here: match_exits put the typed
+	// alias in match_cmdname and the rest of the line in
+	// match_args, which is what c.verb and c.arg hold for an
+	// exit, and the exit's own messages are what read them back.
 	if !s.canDoit(c.w, c.d.ID, c.who, exit,
-		"You can't go that way.") {
+		"You can't go that way.",
+		mesgArgs{cmd: c.verb, arg: c.arg}) {
 		return
 	}
 	s.trigger(c, exit, true)
@@ -206,7 +211,8 @@ func (s *Server) enterViaExit(c *ctx, exit, dest ref.Ref) bool {
 		return false
 	}
 
-	s.moveTo(c.w, c.d.ID, c.who, dest, exit)
+	s.moveTo(c.w, c.d.ID, c.who, dest, exit,
+		mesgArgs{cmd: c.verb, arg: c.arg})
 	return true
 }
 
@@ -248,16 +254,16 @@ func (s *Server) bringThing(c *ctx, exit, thing ref.Ref) bool {
 // calls enter_room, so a message about arriving is read before "has
 // arrived" and before the look. Emerald had it the other way round.
 func (s *Server) moveTo(w *world.World, descr int,
-	who, dest, via ref.Ref) {
+	who, dest, via ref.Ref, ma mesgArgs) {
 
 	o := w.Get(who)
 	if via != ref.Nothing {
 		s.execOrNotifyProp(w, descr, who, via, propDrop,
-			"(@Drop)")
+			"(@Drop)", ma)
 		// A DARK player announces nothing to the room.
 		if o.Flags&ref.Dark == 0 {
 			s.parseOProp(w, descr, who, dest, via,
-				propODrop, o.Name, "(@Odrop)")
+				propODrop, o.Name, "(@Odrop)", ma)
 		}
 	}
 	s.enterRoom(w, descr, who, dest, via)

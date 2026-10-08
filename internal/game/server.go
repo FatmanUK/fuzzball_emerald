@@ -91,6 +91,10 @@ type Server struct {
 	// that forces something that forces back cannot recurse
 	// without end.
 	forceDepth int
+	// relayDepth is notify_nolisten_level: a puppet's @pecho is
+	// evaluated only at depth zero, so a @pecho that notifies
+	// anything cannot recurse through the relay for ever.
+	relayDepth int
 	// forcelist is upstream's own global objnode stack: who is
 	// forcing what, most recently pushed last, read by
 	// FORCEDBY/FORCEDBY_ARRAY. Both @force (cmdForce) and the
@@ -350,7 +354,10 @@ func (s *Server) notify(w *world.World, player ref.Ref, format string, args ...a
 // person at all.
 func (s *Server) send(w *world.World, player ref.Ref, text string) {
 	s.hub.Tell(player, text)
-	if owner, prefix, ok := puppetRelay(s, w, player); ok {
+	// A direct notify is **private**, which is half of upstream's
+	// relay condition.
+	if owner, prefix, ok := puppetRelay(s, w, player,
+		true); ok {
 		s.hub.Tell(owner, prefix+text)
 	}
 }
@@ -358,11 +365,22 @@ func (s *Server) send(w *world.World, player ref.Ref, text string) {
 // puppetRelay reports whether a target's output should also reach its
 // owner, and with what prefix.
 //
-// The conditions are upstream's, and each excludes a way of using a
-// puppet to spy: a DARK puppet is silent unless a wizard owns it, a
-// room flagged ZOMBIE is a no-puppet zone, and an owner who is
-// themselves flagged ZOMBIE has opted out of hearing any of it.
-func puppetRelay(s *Server, w *world.World, target ref.Ref) (ref.Ref, string, bool) {
+// The conditions are upstream's (`interface.c:4697`), and each
+// excludes a way of using a puppet to spy: a DARK puppet is silent
+// unless a wizard owns it, a room flagged ZOMBIE is a no-puppet zone,
+// and an owner who is themselves flagged ZOMBIE has opted out of
+// hearing any of it.
+//
+// **And one more, which was missing**: the relay happens only when
+// the message is private *or* the puppet is somewhere other than its
+// owner. A puppet standing in the room with its owner relays nothing
+// public, because the owner has already heard the line — and
+// without that test every pose a puppet made arrived twice, once as
+// itself and once prefixed. The old comment here asserted the
+// condition was always satisfied; §4.3's `@force $pup = :jumps!` is
+// where that turned out to be wrong.
+func puppetRelay(s *Server, w *world.World, target ref.Ref,
+	isPrivate bool) (ref.Ref, string, bool) {
 	if !w.Tune.Bool("allow_zombies") {
 		return ref.Nothing, "", false
 	}
@@ -384,19 +402,25 @@ func puppetRelay(s *Server, w *world.World, target ref.Ref) (ref.Ref, string, bo
 		return ref.Nothing, "", false
 	}
 
-	// Everything sent this way is a private message — room
-	// speech reaches people through notifyRoom instead — so
-	// upstream's "unless the owner is standing right here" test
-	// is always satisfied.
+	if !isPrivate && owner.Location == o.Location {
+		return ref.Nothing, "", false
+	}
+
 	prefix := o.Name + "> "
+	// notify_nolisten_level: while a relay is already evaluating
+	// a @pecho, the prefix is taken as empty rather than
+	// evaluated again. Without it a @pecho that notifies anything
+	// recurses, and on one goroutine that is the whole server.
 	if v, ok := w.GetProp(target, propPuppetEcho); ok &&
-		v.Type == props.String {
+		v.Type == props.String && s.relayDepth == 0 {
 		// Upstream evaluates this one with no descriptor at
 		// all — do_parse_prop(-1, ...) at interface.c:4722
 		// — because the text is being relayed rather than
 		// triggered by anyone in particular.
+		s.relayDepth++
 		got := s.evalMPI(w, -1, target, target, v.Str,
 			"(@Pecho)", v.Blessed, mpi.Private)
+		s.relayDepth--
 		if got != "" {
 			prefix = got + " "
 		}
@@ -470,9 +494,16 @@ func (s *Server) notifyRoomFrom(w *world.World, from, room ref.Ref,
 		case ref.TypeThing:
 			// A thing hears nothing itself, but a puppet
 			// relays what it hears to whoever owns it.
-			if owner, prefix, ok := puppetRelay(s, w, r); ok {
+			// Room speech is **public** -- notify_except
+			// passes isprivate 0 all the way down -- so a
+			// puppet standing where its owner stands
+			// relays nothing: the owner has already heard
+			// the line itself.
+			if owner, prefix, ok := puppetRelay(s, w, r,
+				false); ok {
 				s.hub.Tell(owner, prefix+text)
 			}
+			s.vehicleEcho(w, from, r, text)
 		}
 	}
 
@@ -551,12 +582,88 @@ func unparse(w *world.World, viewer, target ref.Ref) string {
 	if o == nil {
 		return "*INVALID*"
 	}
+	// unparse_object's first line, commented "Handle ZOMBIE case"
+	// (`db.c:2232`): the test is made on whoever **owns** the
+	// viewer, so a puppet sees what its owner sees. Without it a
+	// wizard's puppet reported bare names where the wizard would
+	// have seen dbrefs and flags, which is what §4.3's "z look"
+	// found.
+	if viewer != ref.Nothing {
+		viewer = w.OwnerOf(viewer)
+	}
 	v := w.Get(viewer)
+	// Three of upstream's clauses are still missing and are
+	// recorded in docs/upstream-coverage.md: a **STICKY viewer**
+	// sees only names whatever else is true, `can_see_flags` is
+	// `can_teleport_to` rather than wizardry-or-ownership, and a
+	// non-player target also shows its flags to anyone who
+	// `controls_link`s it or when it is CHOWN_OK. Porting them
+	// means a lock evaluation, so `unparse` would have to become
+	// a method on Server at fifty-odd call sites.
 	if viewer == ref.Nothing ||
-		v != nil && (v.Flags.IsWizard() || o.Owner == viewer || target == viewer) {
+		v != nil && (v.Flags.IsWizard() ||
+			o.Owner == viewer || target == viewer) {
 		return o.Name + "(" + target.String() + o.Flags.Unparse() + ")"
 	}
 	return o.Name
+}
+
+// vehicleEcho is `notify_listeners`'s vehicle branch
+// (`interface.c:4902`): what happens *outside* a vehicle is relayed
+// to whoever is inside it, prefixed.
+//
+// `_/oecho` was written by `@oecho`, displayed by `examine`, and
+// **read nowhere** -- the same shape `@ownlock` still has. The
+// default prefix is "Outside>", so the gap showed even in a world
+// that had never set the property: §4.4's `drive :vroom` is said by
+// the car, in the room, to a driver sitting inside it, and this
+// server delivered nothing.
+//
+// Five conditions, and each of them excludes a way of listening in
+// from a parked car. The vehicle must not be DARK unless a wizard
+// owns it; the line must be **public**, which is why this is reached
+// only from notifyRoomFrom; the speaker must be where the vehicle is;
+// and a vehicle inside another vehicle relays nothing unless a wizard
+// owns it, which is what stops a chain of them carrying a room's
+// speech away.
+func (s *Server) vehicleEcho(w *world.World, from, obj ref.Ref,
+	text string) {
+
+	o := w.Get(obj)
+	if o == nil || o.Type() != ref.TypeThing ||
+		o.Flags&ref.Vehicle == 0 {
+		return
+	}
+	wizardOwned := isWizard(w, o.Owner)
+	if o.Flags&ref.Dark != 0 && !wizardOwned {
+		return
+	}
+	speaker := w.Get(from)
+	if speaker == nil || speaker.Location != o.Location {
+		return
+	}
+	if loc := w.Get(o.Location); !wizardOwned && loc != nil &&
+		loc.Type() == ref.TypeRoom &&
+		loc.Flags&ref.Vehicle != 0 {
+		return
+	}
+
+	prefix := "Outside>"
+	if v, ok := w.GetProp(obj, propRoomEcho); ok &&
+		v.Type == props.String {
+		// do_parse_prop(-1, who, obj, ...): no descriptor,
+		// the speaker as the viewer and the vehicle as the
+		// object carrying the property, and private even
+		// though the line being prefixed is public.
+		got := s.evalMPI(w, -1, from, obj, v.Str,
+			"(@Oecho)", v.Blessed, mpi.Private)
+		if got != "" {
+			prefix = got
+		}
+	}
+	for _, r := range w.Contents(obj) {
+		s.send(w, r, prefix+" "+text)
+	}
 }
 
 // statusLog returns the logger for server-lifecycle messages.

@@ -172,9 +172,7 @@ func init() {
 	})
 
 	// Objects and properties.
-	register("NAME", objectText(func(env *Env, obj Ref) string {
-		return env.Host.Name(obj)
-	}))
+	register("NAME", objectName(true))
 	register("PROP", func(env *Env, _ *Func, args []string) (string, error) {
 		obj, err := env.resolve("PROP", args, 1)
 		if err != nil {

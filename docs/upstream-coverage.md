@@ -1553,6 +1553,116 @@ receiver. The two names in `internal/game` now delegate.
 
 Five mutations across the two, all five caught.
 
+### `{&cmd}` and `{&arg}` were empty everywhere
+
+§4.2's multi-action is one action carrying several names that answers
+differently for each, through `@fail` set to `{exec:{&cmd}}` — and it
+did nothing at all here. `do_parse_mesg_2` (`msgparse.c:1957`) fills
+MPI's `cmd` and `arg` variables from the globals `match_cmdname` and
+`match_args` (`match.c:28`), which are **cleared by `init_match`**
+(`:800`) and filled in by `match_exits` when an exit's alias matches.
+So they are live from the exit match until the next match of any
+kind, which in practice means the exit's own message properties and
+nothing else: a description reads them empty, because `do_look_at`
+matches first, and the oracle confirms that directly.
+
+Nothing passed them, so every `{&cmd}` and `{&arg}` read empty.
+`mesgArgs` is the pair, threaded through `canDoit`,
+`execOrNotifyProp`, `execOrNotify` and `parseOProp` rather than kept
+on the Server, so each of the twenty-odd call sites says out loud
+whether the pair is live — a field would leak the typed verb into
+the arrival description after a move, which upstream's clear is
+exactly what prevents.
+
+### `{name}` did not truncate an exit's alias list
+
+The same script. `mfn_name` (`mfuns2.c:638`) cuts an **exit's** name
+at the first `;`, so a multi-alias action reports only the name it is
+known by; `mfn_fullname` (`:694`) is the same function with that one
+line removed, and upstream's comment on it says so and asks for the
+shared helper this now has. Its abort still says "NAME", which is
+part of the copy/paste and is kept.
+
+**Upstream's three sentinel branches are dead code.** Both functions
+test for NOTHING, AMBIGUOUS and HOME and answer `#NOTHING#`,
+`#AMBIGUOUS#` and `#HOME#` — but `mesg_dbref_raw` ends with
+`if (!OkObj(obj)) obj = UNKNOWN;` and `OkObj` requires `d >= 0`
+(`db.h:440`), so all three have already become UNKNOWN and "Match
+failed." is the only answer any of them can give. `FULLNAME` used to
+return `#NOTHING#`, which is the one answer upstream cannot produce.
+
+### The puppet relay fired twice, and `unparse` forgot whose eyes
+
+§4.3. `@force $pup = :jumps!` arrived twice here, once as the room's
+own line and once prefixed `Squiggy> `. `notify_nolisten`
+(`interface.c:4712`) relays to the owner only when the message is
+**private** *or* the puppet is somewhere other than its owner: a
+puppet standing beside its owner relays nothing public, because the
+owner has already heard the line. The comment here asserted the
+condition was always satisfied, and it is not — room speech is
+public all the way down, `notify_except` passing `isprivate` 0.
+
+Upstream also guards the `@pecho` evaluation with
+`notify_nolisten_level`, taking the prefix as empty while a relay is
+already running. Without it a `@pecho` that notifies anything
+recurses, and on one goroutine that is the whole server;
+`Server.relayDepth` is that guard.
+
+And `z look` showed bare names where upstream showed dbrefs and
+flags. `unparse_object`'s first line is `player = OWNER(player)`,
+commented "Handle ZOMBIE case" (`db.c:2232`): the test is made on
+whoever **owns** the viewer, so a puppet sees what its owner sees.
+
+**Three of `unparse_object`'s clauses are still missing**, and are
+left because porting them means a lock evaluation and so making
+`unparse` a method at fifty-odd call sites: a **STICKY viewer** sees
+only names whatever else is true; `can_see_flags` is
+`can_teleport_to` rather than the wizardry-or-ownership test here;
+and a non-player target also shows its flags to anyone who
+`controls_link`s it, or when it is CHOWN_OK.
+
+### `_/oecho` was written, displayed, and read nowhere
+
+§4.4, and the one the plan expected to need a second seat. It does
+not: the driver sits **inside** the car while the car speaks in the
+room, so `drive :vroom vrooOOOOmms!` is an exterior line delivered to
+an interior viewer, and one transcript sees it.
+
+`notify_listeners`'s vehicle branch (`interface.c:4902`) prefixes
+what happens outside a vehicle and delivers it to everything inside,
+defaulting to `"Outside>"` — so the gap showed even in a world that
+had never set the property. `@oecho` wrote `_/oecho`, `examine`
+displayed it, and nothing read it, which is the shape `@ownlock`
+still has.
+
+Five conditions, each excluding a way of listening in from a parked
+car: the vehicle must not be DARK unless a wizard owns it; the line
+must be public; the speaker must be where the vehicle is; and a
+vehicle inside another vehicle relays nothing unless a wizard owns
+it.
+
+### Three probes that tested nothing, and one that still does
+
+The walkthrough's own scripts, before their transcripts were read.
+`@link three=one` matched the fixture's **player**, who is called
+"One", so the depth-two metalink chain was never built. `@link
+test=nil` answered "That exit is already linked." `drop $vette`
+answered "I don't understand '$vette'." — `do_drop`'s matcher has no
+`match_registered`, which is upstream's and is kept as a probe with
+the reason written down — and because the drop failed, nothing after
+it boarded: the `@idescribe` landed on Room Zero and `leave` said
+"You can't go that way."
+
+And `drive :vroom` needed a `@link` the manual does not give. An
+**unlinked** exit cannot partial-match — `match_exits` allows one
+only when the exit runs a program or is NIL-linked, which is
+`exitprog` (`match.c:551`) — so the line reached nothing and both
+servers answered "Huh?"
+
+Eleven mutations across the five findings, all eleven caught. Two
+needed rewriting first: one did not compile, and one had an anchor
+that occurred twice.
+
 ### The six `_sys` values on `#0`
 
 `SYSTEM_PROPDIR_PROTECT2` is `_sys` (`include/game.h:70`), and upstream

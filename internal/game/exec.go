@@ -52,29 +52,58 @@ func hasMesg(w *world.World, obj ref.Ref, path string) bool {
 	return ok
 }
 
+// mesgArgs is upstream's `match_cmdname`/`match_args` pair, which MPI
+// reads back as `{&cmd}` and `{&arg}`.
+//
+// Upstream keeps them in two globals (`match.c:28`), **cleared by
+// `init_match`** (`:800`) and filled in by `match_exits` when an
+// exit's alias matches. So they are live from the exit match until
+// the next match of any kind, which in practice means the exit's own
+// message properties and nothing else: a description reads them
+// empty, because `do_look_at` matches first, and the golden case pins
+// that.
+//
+// They are threaded rather than kept on the Server so that every call
+// site says out loud whether the pair is live. A field would leak the
+// typed verb into the arrival description after a move, which
+// upstream's clear is exactly what prevents.
+//
+// Nothing passed them before, so `{&cmd}` and `{&arg}` were empty
+// everywhere -- and §4.2's multi-action, which is one action
+// answering differently per alias through `{exec:{&cmd}}`, did
+// nothing at all.
+type mesgArgs struct {
+	cmd string
+	arg string
+}
+
 // execOrNotifyProp is exec_or_notify_prop: read a message property
 // and act on it, doing nothing at all when it is not set.
 //
 // whatcalled is the caller context — "(@Desc)", "(@Succ)" — which
 // becomes MPI's {&how} and the program's COMMAND variable.
 func (s *Server) execOrNotifyProp(w *world.World, descr int,
-	player, thing ref.Ref, path, whatcalled string) {
+	player, thing ref.Ref, path, whatcalled string,
+	ma mesgArgs) {
 
 	v, ok := mesgValue(w, thing, path)
 	if !ok {
 		return
 	}
-	s.execOrNotify(w, descr, player, thing, v.Str, whatcalled, v.Blessed)
+	s.execOrNotify(w, descr, player, thing, v.Str, whatcalled,
+		v.Blessed, ma)
 }
 
 // execOrNotify shows one message to a player, running it as a program
 // when it names one.
 func (s *Server) execOrNotify(w *world.World, descr int,
-	player, thing ref.Ref, message, whatcalled string, blessed bool) {
+	player, thing ref.Ref, message, whatcalled string,
+	blessed bool, ma mesgArgs) {
 
 	if !strings.HasPrefix(message, "@") {
-		s.send(w, player, s.evalMPI(w, descr, player, thing,
-			message, whatcalled, blessed, mpi.Private))
+		s.send(w, player, s.evalMPIWith(w, descr, player,
+			thing, message, whatcalled, blessed,
+			mpi.Private, ma))
 		return
 	}
 
@@ -108,8 +137,8 @@ func (s *Server) execOrNotify(w *world.World, descr int,
 	// them. The program does every notification itself: this adds
 	// no text of its own, not even when it produces none.
 	s.runMesgProgram(w, descr, player, thing, prog, whatcalled,
-		s.evalMPI(w, descr, player, thing, args, whatcalled,
-			blessed, mpi.Private))
+		s.evalMPIWith(w, descr, player, thing, args,
+			whatcalled, blessed, mpi.Private, ma))
 }
 
 // runMesgProgram runs the program a message property named.
@@ -178,7 +207,8 @@ func (s *Server) runMesgProgram(w *world.World, descr int,
 // one. look_room passes none, so a room locked against whoever is
 // looking says nothing rather than borrowing an exit's wording.
 func (s *Server) canDoit(w *world.World, descr int,
-	who, thing ref.Ref, defaultFail string) bool {
+	who, thing ref.Ref, defaultFail string,
+	ma mesgArgs) bool {
 
 	me, o := w.Get(who), w.Get(thing)
 	if me == nil || o == nil || me.Location == ref.Nothing {
@@ -199,20 +229,22 @@ func (s *Server) canDoit(w *world.World, descr int,
 	if !couldDoit(s, w, descr, 1, who, thing) {
 		if hasMesg(w, thing, propFail) {
 			s.execOrNotifyProp(w, descr, who, thing,
-				propFail, "(@Fail)")
+				propFail, "(@Fail)", ma)
 		} else if defaultFail != "" {
 			s.notify(w, who, "%s", defaultFail)
 		}
 		if !quiet {
 			s.parseOProp(w, descr, who, me.Location,
-				thing, propOFail, me.Name, "(@Ofail)")
+				thing, propOFail, me.Name, "(@Ofail)",
+				ma)
 		}
 		return false
 	}
-	s.execOrNotifyProp(w, descr, who, thing, propSucc, "(@Succ)")
+	s.execOrNotifyProp(w, descr, who, thing, propSucc,
+		"(@Succ)", ma)
 	if !quiet {
 		s.parseOProp(w, descr, who, me.Location, thing,
-			propOSucc, me.Name, "(@Osucc)")
+			propOSucc, me.Name, "(@Osucc)", ma)
 	}
 	return true
 }
@@ -225,7 +257,8 @@ func (s *Server) canDoit(w *world.World, descr int,
 // it goes through pronoun substitution before the prefix is applied.
 // An empty result sends nothing at all.
 func (s *Server) parseOProp(w *world.World, descr int,
-	player, dest, thing ref.Ref, path, prefix, whatcalled string) {
+	player, dest, thing ref.Ref, path, prefix,
+	whatcalled string, ma mesgArgs) {
 
 	v, ok := mesgValue(w, thing, path)
 	if !ok {
@@ -233,8 +266,8 @@ func (s *Server) parseOProp(w *world.World, descr int,
 	}
 	// MPI_ISPUBLIC is zero upstream: public is simply the absence
 	// of Private, which is what MesgType.Public reads back.
-	text := s.evalMPI(w, descr, player, thing, v.Str, whatcalled,
-		v.Blessed, 0)
+	text := s.evalMPIWith(w, descr, player, thing, v.Str,
+		whatcalled, v.Blessed, 0, ma)
 	text = muf.PronounSub(&mufHost{s: s, w: w, caller: player},
 		player, text)
 	if text == "" {

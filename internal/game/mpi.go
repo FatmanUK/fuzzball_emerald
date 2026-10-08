@@ -158,6 +158,17 @@ func (s *Server) evalMPI(w *world.World, descr int,
 		blessed, kind)
 }
 
+// evalMPIWith is evalMPI carrying upstream's match_cmdname and
+// match_args, which MPI reads back as {&cmd} and {&arg}. Every
+// message property goes through it; only an exit's pass anything.
+func (s *Server) evalMPIWith(w *world.World, descr int,
+	viewer, what ref.Ref, text, how string, blessed bool,
+	kind mpi.MesgType, ma mesgArgs) string {
+
+	return s.evalMPIAs(w, descr, viewer, what, text, how,
+		ma.cmd, ma.arg, blessed, kind)
+}
+
 // evalMPIAs is evalMPI with {&cmd} and {&arg} spelled out, which the
 // propqueues need: propqueue sets match_cmdname to the queue's own
 // name — "Depart", "Arrive", "#123" — and match_args to the empty

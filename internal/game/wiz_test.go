@@ -178,17 +178,49 @@ func TestPuppetRelayRespectsDark(t *testing.T) {
 		owner.Owner = owner.Ref
 		puppet := w.Create("spy", ref.TypeThing, owner.Ref)
 		puppet.Flags |= ref.Zombie | ref.Dark
-		if _, _, ok := puppetRelay(h.s, w, puppet.Ref); ok {
+		// Every call here is a *private* message, which is
+		// the half of upstream's condition these three rules
+		// sit behind.
+		if _, _, ok := puppetRelay(h.s, w, puppet.Ref,
+			true); ok {
 			t.Error("a dark puppet should not relay to a non-wizard owner")
 		}
 		puppet.Flags &^= ref.Dark
-		if _, _, ok := puppetRelay(h.s, w, puppet.Ref); !ok {
+		if _, _, ok := puppetRelay(h.s, w, puppet.Ref,
+			true); !ok {
 			t.Error("a plain puppet should relay")
 		}
+
+		// A **public** message relays only when the puppet is
+		// somewhere other than its owner, because the owner
+		// has already heard the line itself. Both are at #0
+		// here, so it does not.
+		if _, _, ok := puppetRelay(h.s, w, puppet.Ref,
+			false); ok {
+			t.Error("a puppet beside its owner should " +
+				"not relay a public message")
+		}
+		elsewhere := w.Create("Attic", ref.TypeRoom,
+			owner.Ref)
+		if err := w.MoveTo(puppet.Ref,
+			elsewhere.Ref); err != nil {
+			t.Error(err)
+		}
+		if _, _, ok := puppetRelay(h.s, w, puppet.Ref,
+			false); !ok {
+			t.Error("a puppet elsewhere should relay a " +
+				"public message")
+		}
+		if err := w.MoveTo(puppet.Ref,
+			owner.Location); err != nil {
+			t.Error(err)
+		}
+
 		// An owner who is themselves flagged ZOMBIE has opted
 		// out.
 		owner.Flags |= ref.Zombie
-		if _, _, ok := puppetRelay(h.s, w, puppet.Ref); ok {
+		if _, _, ok := puppetRelay(h.s, w, puppet.Ref,
+			true); ok {
 			t.Error("an owner flagged ZOMBIE should hear nothing")
 		}
 	}); err != nil {

@@ -13,16 +13,12 @@ func init() {
 		return env.Host.TypeName(obj), nil
 	})
 
-	// {name} renders a player as "*Name"; {fullname} always gives
-	// the stored name, which for a player includes nothing extra
-	// but for anything else is the same string.
-	register("FULLNAME", func(env *Env, _ *Func, args []string) (string, error) {
-		obj := env.lookup(args[0])
-		if !env.Host.Valid(obj) {
-			return "#NOTHING#", nil
-		}
-		return env.Host.Name(obj), nil
-	})
+	// {fullname} is {name} with the exit truncation taken out,
+	// and upstream says so: mfn_fullname (mfuns2.c:694) is a
+	// copy/paste of mfn_name with a TODO on top asking for
+	// exactly the shared helper below. Its abort still says
+	// "NAME", which is part of the copy/paste and is kept.
+	register("FULLNAME", objectName(false))
 
 	register("REF", func(env *Env, _ *Func, args []string) (string, error) {
 		return "#" + itoa(int(env.lookup(args[0]))), nil
@@ -329,4 +325,42 @@ func neighbours(env *Env, a, b Ref) bool {
 	}
 	locA, locB := env.Host.Location(a), env.Host.Location(b)
 	return locA == b || locB == a || (locA == locB && locA != nothing)
+}
+
+// objectName is mfn_name (mfuns2.c:638) and mfn_fullname (:694),
+// which differ in one line: NAME cuts an **exit's** name at the first
+// ';', so a multi-alias action reports only the name it is known by.
+// Nothing here truncated, so §4.2's multi-action -- whose whole
+// point is one action with several names -- reported the whole alias
+// list. Upstream's own comment on mfn_fullname says it is a
+// copy/paste of mfn_name with that line removed, and asks for exactly
+// this helper; its abort still says "NAME", which is part of the
+// copy/paste and is kept.
+//
+// **Upstream's three sentinel branches are dead code.** Both
+// functions test for NOTHING, AMBIGUOUS and HOME and answer
+// "#NOTHING#", "#AMBIGUOUS#" and "#HOME#" -- but mesg_dbref_raw ends
+// with `if (!OkObj(obj)) obj = UNKNOWN;` and OkObj requires `d >= 0`
+// (`db.h:440`), so all three have already become UNKNOWN and "Match
+// failed." is the only answer any of them can give. FULLNAME used to
+// return "#NOTHING#" here, which is the one upstream cannot produce.
+func objectName(truncateExit bool) impl {
+	return func(env *Env, _ *Func, args []string) (string,
+		error) {
+
+		obj := env.lookup(args[0])
+		if !env.Host.Valid(obj) {
+			return "", errf("NAME", "Match failed.")
+		}
+		name := env.Host.Name(obj)
+		// Asked through TypeName rather than a new Host
+		// method: {type} already needs the same answer, and
+		// upstream's word for an exit is "Exit".
+		if truncateExit && env.Host.TypeName(obj) == "Exit" {
+			if i := strings.IndexByte(name, ';'); i >= 0 {
+				name = name[:i]
+			}
+		}
+		return name, nil
+	}
 }

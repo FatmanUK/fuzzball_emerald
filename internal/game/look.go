@@ -163,7 +163,7 @@ func (s *Server) lookDetail(c *ctx, target ref.Ref,
 		// @bless on a trap makes its MPI wizardly, like any
 		// other message property.
 		s.execOrNotify(c.w, c.d.ID, c.who, thing, v.Str,
-			"(@detail)", v.Blessed)
+			"(@detail)", v.Blessed, mesgArgs{})
 	case ambiguous:
 		c.tell("I don't know which '%s' you mean!", typed)
 	case detail != "":
@@ -278,7 +278,8 @@ func (s *Server) lookSimple(w *world.World, descr int,
 		s.send(w, who, w.Tune.String("description_default"))
 		return
 	}
-	s.execOrNotifyProp(w, descr, who, target, propDesc, "(@Desc)")
+	s.execOrNotifyProp(w, descr, who, target, propDesc,
+		"(@Desc)", mesgArgs{})
 }
 
 // lookRoom is look_room: the name, the description, the success
@@ -300,15 +301,15 @@ func (s *Server) lookRoom(w *world.World, descr int,
 	if o.Type() == ref.TypeRoom {
 		if hasMesg(w, loc, propDesc) {
 			s.execOrNotifyProp(w, descr, who, loc,
-				propDesc, "(@Desc)")
+				propDesc, "(@Desc)", mesgArgs{})
 		}
 		// can_doit with no default failure message, which is
 		// how a room's @succ and @ofail come to show on a
 		// plain look.
-		s.canDoit(w, descr, who, loc, "")
+		s.canDoit(w, descr, who, loc, "", mesgArgs{})
 	} else if hasMesg(w, loc, propIDesc) {
 		s.execOrNotifyProp(w, descr, who, loc, propIDesc,
-			"(@Idesc)")
+			"(@Idesc)", mesgArgs{})
 	}
 
 	w.Used(loc)
