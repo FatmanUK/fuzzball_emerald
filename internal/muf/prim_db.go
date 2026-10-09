@@ -246,7 +246,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, f.Push(Bool(controls(h, who, obj)))
+		// prim_controls (p_db.c:1120) opens with a
+		// CHECKREMOTE that this does not have. It is left for
+		// the sweep that adds the other 32: ProgUID is a
+		// wizard in every fixture this suite can build, so
+		// checkRemote never bites here, and shipping it
+		// untested is worse than recording it.
+		return nil, f.Push(Bool(h.Controls(who, obj)))
 	})
 
 	// The three matching primitives strip ANSI from the name
@@ -568,22 +574,6 @@ func refToRef(fn func(Host, ref.Ref) ref.Ref) primFunc {
 		}
 		return nil, f.Push(Obj(fn(h, obj)))
 	}
-}
-
-// controls reports whether one object may modify another, which is
-// ownership or an unquelled wizard bit.
-func controls(h Host, who, what ref.Ref) bool {
-	if !h.Valid(who) || !h.Valid(what) {
-		return false
-	}
-	if h.Flags(who).IsWizard() {
-		return true
-	}
-	owner := who
-	if h.ObjType(who) != ref.TypePlayer {
-		owner = h.Owner(who)
-	}
-	return who == what || h.Owner(what) == owner
 }
 
 // Environment-walking property lookups, reflists, and the remaining

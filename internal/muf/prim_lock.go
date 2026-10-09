@@ -80,7 +80,7 @@ func (f *Frame) checkRemote(h Host, x ref.Ref) error {
 		x == loc || x == f.Caller {
 		return nil
 	}
-	if controls(h, f.progUID(h), x) {
+	if h.Controls(f.progUID(h), x) {
 		return nil
 	}
 	return errf("Mucker Level 2 required to get remote info.")
