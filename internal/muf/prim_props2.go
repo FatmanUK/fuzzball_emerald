@@ -14,11 +14,10 @@ import (
 // more plumbing than a primitive port on its own, and deferred rather
 // than rushed.
 //
-// None of these primitives check prop_read_perms/prop_write_perms —
-// Emerald's property primitives have no read/write permission model
-// at all yet (SETPROP and GETPROP do not either), so adding one only
-// here would make these primitives stricter than the rest of the
-// property surface.
+// BLESSED? takes prop_read_perms like every other property reader.
+// BLESSPROP and UNBLESSPROP take **no** write test: upstream gates
+// them on mlev 4 alone (p_props.c:1610, :1659), which is stricter
+// than prop_write_perms would be anyway.
 func init() {
 	register("BLESSPROP", blessEdit(true))
 	register("UNBLESSPROP", blessEdit(false))
@@ -36,6 +35,9 @@ func init() {
 		}
 		if path == "" {
 			return nil, errf("Null string not allowed. (2)")
+		}
+		if !f.propReadPerms(h, obj, path) {
+			return nil, propDenied()
 		}
 		return nil, f.Push(Bool(h.IsPropBlessed(obj, path)))
 	})

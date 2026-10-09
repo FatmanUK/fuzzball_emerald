@@ -338,7 +338,7 @@ func init() {
 		return nil, f.Push(Str(v.Str))
 	})
 	register("GETPROPVAL", func(f *Frame) (*Result, error) {
-		v, err := f.getProp()
+		v, err := f.getPropChecked()
 		if err != nil {
 			return nil, err
 		}
@@ -348,7 +348,7 @@ func init() {
 		return nil, f.Push(Int(v.Num))
 	})
 	register("GETPROPFVAL", func(f *Frame) (*Result, error) {
-		v, err := f.getProp()
+		v, err := f.getPropChecked()
 		if err != nil {
 			return nil, err
 		}
@@ -358,7 +358,7 @@ func init() {
 		return nil, f.Push(Float(v.Float))
 	})
 	register("GETPROP", func(f *Frame) (*Result, error) {
-		v, err := f.getProp()
+		v, err := f.getPropChecked()
 		if err != nil {
 			return nil, err
 		}
@@ -373,6 +373,21 @@ func init() {
 		path, obj, h, err := f.propTarget()
 		if err != nil {
 			return nil, err
+		}
+		// Three guards in upstream's own order
+		// (p_props.c:902-920): its own ownership gate, then
+		// prop_write_perms, then the name's validity -- which
+		// is last, so a name that is both unwritable and
+		// illegal is reported as the first.
+		if f.MLevel() < 2 &&
+			!f.permissions(h, f.progUID(h), obj) {
+			return nil, propDenied()
+		}
+		if !f.propWritePerms(h, obj, path) {
+			return nil, propDenied()
+		}
+		if !isValidPropName(path) {
+			return nil, errf("Illegal propname")
 		}
 		h.SetProp(obj, path, toProp(val))
 		return nil, nil
@@ -392,6 +407,20 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		if f.MLevel() < 2 &&
+			!f.permissions(h, f.progUID(h), obj) {
+			return nil, propDenied()
+		}
+		if !f.propWritePerms(h, obj, path) {
+			return nil, propDenied()
+		}
+		// prim_addprop checks for a carriage return rather
+		// than calling is_valid_propname, and says so
+		// differently (p_props.c:1035).
+		if strings.ContainsRune(path, '\r') {
+			return nil, errf(
+				"CRs not allowed in propname")
+		}
 		if str != "" {
 			h.SetProp(obj, path, props.Value{Type: props.String, Str: str})
 		} else {
@@ -404,6 +433,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		if !f.propWritePerms(h, obj, path) {
+			return nil, propDenied()
+		}
 		h.RemoveProp(obj, path)
 		return nil, nil
 	})
@@ -411,6 +443,9 @@ func init() {
 		path, obj, h, err := f.propTarget()
 		if err != nil {
 			return nil, err
+		}
+		if !f.propReadPerms(h, obj, path) {
+			return nil, propDenied()
 		}
 		return nil, f.Push(Bool(len(h.PropChildren(obj, path)) > 0))
 	})
@@ -457,6 +492,26 @@ func (f *Frame) propTarget() (string, ref.Ref, Host, error) {
 	}
 	obj, h, err := f.refAndHost()
 	return path, obj, h, err
+}
+
+// getPropChecked is getProp with prop_read_perms in front of it,
+// which is what GETPROPVAL, GETPROPFVAL and GETPROP have and
+// **GETPROPSTR does not**: prim_getpropstr (p_props.c:387) opens with
+// CHECKREMOTE and nothing else, alone among the four. Guarding the
+// shared helper would have made it stricter than upstream.
+func (f *Frame) getPropChecked() (props.Value, error) {
+	path, obj, h, err := f.propTarget()
+	if err != nil {
+		return props.Value{}, err
+	}
+	if !f.propReadPerms(h, obj, path) {
+		return props.Value{}, propDenied()
+	}
+	v, ok := h.GetProp(obj, path)
+	if !ok {
+		return props.Value{}, nil
+	}
+	return v, nil
 }
 
 // getProp reads a property, yielding the zero value when unset.
@@ -653,6 +708,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		if !f.propReadPerms(h, obj, path) {
+			return nil, propDenied()
+		}
 		list := readRefList(h, obj, path)
 		for i, r := range list {
 			if r == target {
@@ -672,6 +730,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		if !f.propWritePerms(h, obj, path) {
+			return nil, propDenied()
+		}
 		list := readRefList(h, obj, path)
 		for _, r := range list {
 			if r == target {
@@ -689,6 +750,9 @@ func init() {
 		path, obj, h, err := f.propTarget()
 		if err != nil {
 			return nil, err
+		}
+		if !f.propWritePerms(h, obj, path) {
+			return nil, propDenied()
 		}
 		v, _ := h.GetProp(obj, path)
 		h.SetProp(obj, path, props.Value{
