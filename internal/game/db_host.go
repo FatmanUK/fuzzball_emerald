@@ -126,23 +126,12 @@ func (h *mufHost) CopyObject(src ref.Ref, copyHidden bool) (ref.Ref, error) {
 // rebalancing.
 func copyProps(from, to *world.Object, copyHidden bool) {
 	from.Props.Walk(func(e props.Entry) bool {
-		if !copyHidden && isHiddenProp(e.Path) {
+		if !copyHidden && props.IsHidden(e.Path) {
 			return true
 		}
 		to.Props.Set(e.Path, e.Value)
 		return true
 	})
-}
-
-// isHiddenProp is upstream's Prop_Hidden: any path segment starting
-// with '@'.
-func isHiddenProp(path string) bool {
-	for _, seg := range strings.Split(path, "/") {
-		if strings.HasPrefix(seg, "@") {
-			return true
-		}
-	}
-	return false
 }
 
 // SetProgramLines implements muf.Host for PROGRAM_SETLINES.

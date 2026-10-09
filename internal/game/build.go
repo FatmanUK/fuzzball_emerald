@@ -1182,7 +1182,7 @@ func (s *Server) clearProperties(w *world.World, target ref.Ref,
 // outside the "_/" propdir, which holds the message properties the
 // verbs write.
 func userOwnedProp(path string) bool {
-	if isHiddenProp(path) || propSegmentStartsWith(path, '~') {
+	if props.IsHidden(path) || props.IsSeeOnly(path) {
 		return false
 	}
 	return !ascii.HasPrefix(path, "_/")

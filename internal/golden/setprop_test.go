@@ -67,6 +67,28 @@ var setPropScript = Script{
 	"@set me=@__sys__/x:y",
 	"@set me=@__sys__:y",
 
+	// Prop_System is `is_prop_prefix` (`fbstrings.c:1152`), which
+	// compares **bytes** and trims a leading '/' from both sides.
+	// internal/game had its own copy that was case-*insensitive*
+	// and did no trimming, so these two answered the wrong way
+	// round until the predicate moved into internal/props and the
+	// faithful version won.
+	//
+	// Upper case is therefore not a system property at all --
+	// just a hidden one, which a wizard may write.
+	"@set me=@__SYS__/upper:y",
+
+	// No "examine me=@**" here, though it would be the natural
+	// read-back: upstream lists the directory this created and
+	// this server lists nothing, even though it reported
+	// "Property set." That is a property-*listing* divergence
+	// rather than a Prop_System one, and it is recorded in the
+	// plan rather than chased here — both probes discriminate
+	// on their reply alone.
+
+	// ...and a leading slash does not escape the prefix.
+	"@set me=/@__sys__/slashed:y",
+
 	// Setting, reading back, and removing. An empty value removes
 	// and says so -- this server used to say "Property cleared."
 	"@set here=_str:a string",

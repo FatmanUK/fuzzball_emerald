@@ -30,36 +30,13 @@ func init() {
 // The three sigils are per *path segment*, not per path —
 // "_stuff/@x" is hidden — which is Prop_Check.
 func propRestricted(path string, wizard bool) bool {
-	if isSystemProp(path) {
+	if props.IsSystem(path) {
 		return true
 	}
 	if wizard {
 		return false
 	}
-	return isHiddenProp(path) || propSegmentStartsWith(path, '~')
-}
-
-// isSystemProp is upstream's Prop_System: anything under "@__sys__".
-func isSystemProp(path string) bool {
-	if !ascii.HasPrefix(path, "@__sys__") {
-		return false
-	}
-	rest := path[len("@__sys__"):]
-	return rest == "" || rest[0] == '/'
-}
-
-// propSegmentStartsWith is Prop_Check: whether the path or any
-// segment after a '/' begins with the given character.
-func propSegmentStartsWith(path string, c byte) bool {
-	if len(path) > 0 && path[0] == c {
-		return true
-	}
-	for i := 0; i+1 < len(path); i++ {
-		if path[i] == '/' && path[i+1] == c {
-			return true
-		}
-	}
-	return false
+	return props.IsHidden(path) || props.IsSeeOnly(path)
 }
 
 // cmdPropset is do_propset: write any property, in any of six types.
@@ -260,8 +237,8 @@ func (s *Server) cmdRegister(c *ctx) {
 	path := propdir + "/" + name
 	wizard := isWizard(c.w, ownerOf(c.w, c.who))
 	if !wizard && (target != ownerOf(c.w, c.who) ||
-		propSegmentStartsWith(path, '~') ||
-		isHiddenProp(path)) {
+		props.IsSeeOnly(path) ||
+		props.IsHidden(path)) {
 		c.tell("Permission denied. (You can't register an " +
 			"object there.)")
 		return
@@ -383,7 +360,7 @@ func (s *Server) listRegistrations(c *ctx, target ref.Ref,
 	if o != nil {
 		for _, child := range o.Props.Children(dir) {
 			path := dir + "/" + child
-			if isHiddenProp(path) && !wizard {
+			if props.IsHidden(path) && !wizard {
 				continue
 			}
 			label := child

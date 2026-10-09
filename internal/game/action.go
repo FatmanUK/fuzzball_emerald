@@ -195,7 +195,7 @@ func (s *Server) cmdClone(c *ctx) {
 	clone.Home = c.w.Get(c.who).Location
 	wizard := isWizard(c.w, ownerOf(c.w, c.who))
 	for _, e := range o.Props.All() {
-		if !wizard && isHiddenProp(e.Path) {
+		if !wizard && props.IsHidden(e.Path) {
 			continue
 		}
 		clone.Props.Set(e.Path, e.Value)
@@ -423,7 +423,7 @@ func (s *Server) blessProps(c *ctx, bless bool) {
 	o := c.w.Get(victim)
 	n := 0
 	for _, e := range o.Props.All() {
-		if isSystemProp(e.Path) {
+		if props.IsSystem(e.Path) {
 			continue
 		}
 		if !blessMatches(pattern, e.Path) {
