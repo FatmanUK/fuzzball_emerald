@@ -110,6 +110,22 @@ func (h *mufHost) ParentLoopCheck(source, dest ref.Ref) bool {
 	return parentLoopCheck(h.w, source, dest)
 }
 
+// ExitLoopCheck implements muf.Host for SETLINK and SETLINKS_ARRAY.
+// The port is internal/game's own, reached from @link, @open's second
+// argument and @relink's dry run; neither MUF primitive could see it,
+// so a program could build the ring of exits @link refuses.
+func (h *mufHost) ExitLoopCheck(from, dest ref.Ref) bool {
+	return exitLoopCheck(h.w, from, dest)
+}
+
+// LinkLockPasses implements muf.Host for prog_can_link_to, which is
+// the only caller: test_lock with a **true** default, so an object
+// with no link lock is publicly linkable as soon as it is Linkable.
+func (h *mufHost) LinkLockPasses(who, obj ref.Ref) bool {
+	return h.s.lockPasses(h.w, -1, 1, who, obj, propLinkLock,
+		true)
+}
+
 // CanTeleportTo implements muf.Host for MOVETO's room branch. The
 // descriptor is accepted and discarded: upstream's can_teleport_to
 // has none, evaluating the link lock with NOTHING.

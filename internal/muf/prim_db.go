@@ -1534,6 +1534,22 @@ func init() {
 		return nil, nil
 	})
 
+	// SETLINK is prim_setlink (`p_db.c:1745`), and fifteen lines
+	// stood in for sixty. It popped two refs, checked the
+	// destination existed, and stored it -- no permission test,
+	// no type rules, no loop check, and none of the five
+	// refusals.
+	//
+	// **Three of upstream's own branches are dead** and are
+	// reproduced as dead, with the reasoning rather than the
+	// code: `valid_object(oper1)` runs before anything looks at
+	// the destination, and it is `ObjExists && !GARBAGE` -- so
+	// NOTHING, HOME and NIL all abort with "Invalid object. (2)"
+	// first. That makes the documented "a target of NOTHING
+	// unlinks the given exit or room source" unreachable, and
+	// makes `prog_can_link_to`'s HOME and NIL clauses unreachable
+	// *from here* -- they are live for SETLINKS_ARRAY, which
+	// tests for the two before validating.
 	register("SETLINK", func(f *Frame) (*Result, error) {
 		dest, err := f.popRef()
 		if err != nil {
@@ -1543,29 +1559,136 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// SETLINK needs a real object; there is no unlinking
-		// through it.
+		// The destination is validated first, and its index
+		// is the higher of the two.
 		if !h.Valid(dest) {
 			return nil, errf("Invalid object. (2)")
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object. (1)")
+		}
+		if h.ObjType(obj) == ref.TypeProgram {
+			return nil, errf("Program objects are not " +
+				"linkable. (1)")
+		}
+		uid := f.progUID(h)
+		if !f.progCanLinkTo(h, uid, h.ObjType(obj), dest) {
+			return nil, errf("Can't link source to " +
+				"destination.")
+		}
+		if f.MLevel() < 4 && !f.permissions(h, uid, obj) {
+			return nil, errf("Permission denied.")
+		}
+		switch h.ObjType(obj) {
+		case ref.TypeExit:
+			// An exit linked to NIL counts as unlinked,
+			// which is the one way to relink one.
+			if l := h.Links(obj); len(l) != 0 &&
+				l[0] != ref.Nil {
+				return nil, errf("Exit is already " +
+					"linked.")
+			}
+			if h.ExitLoopCheck(obj, dest) {
+				return nil, errf("Link would cause " +
+					"a loop.")
+			}
+		case ref.TypePlayer:
+			if dest == ref.Home {
+				return nil, errf("Cannot link " +
+					"player to HOME.")
+			}
+		case ref.TypeThing:
+			if dest == ref.Home {
+				return nil, errf("Cannot link " +
+					"thing to HOME.")
+			}
+			if h.ParentLoopCheck(obj, dest) {
+				return nil, errf("That would cause " +
+					"a parent paradox.")
+			}
 		}
 		h.SetLinks(obj, []ref.Ref{dest})
 		return nil, nil
 	})
+
+	// SETLINKS_ARRAY is prim_setlinks_array (`p_db.c:3848`), and
+	// it is not SETLINK with a list: it validates the whole array
+	// before writing any of it, allows HOME and NIL where SETLINK
+	// cannot reach them, unlinks on an empty array, and carries
+	// four refusals of its own.
+	//
+	// **Its two argument indices are swapped**: the source ref is
+	// "(2)" and the array is "(1)", the opposite of their stack
+	// order and of SETLINK's. That is upstream's and programs
+	// match on it.
 	register("SETLINKS_ARRAY", func(f *Frame) (*Result, error) {
-		a, err := f.popArray()
+		a, err := f.popArrayIndexed(1)
 		if err != nil {
 			return nil, err
 		}
-		obj, h, err := f.refAndHost()
+		obj, err := f.popRefIndexed(2)
 		if err != nil {
 			return nil, err
 		}
-		var dests []ref.Ref
+		h, err := f.needHost()
+		if err != nil {
+			return nil, err
+		}
+		dests := make([]ref.Ref, 0, a.Len())
 		for _, v := range a.Values() {
 			if v.Type != TypeObject {
-				return nil, errf("Argument not an array of dbrefs.")
+				return nil, errf("Argument not an " +
+					"array of dbrefs. (2)")
 			}
 			dests = append(dests, v.Ref)
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object. (1)")
+		}
+		uid := f.progUID(h)
+		if f.MLevel() < 4 && !f.permissions(h, uid, obj) {
+			return nil, errf("Permission denied. (1)")
+		}
+		if len(dests) >= maxLinks {
+			return nil, errf("Too many destinations. (2)")
+		}
+		typ := h.ObjType(obj)
+		if len(dests) > 1 && typ != ref.TypeExit {
+			return nil, errf("Only exits may be linked " +
+				"to multiple destinations.")
+		}
+		// One player, room or program among an exit's
+		// destinations: several things may be fetched by one
+		// exit, but it cannot walk you into two places.
+		foundPRP := false
+		for _, where := range dests {
+			if where != ref.Home && where != ref.Nil &&
+				!h.Valid(where) {
+				return nil, errf(
+					"Invalid object. (2)")
+			}
+			if !f.progCanLinkTo(h, uid, typ, where) {
+				return nil, errf("Can't link " +
+					"source to destination. (2)")
+			}
+			if err := checkLinkDest(h, typ, obj, where,
+				&foundPRP); err != nil {
+				return nil, err
+			}
+		}
+		// An exit's priority is reset whether or not anything
+		// is being linked, which is not SETLINK's rule: there
+		// the reset belongs to the unlink branch alone.
+		if typ == ref.TypeExit {
+			if fl := h.Flags(obj); fl.RawMLevel() != 0 {
+				h.SetFlags(obj,
+					fl&^(ref.Mucker|ref.SMucker))
+			}
+		}
+		if len(dests) == 0 && typ != ref.TypeExit &&
+			typ != ref.TypeRoom {
+			return nil, errf("Only exits and rooms may " +
+				"be linked to nothing.")
 		}
 		h.SetLinks(obj, dests)
 		return nil, nil
@@ -1865,4 +1988,153 @@ func splitNameAndPassword(s string) (name, pass string) {
 		i++
 	}
 	return name, s[i:]
+}
+
+// maxLinks is upstream's MAX_LINKS, how many destinations one exit
+// may carry.
+const maxLinks = 50
+
+// progCanLinkTo is `prog_can_link_to` (`p_db.c:1680`), which was
+// ported nowhere — so MUF could link anything to anything.
+//
+// It is **not** `can_link_to`, the command side's rule, and upstream
+// keeps them apart with no comment saying why. The type rules are the
+// same four, but the permission tail is different: a mucker level
+// above 3 passes outright, otherwise ownership of the *destination*,
+// otherwise the destination being `Linkable` and its link lock
+// passing. `can_link_to` has no mucker level to consult and asks
+// about the linker instead.
+func (f *Frame) progCanLinkTo(h Host, who ref.Ref,
+	whatType ref.ObjType, where ref.Ref) bool {
+
+	if where == ref.Home {
+		return true
+	}
+	if whatType == ref.TypeExit && where == ref.Nil {
+		return true
+	}
+	if !h.Valid(where) {
+		return false
+	}
+	switch whatType {
+	case ref.TypePlayer:
+		if h.ObjType(where) != ref.TypeRoom {
+			return false
+		}
+	case ref.TypeRoom:
+		if t := h.ObjType(where); t != ref.TypeThing &&
+			t != ref.TypeRoom {
+			return false
+		}
+	case ref.TypeThing:
+		if t := h.ObjType(where); t == ref.TypeExit ||
+			t == ref.TypeProgram {
+			return false
+		}
+	case ref.TypeProgram:
+		return false
+	}
+	if f.MLevel() > 3 || f.permissions(h, who, where) {
+		return true
+	}
+	return linkable(h, where) && h.LinkLockPasses(who, where)
+}
+
+// linkable is `Linkable` (`db.h:576`): ABODE on a room **or a
+// thing**, LINK_OK on anything else, and HOME always.
+//
+// Not the other way about, which is the easy mistake —
+// `can_teleport_to` tests the pair the other way round (`LINK_OK ||
+// (not a thing && ABODE)`), so the two predicates disagree about a
+// thing and about a room.
+func linkable(h Host, where ref.Ref) bool {
+	if where == ref.Home {
+		return true
+	}
+	if t := h.ObjType(where); t == ref.TypeRoom ||
+		t == ref.TypeThing {
+		return h.Flags(where)&ref.Abode != 0
+	}
+	return h.Flags(where)&ref.LinkOK != 0
+}
+
+// checkLinkDest is the per-type half of SETLINKS_ARRAY's validation
+// loop, which runs once per destination before anything is written.
+//
+// foundPRP carries upstream's own flag across the loop: an exit may
+// be linked to several *things*, because each one is fetched, but to
+// only one player, room or program, because walking somewhere is not
+// something that can happen twice.
+func checkLinkDest(h Host, typ ref.ObjType, obj, where ref.Ref,
+	foundPRP *bool) error {
+
+	switch typ {
+	case ref.TypeExit:
+		if where == ref.Nil {
+			return nil
+		}
+		switch h.ObjType(where) {
+		case ref.TypePlayer, ref.TypeRoom, ref.TypeProgram:
+			if *foundPRP {
+				return errf("Only one player, " +
+					"room, or program " +
+					"destination allowed.")
+			}
+			*foundPRP = true
+		case ref.TypeThing:
+		case ref.TypeExit:
+			if h.ExitLoopCheck(obj, where) {
+				return errf("Destination would " +
+					"create loop.")
+			}
+		default:
+			return errf("Invalid object. (2)")
+		}
+	case ref.TypePlayer:
+		if where == ref.Home {
+			return errf("Cannot link player to HOME.")
+		}
+	case ref.TypeThing:
+		if where == ref.Home {
+			return errf("Cannot link thing to HOME.")
+		}
+		if h.ParentLoopCheck(obj, where) {
+			// "case" rather than "cause": upstream's
+			// typo, and a program matching on the line
+			// sees it.
+			return errf("That would case a parent " +
+				"paradox.")
+		}
+	case ref.TypeRoom:
+	default:
+		return errf("Invalid object. (1)")
+	}
+	return nil
+}
+
+// popArrayIndexed and popRefIndexed are popArray and popRef with the
+// argument index upstream names in the message. SETLINKS_ARRAY is the
+// only caller, and the indices it uses are the opposite way round
+// from the stack order.
+func (f *Frame) popArrayIndexed(n int) (*Array, error) {
+	v, err := f.Pop()
+	if err != nil {
+		return nil, err
+	}
+	if v.Type != TypeArray || v.Array == nil {
+		return nil, errf("Non-array argument. (%d)", n)
+	}
+	return v.Array, nil
+}
+
+func (f *Frame) popRefIndexed(n int) (ref.Ref, error) {
+	v, err := f.Pop()
+	if err != nil {
+		return ref.Nothing, err
+	}
+	if v.Type != TypeObject {
+		return ref.Nothing, errf("Non-object argument. (%d)",
+			n)
+	}
+	return v.Ref, nil
 }

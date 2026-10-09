@@ -52,6 +52,18 @@ type Host interface {
 	// ParentLoopCheck is move.c's parent_loop_check, which is two
 	// walks rather than one: locations, and getparent.
 	ParentLoopCheck(source, dest ref.Ref) bool
+	// ExitLoopCheck is predicates.c:289's exit_loop_check, a full
+	// recursive walk of an exit's destinations. Upstream runs it
+	// in all three places an exit's destination is set, each with
+	// its own wording; SETLINK and SETLINKS_ARRAY are two of them
+	// and neither reached it.
+	ExitLoopCheck(from, dest ref.Ref) bool
+	// LinkLockPasses evaluates the link lock (`@/lnk`) on obj
+	// against who, defaulting to **true** when none is set --
+	// test_lock rather than test_lock_false_default, which is
+	// what prog_can_link_to asks for. Note that this is the
+	// opposite default from ForceLockPasses and ReadLockPasses.
+	LinkLockPasses(who, obj ref.Ref) bool
 	// CanTeleportTo is predicates.c:89's can_teleport_to, which
 	// MOVETO's room branch consults where its player branch
 	// demands outright control.

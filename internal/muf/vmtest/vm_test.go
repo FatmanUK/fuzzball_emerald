@@ -262,6 +262,14 @@ func (h *fakeHost) ParentLoopCheck(ref.Ref, ref.Ref) bool {
 	return false
 }
 
+func (h *fakeHost) ExitLoopCheck(ref.Ref, ref.Ref) bool {
+	return false
+}
+
+func (h *fakeHost) LinkLockPasses(ref.Ref, ref.Ref) bool {
+	return true
+}
+
 func (h *fakeHost) CanTeleportTo(int, ref.Ref, ref.Ref) bool {
 	return false
 }
