@@ -110,11 +110,13 @@ func (h *mufHost) ParentLoopCheck(source, dest ref.Ref) bool {
 	return parentLoopCheck(h.w, source, dest)
 }
 
-// CanTeleportTo implements muf.Host for MOVETO's room branch.
-func (h *mufHost) CanTeleportTo(descr int, who,
+// CanTeleportTo implements muf.Host for MOVETO's room branch. The
+// descriptor is accepted and discarded: upstream's can_teleport_to
+// has none, evaluating the link lock with NOTHING.
+func (h *mufHost) CanTeleportTo(_ int, who,
 	where ref.Ref) bool {
 
-	return h.s.canTeleportToFor(h.w, descr, who, where)
+	return h.s.canTeleportToFor(h.w, who, where)
 }
 
 // TuneNamesObject implements muf.Host for RECYCLE's @tune guard,

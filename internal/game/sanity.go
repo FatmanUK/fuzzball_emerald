@@ -25,7 +25,9 @@ func (s *Server) cmdSanity(c *ctx) {
 	found := 0
 	c.w.Check(c.send, func(v world.Violation) {
 		found++
-		c.tell("Object \"%s\" %s!", unparse(c.w, ref.Nothing, v.Ref), v.Problem)
+		c.tell("Object \"%s\" %s!",
+			s.unparse(c.w, ref.Nothing, v.Ref),
+			v.Problem)
 	})
 	c.tell("Done.")
 	s.statusLog().Info("sanity check", "violations", found,
@@ -42,7 +44,9 @@ func (s *Server) cmdSanfix(c *ctx) {
 		c.send(line)
 	}
 	for _, v := range unfixed {
-		c.tell("Object %q %s!", unparse(c.w, ref.Nothing, v.Ref), v.Problem)
+		c.tell("Object %q %s!",
+			s.unparse(c.w, ref.Nothing, v.Ref),
+			v.Problem)
 	}
 
 	// The repair log goes to the server's log as well as to the
@@ -130,8 +134,9 @@ func (s *Server) cmdSanchange(c *ctx) {
 		"by", c.who.String(), "byName", nameOf(c.w, c.who))
 
 	c.tell("## Setting #%d's %s %s", int32(target), label,
-		unparse(c.w, ref.Nothing, value))
-	c.tell("## Old value was %s", unparse(c.w, ref.Nothing, was))
+		s.unparse(c.w, ref.Nothing, value))
+	c.tell("## Old value was %s",
+		s.unparse(c.w, ref.Nothing, was))
 }
 
 // sanchangeHelp prints the field list.
@@ -230,32 +235,33 @@ func (s *Server) cmdExamineSanity(c *ctx) {
 	if o == nil || o.Type() == ref.TypeGarbage {
 		c.tell("Object:         *GARBAGE* %s", d)
 	} else {
-		c.tell("Object:         %s", sanName(c.w, d))
+		c.tell("Object:         %s", s.sanName(c.w, d))
 	}
 	if o == nil {
 		c.tell("Done.")
 		return
 	}
 
-	c.tell("  Owner:          %s", sanName(c.w, o.Owner))
-	c.tell("  Location:       %s", sanName(c.w, o.Location))
-	c.tell("  Contents Start: %s", sanName(c.w, o.Contents))
-	c.tell("  Exits Start:    %s", sanName(c.w, o.Exits))
-	c.tell("  Next:           %s", sanName(c.w, o.Next))
+	c.tell("  Owner:          %s", s.sanName(c.w, o.Owner))
+	c.tell("  Location:       %s", s.sanName(c.w, o.Location))
+	c.tell("  Contents Start: %s", s.sanName(c.w, o.Contents))
+	c.tell("  Exits Start:    %s", s.sanName(c.w, o.Exits))
+	c.tell("  Next:           %s", s.sanName(c.w, o.Next))
 
 	switch o.Type() {
 	case ref.TypeThing:
-		c.tell("  Home:           %s", sanName(c.w, o.Home))
+		c.tell("  Home:           %s", s.sanName(c.w, o.Home))
 		c.tell("  Value:          %d", valueOf(c.w, d))
 	case ref.TypeRoom:
-		c.tell("  Drop-to:        %s", sanName(c.w, o.Dropto))
+		c.tell("  Drop-to:        %s",
+			s.sanName(c.w, o.Dropto))
 	case ref.TypePlayer:
-		c.tell("  Home:           %s", sanName(c.w, o.Home))
+		c.tell("  Home:           %s", s.sanName(c.w, o.Home))
 		c.tell("  Pennies:        %d", valueOf(c.w, d))
 	case ref.TypeExit:
 		c.tell("  Links:")
 		for _, dest := range o.Dest {
-			c.tell("    %s", sanName(c.w, dest))
+			c.tell("    %s", s.sanName(c.w, dest))
 		}
 	}
 
@@ -265,15 +271,15 @@ func (s *Server) cmdExamineSanity(c *ctx) {
 	c.w.Each(func(other *world.Object) bool {
 		if other.Contents == d {
 			c.tell("  By contents field: %s",
-				sanName(c.w, other.Ref))
+				s.sanName(c.w, other.Ref))
 		}
 		if other.Exits == d {
 			c.tell("  By exits field:    %s",
-				sanName(c.w, other.Ref))
+				s.sanName(c.w, other.Ref))
 		}
 		if other.Next == d {
 			c.tell("  By next field:     %s",
-				sanName(c.w, other.Ref))
+				s.sanName(c.w, other.Ref))
 		}
 		return true
 	})
@@ -283,8 +289,10 @@ func (s *Server) cmdExamineSanity(c *ctx) {
 // sanName unparses a ref with no viewer, which is what the sanity
 // commands do: SanPrintObject passes NOTHING as the player, so the
 // flags and the dbref always show whoever is looking.
-func sanName(w *world.World, r ref.Ref) string {
-	return unparse(w, ref.Nothing, r)
+func (s *Server) sanName(w *world.World,
+	r ref.Ref) string {
+
+	return s.unparse(w, ref.Nothing, r)
 }
 
 // cmdDebug is do_debug (wiz.c:1309), whose only option is "display

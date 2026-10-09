@@ -1613,13 +1613,17 @@ flags. `unparse_object`'s first line is `player = OWNER(player)`,
 commented "Handle ZOMBIE case" (`db.c:2232`): the test is made on
 whoever **owns** the viewer, so a puppet sees what its owner sees.
 
-**Three of `unparse_object`'s clauses are still missing**, and are
-left because porting them means a lock evaluation and so making
-`unparse` a method at fifty-odd call sites: a **STICKY viewer** sees
-only names whatever else is true; `can_see_flags` is
-`can_teleport_to` rather than the wizardry-or-ownership test here;
-and a non-player target also shows its flags to anyone who
-`controls_link`s it, or when it is CHOWN_OK.
+**The other three clauses are ported now**, and `unparse` is a
+method on `*Server` at fifty-odd call sites because of it: a
+**STICKY viewer** sees only names whatever else is true;
+`can_see_flags` is `can_teleport_to`, not the wizardry-or-ownership
+test that stood in for it; and a non-player target also shows its
+flags to anyone who `controls_link`s it, or when it is CHOWN_OK. So a
+mortal sees the dbref of anything marked LINK_OK or CHOWN_OK. The
+citation here used to say `db.c:2232`; it is `db.c:1428`.
+
+It could not be *tested* until the ownership lock was read, because
+nothing else gave a non-owner a way to control an object.
 
 ### `_/oecho` was written, displayed, and read nowhere
 

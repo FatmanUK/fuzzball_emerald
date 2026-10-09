@@ -602,8 +602,8 @@ func nameOf(w *world.World, r ref.Ref) string {
 	return "<nothing>"
 }
 
-// unparse renders an object the way @examine and wizard output do:
-// the name, followed by its dbref when the viewer may see it.
+// unparse is `unparse_object` (`db.c:1428`): an object's name,
+// followed by its dbref and flags when the viewer may see them.
 //
 // The virtual refs render as their names rather than as numbers,
 // because they are what a link or a location field says when it
@@ -612,7 +612,31 @@ func nameOf(w *world.World, r ref.Ref) string {
 //
 // A viewer of ref.Nothing is the sanity checker rather than a person,
 // and sees everything: there is nobody to keep a secret from.
-func unparse(w *world.World, viewer, target ref.Ref) string {
+//
+// **Three of upstream's clauses were missing**, and what stood in
+// their place was an invented wizard-or-owner test. The real
+// condition has four parts and no wizardry of its own:
+//
+//   - a **STICKY viewer** sees only names, whatever else is true. On
+//     a player STICKY is "goes home when dropped" for their things;
+//     here it doubles as a per-player switch for a quieter display,
+//     which reads like an accident of flag reuse and is upstream's.
+//   - `can_see_flags`, which is `can_teleport_to` — control of the
+//     target, *or* its link lock passing and either LINK_OK or, for
+//     anything that is not a thing, ABODE. Wizardry and ownership
+//     arrive through `controls` inside it.
+//   - for a **non-player** target, `controls_link`: control of what
+//     it points at, which for an exit is any of its destinations or
+//     the owner of its location.
+//   - or the target being **CHOWN_OK**, which is how a world
+//     publishes an object's dbref to everybody.
+//
+// So a mortal sees the dbref of anything marked LINK_OK or CHOWN_OK,
+// which this server showed to nobody but the owner. Porting it meant
+// a lock evaluation, which is why `unparse` is now a method.
+func (s *Server) unparse(w *world.World, viewer,
+	target ref.Ref) string {
+
 	switch target {
 	case ref.Nothing:
 		return "*NOTHING*"
@@ -628,7 +652,7 @@ func unparse(w *world.World, viewer, target ref.Ref) string {
 		return "*INVALID*"
 	}
 	// unparse_object's first line, commented "Handle ZOMBIE case"
-	// (`db.c:2232`): the test is made on whoever **owns** the
+	// (`db.c:1434`): the test is made on whoever **owns** the
 	// viewer, so a puppet sees what its owner sees. Without it a
 	// wizard's puppet reported bare names where the wizard would
 	// have seen dbrefs and flags, which is what §4.3's "z look"
@@ -637,18 +661,15 @@ func unparse(w *world.World, viewer, target ref.Ref) string {
 		viewer = w.OwnerOf(viewer)
 	}
 	v := w.Get(viewer)
-	// Three of upstream's clauses are still missing and are
-	// recorded in docs/upstream-coverage.md: a **STICKY viewer**
-	// sees only names whatever else is true, `can_see_flags` is
-	// `can_teleport_to` rather than wizardry-or-ownership, and a
-	// non-player target also shows its flags to anyone who
-	// `controls_link`s it or when it is CHOWN_OK. Porting them
-	// means a lock evaluation, so `unparse` would have to become
-	// a method on Server at fifty-odd call sites.
-	if viewer == ref.Nothing ||
-		v != nil && (v.Flags.IsWizard() ||
-			o.Owner == viewer || target == viewer) {
-		return o.Name + "(" + target.String() + o.Flags.Unparse() + ")"
+	if viewer == ref.Nothing || v != nil &&
+		v.Flags&ref.Sticky == 0 &&
+		(s.canSeeFlagsFor(w, viewer, target) ||
+			o.Type() != ref.TypePlayer &&
+				(s.controlsLink(w, viewer, target) ||
+					o.Flags&ref.ChownOK != 0)) {
+
+		return o.Name + "(" + target.String() +
+			o.Flags.Unparse() + ")"
 	}
 	return o.Name
 }

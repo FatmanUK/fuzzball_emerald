@@ -43,7 +43,7 @@ func (h *lockHost) Wizard(player ref.Ref) bool {
 // and wizard output): r's bare name, or "name(#dbref FLAGS)" when
 // viewer controls r or may otherwise see its flags.
 func (h *lockHost) Name(viewer, r ref.Ref) string {
-	return unparse(h.w, viewer, r)
+	return h.s.unparse(h.w, viewer, r)
 }
 
 func (h *lockHost) Valid(r ref.Ref) bool { return h.w.Valid(r) }

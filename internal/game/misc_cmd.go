@@ -77,7 +77,7 @@ func (s *Server) cmdTrace(c *ctx) {
 
 	for i := 0; (depth == 0 || i < depth) &&
 		thing != ref.Nothing; i++ {
-		c.send(unparse(c.w, c.who, thing))
+		c.send(s.unparse(c.w, c.who, thing))
 		o := c.w.Get(thing)
 		if o == nil {
 			break

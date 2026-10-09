@@ -94,7 +94,8 @@ func (s *Server) edit(c *ctx, program ref.Ref) {
 		c.w.Modified(c.who)
 	}
 
-	c.tell("Entering editor for %s.", unparse(c.w, c.who, program))
+	c.tell("Entering editor for %s.",
+		s.unparse(c.w, c.who, program))
 	s.listProgram(c, e, nil, false)
 }
 
@@ -669,7 +670,8 @@ func (s *Server) listPublics(c *ctx, e *editSession, arg []int, argc int) {
 	}
 	prog, ok := s.compileForEditor(c, program, src)
 	if !ok {
-		c.tell("Unable to compile %s.", unparse(c.w, c.who, program))
+		c.tell("Unable to compile %s.",
+			s.unparse(c.w, c.who, program))
 		return
 	}
 	c.tell("PUBLIC functions:")
@@ -809,7 +811,8 @@ func (s *Server) cmdProgram(c *ctx) {
 			c.send(err.Error())
 			return
 		}
-		c.tell("Program %s created.", unparse(c.w, c.who, program))
+		c.tell("Program %s created.",
+			s.unparse(c.w, c.who, program))
 		// register_object, on the *player* — create.c:434,
 		// not on #0 with a message of its own.
 		s.registerBuilt(c, rname, program)

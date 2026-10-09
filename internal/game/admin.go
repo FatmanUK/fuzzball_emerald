@@ -359,7 +359,7 @@ func (s *Server) tuneDisplay(c *ctx, pattern string, mlev int,
 func (s *Server) tuneValue(c *ctx, p *tune.Param) string {
 	v, _ := c.w.Tune.Get(p.Name)
 	if p.Type == tune.TypeDbref {
-		return unparse(c.w, c.who, v.Ref)
+		return s.unparse(c.w, c.who, v.Ref)
 	}
 	return p.Format(v)
 }
@@ -396,7 +396,7 @@ func (s *Server) cmdPs(c *ctx) {
 		}
 		c.tell("%5d %-16s %-6s %-20s %s",
 			p.pid, nameOf(c.w, p.player), p.state,
-			unparse(c.w, c.who, p.program), p.command)
+			s.unparse(c.w, c.who, p.program), p.command)
 		shown++
 	}
 	c.tell("%d process%s.", shown, pluralES(shown))

@@ -286,7 +286,7 @@ func (s *Server) registerObject(c *ctx, location ref.Ref,
 	if v, ok := c.w.GetProp(location, path); ok {
 		if prev, known := registeredRef(v); known {
 			c.tell("Used to be registered as %s: %s",
-				path, unparse(c.w, c.who, prev))
+				path, s.unparse(c.w, c.who, prev))
 		}
 	} else if object == ref.Nothing {
 		c.tell("Nothing to remove.")
@@ -299,14 +299,14 @@ func (s *Server) registerObject(c *ctx, location ref.Ref,
 			c.w.Modified(location)
 		}
 		c.tell("Registry entry on %s removed.",
-			unparse(c.w, c.who, location))
+			s.unparse(c.w, c.who, location))
 		return
 	}
 	c.w.SetProp(location, path,
 		props.Value{Type: props.Ref, Ref: object})
 	c.tell("Now registered as %s: %s on %s", path,
-		unparse(c.w, c.who, object),
-		unparse(c.w, c.who, location))
+		s.unparse(c.w, c.who, object),
+		s.unparse(c.w, c.who, location))
 }
 
 // validRegistryName is is_valid_propname (property.c:2642):
@@ -353,7 +353,7 @@ func (s *Server) listRegistrations(c *ctx, target ref.Ref,
 		dir = propdir + "/" + sub
 	}
 	c.tell("Registered objects on %s:",
-		unparse(c.w, c.who, target))
+		s.unparse(c.w, c.who, target))
 
 	wizard := isWizard(c.w, ownerOf(c.w, c.who))
 	o := c.w.Get(target)
@@ -389,7 +389,7 @@ func (s *Server) registryDetail(c *ctx, target ref.Ref,
 	if !known {
 		r = ref.Ambiguous
 	}
-	return ": " + unparse(c.w, c.who, r)
+	return ": " + s.unparse(c.w, c.who, r)
 }
 
 // firstWord and afterFirstWord split on whitespace the way

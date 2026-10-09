@@ -66,15 +66,12 @@ var ownLockScript = Script{
 	"@lock plain=me",
 	"@chown keyed=me",
 
-	// `examine plain` shows what a non-controller sees, which is
-	// one line. Its counterpart, `examine keyed` **while
-	// quelled**, is deliberately not here: upstream answers
-	// "keyed(#5K)" and this server "keyed", because
-	// `unparse_object`'s `can_see_flags` clause (`db.c:1428`) is
-	// unported — a clause that could not be seen to be missing
-	// until the ownlock gave a non-owner a way to control
-	// something. It is the next commit, and the probe goes in
-	// with it.
+	// examine shows more of an object the asker controls, which
+	// is `can_see_flags` rather than a message of its own -- and
+	// `examine keyed` while quelled is what showed
+	// `unparse_object`'s missing clauses, since the ownlock is
+	// what gives a non-owner a way to control something at all.
+	"examine keyed",
 	"examine plain",
 
 	"@set me=!quell",

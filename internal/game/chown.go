@@ -90,7 +90,7 @@ func (s *Server) cmdChown(c *ctx) {
 		c.tell("Owner changed to you.")
 		return
 	}
-	c.tell("Owner changed to %s.", unparse(c.w, c.who, owner))
+	c.tell("Owner changed to %s.", s.unparse(c.w, c.who, owner))
 }
 
 // mayTakePossession is upstream's permission check, which is written

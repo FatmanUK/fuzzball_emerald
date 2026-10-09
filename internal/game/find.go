@@ -33,7 +33,7 @@ func init() {
 // upstream's "%-38.512s %.512s" — so a long name pushes the second
 // column right rather than being cut.
 func (s *Server) objinfo(c *ctx, obj ref.Ref, mode muf.OutputMode) {
-	left := unparse(c.w, c.who, obj)
+	left := s.unparse(c.w, c.who, obj)
 	right := ""
 
 	switch mode {
@@ -42,9 +42,9 @@ func (s *Server) objinfo(c *ctx, obj ref.Ref, mode muf.OutputMode) {
 		// the total.
 		return
 	case muf.OutOwners:
-		right = unparse(c.w, c.who, ownerOf(c.w, obj))
+		right = s.unparse(c.w, c.who, ownerOf(c.w, obj))
 	case muf.OutLocations:
-		right = unparse(c.w, c.who, locationOf(c.w, obj))
+		right = s.unparse(c.w, c.who, locationOf(c.w, obj))
 	case muf.OutLinks:
 		right = s.linkColumn(c, obj)
 	default:
@@ -67,18 +67,18 @@ func (s *Server) linkColumn(c *ctx, obj ref.Ref) string {
 	}
 	switch o.Type() {
 	case ref.TypeRoom:
-		return unparse(c.w, c.who, o.Dropto)
+		return s.unparse(c.w, c.who, o.Dropto)
 	case ref.TypeExit:
 		switch len(o.Dest) {
 		case 0:
 			return "*UNLINKED*"
 		case 1:
-			return unparse(c.w, c.who, o.Dest[0])
+			return s.unparse(c.w, c.who, o.Dest[0])
 		default:
 			return "*METALINKED*"
 		}
 	case ref.TypePlayer, ref.TypeThing:
-		return unparse(c.w, c.who, o.Home)
+		return s.unparse(c.w, c.who, o.Home)
 	default:
 		return "N/A"
 	}

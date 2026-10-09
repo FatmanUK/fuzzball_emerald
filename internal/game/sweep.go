@@ -62,7 +62,7 @@ func (s *Server) cmdSweep(c *ctx) {
 		return
 	}
 
-	c.tell("Listeners in %s:", unparse(c.w, c.who, thing))
+	c.tell("Listeners in %s:", s.unparse(c.w, c.who, thing))
 
 	dark := hasFlag(c.w, thing, ref.Dark)
 	for _, r := range c.w.Contents(thing) {
@@ -83,7 +83,7 @@ func (s *Server) cmdSweep(c *ctx) {
 	for loc := thing; loc != ref.Nothing; {
 		if c.w.IsListener(loc) {
 			c.tell("  %s is a listening room.",
-				unparse(c.w, c.who, loc))
+				s.unparse(c.w, c.who, loc))
 		}
 		s.sweepTraps(c, loc)
 		loc = c.w.Parent(loc)
@@ -107,7 +107,8 @@ func (s *Server) sweepPlayer(c *ctx, r ref.Ref, darkRoom bool) {
 	if awake {
 		asleep = ""
 	}
-	c.tell("  %s is a %splayer.", unparse(c.w, c.who, r), asleep)
+	c.tell("  %s is a %splayer.",
+		s.unparse(c.w, c.who, r), asleep)
 }
 
 // sweepThing reports a thing that is a zombie, a listener, or both.
@@ -123,7 +124,7 @@ func (s *Server) sweepThing(c *ctx, r ref.Ref) {
 	}
 
 	var b strings.Builder
-	b.WriteString("  " + unparse(c.w, c.who, r) + " is a")
+	b.WriteString("  " + s.unparse(c.w, c.who, r) + " is a")
 	tell := false
 
 	if o.Flags&ref.Zombie != 0 {
@@ -140,7 +141,7 @@ func (s *Server) sweepThing(c *ctx, r ref.Ref) {
 	}
 
 	b.WriteString(" object owned by " +
-		unparse(c.w, c.who, ownerOf(c.w, r)) + ".")
+		s.unparse(c.w, c.who, ownerOf(c.w, r)) + ".")
 	if tell {
 		c.send(b.String())
 	}
@@ -172,7 +173,7 @@ func (s *Server) sweepTrap(c *ctx, obj ref.Ref, name string,
 			continue
 		}
 		c.tell("  %ss are trapped on %s", name,
-			unparse(c.w, c.who, obj))
+			s.unparse(c.w, c.who, obj))
 		return true
 	}
 	return false

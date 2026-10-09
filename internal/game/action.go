@@ -87,7 +87,7 @@ func (s *Server) cmdAction(c *ctx) {
 		return
 	}
 	c.tell("Action %s created and attached.",
-		unparse(c.w, c.who, o.Ref))
+		s.unparse(c.w, c.who, o.Ref))
 	if c.w.Tune.Bool("autolink_actions") {
 		// Upstream says this and links nothing: an action is
 		// created with no destinations either way, and the
@@ -217,8 +217,9 @@ func (s *Server) cmdClone(c *ctx) {
 		return
 	}
 	c.w.Modified(clone.Ref)
-	c.tell("Object %s cloned as %s.", unparse(c.w, c.who, thing),
-		unparse(c.w, c.who, clone.Ref))
+	c.tell("Object %s cloned as %s.",
+		s.unparse(c.w, c.who, thing),
+		s.unparse(c.w, c.who, clone.Ref))
 	s.registerBuilt(c, rname, clone.Ref)
 }
 

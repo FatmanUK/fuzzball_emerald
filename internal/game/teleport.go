@@ -99,7 +99,7 @@ func (s *Server) cmdTeleport(c *ctx) {
 	// The victim's name is taken before anything moves, because a
 	// move can change what unparse shows: a thing that lands
 	// somewhere its owner cannot see renders differently.
-	vname := unparse(c.w, c.who, victim)
+	vname := s.unparse(c.w, c.who, victim)
 	if dest == ref.Home {
 		dest = teleportHome(c.w, victim)
 	}
@@ -203,7 +203,7 @@ func (s *Server) teleportPlayer(c *ctx, victim, dest ref.Ref,
 	// Named before the move, because enter_room is what runs the
 	// player's own arrival messages and they may rename nothing
 	// but may well print first.
-	dname := unparse(c.w, c.who, dest)
+	dname := s.unparse(c.w, c.who, dest)
 	s.enterRoom(c.w, c.d.ID, victim, dest, o.Location)
 	c.tell("%s teleported to %s.", vname, dname)
 }
@@ -253,7 +253,7 @@ func (s *Server) teleportThing(c *ctx, victim, dest ref.Ref,
 		moveObject(c.w, victim, dest)
 	}
 	c.tell("%s teleported to %s.", vname,
-		unparse(c.w, c.who, dest))
+		s.unparse(c.w, c.who, dest))
 }
 
 // teleportRoom reparents a room, which is what @teleport does to one
@@ -278,5 +278,5 @@ func (s *Server) teleportRoom(c *ctx, victim, dest ref.Ref,
 	}
 	moveObject(c.w, victim, dest)
 	c.tell("Parent of %s set to %s.", vname,
-		unparse(c.w, c.who, dest))
+		s.unparse(c.w, c.who, dest))
 }

@@ -84,7 +84,9 @@ func (s *Server) printOwner(c *ctx, target ref.Ref) {
 // examineObject prints the full report.
 func (s *Server) examineObject(c *ctx, target ref.Ref) {
 	w, o := c.w, c.w.Get(target)
-	unp := func(r ref.Ref) string { return unparse(w, c.who, r) }
+	unp := func(r ref.Ref) string {
+		return s.unparse(w, c.who, r)
+	}
 
 	// The heading differs by type: what a room is parented to,
 	// what a thing is worth, how much money a player has.
@@ -239,7 +241,7 @@ func (s *Server) tellLocation(c *ctx, o *world.Object) {
 		!s.canSeeFlags(c, o.Location) {
 		return
 	}
-	c.tell("Location: %s", unparse(c.w, c.who, o.Location))
+	c.tell("Location: %s", s.unparse(c.w, c.who, o.Location))
 }
 
 // valueOf reads an object's currency.
@@ -438,7 +440,8 @@ func (s *Server) displayProp(c *ctx, tree *props.Tree,
 	case props.String:
 		return fmt.Sprintf("%s str %s:%s", blessed, shown, v.Str)
 	case props.Ref:
-		return fmt.Sprintf("%s ref %s:%s", blessed, shown, unparse(w, who, v.Ref))
+		return fmt.Sprintf("%s ref %s:%s", blessed, shown,
+			s.unparse(w, who, v.Ref))
 	case props.Int:
 		return fmt.Sprintf("%s int %s:%d", blessed, shown, v.Num)
 	case props.Float:
@@ -494,14 +497,21 @@ func (s *Server) canLink(w *world.World, who, what ref.Ref) bool {
 // too, and @teleport's room branch uses it where its player branch
 // demands outright control.
 func (s *Server) canTeleportTo(c *ctx, where ref.Ref) bool {
-	return s.canTeleportToFor(c.w, c.d.ID, c.who, where)
+	return s.canTeleportToFor(c.w, c.who, where)
 }
 
 // canTeleportToFor is the same test without a ctx, for the callers
 // that have a world and a player but no command — MOVETO's room
 // branch is one, and upstream's can_teleport_to takes exactly these
 // arguments.
-func (s *Server) canTeleportToFor(w *world.World, descr int,
+//
+// **The link lock is evaluated with no descriptor**, which is
+// upstream's own `test_lock(NOTHING, ...)` and not something any
+// caller chooses: `can_teleport_to` has no descriptor parameter at
+// all. This took one, and every caller passed a real connection —
+// so a link lock holding MPI saw a descriptor upstream never gives
+// it.
+func (s *Server) canTeleportToFor(w *world.World,
 	who, where ref.Ref) bool {
 
 	if s.controls(w, who, where) {
@@ -509,7 +519,7 @@ func (s *Server) canTeleportToFor(w *world.World, descr int,
 	}
 	o := w.Get(where)
 	if o == nil ||
-		!s.lockPasses(w, descr, 1, who, where, propLinkLock,
+		!s.lockPasses(w, -1, 1, who, where, propLinkLock,
 			true) {
 		return false
 	}
@@ -524,6 +534,13 @@ func (s *Server) canTeleportToFor(w *world.World, descr int,
 // diverge. That separation is reproduced rather than collapsed.
 func (s *Server) canSeeFlags(c *ctx, where ref.Ref) bool {
 	return s.canTeleportTo(c, where)
+}
+
+// canSeeFlagsFor is canSeeFlags without a command, for unparse.
+func (s *Server) canSeeFlagsFor(w *world.World,
+	who, where ref.Ref) bool {
+
+	return s.canTeleportToFor(w, who, where)
 }
 
 // passesReadLock reports whether someone may read an object's

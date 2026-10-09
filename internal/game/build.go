@@ -119,7 +119,7 @@ func (s *Server) cmdCreate(c *ctx) {
 		c.tell("Created, but it could not be given to you.")
 		return
 	}
-	c.tell("Object %s created.", unparse(c.w, c.who, o.Ref))
+	c.tell("Object %s created.", s.unparse(c.w, c.who, o.Ref))
 	s.registerBuilt(c, rname, o.Ref)
 }
 
@@ -159,7 +159,7 @@ func (s *Server) cmdDig(c *ctx) {
 		c.tell("Room created, but it could not be parented.")
 		return
 	}
-	c.tell("Room %s created.", unparse(c.w, c.who, o.Ref))
+	c.tell("Room %s created.", s.unparse(c.w, c.who, o.Ref))
 
 	// A room that could not be parented where it was asked to go
 	// still exists, at the default parent, and is reported that
@@ -182,7 +182,8 @@ func (s *Server) cmdDig(c *ctx) {
 				c.tell("Parent set to default.")
 				break
 			}
-			c.tell("Parent set to %s.", unparse(c.w, c.who, r))
+			c.tell("Parent set to %s.",
+				s.unparse(c.w, c.who, r))
 		}
 	}
 	s.registerBuilt(c, rname, o.Ref)
@@ -228,7 +229,7 @@ func (s *Server) cmdOpen(c *ctx) {
 		c.tell("The exit could not be attached.")
 		return
 	}
-	c.tell("Exit %s opened.", unparse(c.w, c.who, o.Ref))
+	c.tell("Exit %s opened.", s.unparse(c.w, c.who, o.Ref))
 
 	// Linking costs again, and is reported separately: an exit
 	// that was opened but could not be linked still exists.
@@ -243,7 +244,7 @@ func (s *Server) cmdOpen(c *ctx) {
 			destName); ok {
 			o.Dest = []ref.Ref{dest}
 			c.w.Modified(o.Ref)
-			c.tell("%s", linkedTo(c, dest))
+			c.tell("%s", s.linkedTo(c, dest))
 		}
 	}
 	s.registerBuilt(c, rname, o.Ref)
@@ -345,7 +346,7 @@ func (s *Server) resolveExitDest(c *ctx, exit ref.Ref,
 		c.w.Get(dest).Type() == ref.TypeExit &&
 		exitLoopCheck(c.w, exit, dest) {
 		c.tell("Destination %s would create a loop, "+
-			"ignored.", unparse(c.w, c.who, dest))
+			"ignored.", s.unparse(c.w, c.who, dest))
 		return ref.Nothing, false
 	}
 	return dest, true
@@ -395,7 +396,7 @@ func (s *Server) resolveLinkTarget(c *ctx, target ref.Ref,
 	if !special && c.w.Get(r).Type() == ref.TypePlayer &&
 		!c.w.Tune.Bool("teleport_to_player") {
 		c.tell("You can't link to players.  Destination "+
-			"%s ignored.", unparse(c.w, c.who, r))
+			"%s ignored.", s.unparse(c.w, c.who, r))
 		return ref.Nothing, false
 	}
 	// can_link on the thing being linked *from*, which is its own
@@ -412,7 +413,7 @@ func (s *Server) resolveLinkTarget(c *ctx, target ref.Ref,
 	if !s.canLinkTo(c.w, c.d.ID, c.who,
 		c.w.Get(target).Type(), r) {
 		c.tell("You can't link to %s.",
-			unparse(c.w, c.who, r))
+			s.unparse(c.w, c.who, r))
 		return ref.Nothing, false
 	}
 	return r, true
@@ -570,7 +571,7 @@ func (s *Server) linkExit(c *ctx, target ref.Ref, destName string) {
 	}
 	o.Dest = []ref.Ref{dest}
 	c.w.Modified(target)
-	c.tell("%s", linkedTo(c, dest))
+	c.tell("%s", s.linkedTo(c, dest))
 }
 
 // linkHome is do_link's TYPE_THING and TYPE_PLAYER branch
@@ -656,14 +657,14 @@ func (s *Server) pennies(c *ctx, cost int) string {
 // linkedTo is what @link says it did to an *exit*. HOME is named
 // rather than unparsed, because unparsing it gives "*HOME*" — the
 // spelling a lock or a dump uses, not the one db.c:2143 prints.
-func linkedTo(c *ctx, dest ref.Ref) string {
+func (s *Server) linkedTo(c *ctx, dest ref.Ref) string {
 	if dest == ref.Home {
 		return "Linked to HOME."
 	}
 	if dest == ref.Nil {
 		return "Linked to NIL."
 	}
-	return sprintf("Linked to %s.", unparse(c.w, c.who, dest))
+	return sprintf("Linked to %s.", s.unparse(c.w, c.who, dest))
 }
 
 // cmdUnlink removes an exit's destination or a room's drop-to.

@@ -296,7 +296,7 @@ func (s *Server) lookRoom(w *world.World, descr int,
 	if o == nil {
 		return
 	}
-	s.send(w, who, unparse(w, who, loc))
+	s.send(w, who, s.unparse(w, who, loc))
 
 	if o.Type() == ref.TypeRoom {
 		if hasMesg(w, loc, propDesc) {
@@ -358,7 +358,7 @@ func (s *Server) listContents(w *world.World, who, loc ref.Ref,
 	var names []string
 	for _, r := range w.Contents(loc) {
 		if s.canSee(w, who, r, seeLoc) {
-			names = append(names, unparse(w, who, r))
+			names = append(names, s.unparse(w, who, r))
 		}
 	}
 	if len(names) == 0 {
@@ -430,7 +430,7 @@ func (s *Server) cmdInventory(c *ctx) {
 	} else {
 		c.tell("You are carrying:")
 		for _, r := range contents {
-			c.send(unparse(c.w, c.who, r))
+			c.send(s.unparse(c.w, c.who, r))
 		}
 	}
 	s.cmdScore(c)
