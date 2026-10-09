@@ -111,6 +111,11 @@ type Server struct {
 	dialogs     *mcp.Dialogs
 	dialogOwner map[string]*muf.Frame
 
+	// inOwnLock guards ownLockPasses against a lock whose own
+	// evaluation asks whether somebody controls something. One
+	// goroutine owns the world, so a plain bool is enough.
+	inOwnLock bool
+
 	// mcpPackages is what a new connection is offered, and
 	// mcpBindings maps a message to the program procedure that
 	// claimed it.
@@ -146,7 +151,47 @@ func New(engine *world.Engine, opts Options) *Server {
 		editLine:    map[ref.Ref]int{},
 	}
 	s.installMCPHandlers()
+	// The ownership lock, which World.Controls cannot evaluate
+	// for itself. The operation queue is buffered, so this is
+	// simply the first thing Run applies — ahead of any
+	// command.
+	_ = engine.Go(func(w *world.World) {
+		w.OwnLockPasses = func(who, what ref.Ref) bool {
+			return s.ownLockPasses(w, who, what)
+		}
+	})
 	return s
+}
+
+// ownLockPasses is the last clause of `controls` (`db.c:1866`):
+// `test_lock_false_default(NOTHING, who, what, MESGPROP_OWNLOCK)`.
+//
+// `@ownlock` wrote a property, `examine` displayed it as "Ownership
+// Key", and **nothing read it** — the shape `_/oecho` had. It is
+// the one route past the ownership test a world can configure, so
+// until this existed every mucker rule and every per-type refusal
+// that depends on a non-owner reaching `controls` was unreachable;
+// `TestSetFlagMuckerOwnershipClauseIsUnreachable` was the pin.
+//
+// The descriptor is NOTHING, which is upstream's: an ownership check
+// is not made on anybody's behalf, so a lock property's MPI runs with
+// no connection to report to.
+//
+// **The re-entrancy guard is not upstream's.** A lock may be a
+// property holding MPI, and `{controls}` is an MPI function, so a
+// world can write an ownlock whose evaluation asks the same question
+// again. Upstream recurses until it runs out of stack; refusing the
+// inner question is strictly better and is the answer an unset lock
+// would have given anyway.
+func (s *Server) ownLockPasses(w *world.World,
+	who, what ref.Ref) bool {
+
+	if s.inOwnLock {
+		return false
+	}
+	s.inOwnLock = true
+	defer func() { s.inOwnLock = false }()
+	return s.lockPasses(w, -1, 1, who, what, propOwnLock, false)
 }
 
 func defaultWelcome() []string {

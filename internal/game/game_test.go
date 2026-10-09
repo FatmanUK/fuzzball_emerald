@@ -58,10 +58,14 @@ func newHarness(t *testing.T) *harness {
 
 	engine := world.NewEngine(w, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
+	// The server is constructed before Run starts: Engine.Run
+	// reads its hooks without a lock, and game.New queues an
+	// operation, so the other order is a race.
+	h := &harness{t: t, s: New(engine, Options{}),
+		engine: engine, w: w}
+
 	done := make(chan error, 1)
 	go func() { done <- engine.Run(ctx) }()
-
-	h := &harness{t: t, s: New(engine, Options{}), engine: engine, w: w}
 
 	d, err := h.s.Connect(session.TransportLine, "test")
 	if err != nil {

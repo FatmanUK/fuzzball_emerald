@@ -161,25 +161,139 @@ func TestSetFlagMuckerCeilingForAMortal(t *testing.T) {
 	}
 }
 
-// TestSetFlagMuckerOwnershipClauseIsUnreachable pins a clause that
-// upstream can reach and this server cannot, and says why.
+// TestSetFlagMuckerOwnershipClauseIsReachedThroughTheOwnlock covers
+// the clause that used to be unreachable, and the route that makes it
+// live.
 //
 // Both mucker rules test `OWNER(player) != OWNER(thing)` as well as
 // the type, but `do_set` runs `match_controlled` first, and
-// `controls` (`db.c:1822`) already refuses a non-wizard anything they
-// do not own — so the clause looks dead. Upstream has two ways past
-// `controls` without owning the object: `realms_control`, which is
-// off by default, and an **ownership lock** (`@ownlock`), which any
-// mortal may be let through.
+// `controls` (`db.c:1822`) refuses a non-wizard anything they do not
+// own — so the clause looks dead. Upstream has two ways past
+// `controls` without owning the object: `tp_realms_control`, which is
+// off by default and still unported, and an **ownership lock**, which
+// any mortal may be let through.
 //
-// This server reads neither (`look.go:422`), so `@ownlock` is a
-// property that `@ownlock` writes, `examine` displays as "Ownership
-// Key", and nothing consults — the same shape as `_/oecho`. Until
-// that is fixed the clause cannot fire here, and the refusal a player
-// sees is `match_controlled`'s instead. The clause is kept because it
-// is upstream's and becomes live the moment `controls` is; this test
-// is so that the change is noticed.
-func TestSetFlagMuckerOwnershipClauseIsUnreachable(t *testing.T) {
+// `@ownlock` wrote `@/olk`, `examine` displayed it as "Ownership
+// Key", and nothing read it. Now `World.OwnLockPasses` does, so a
+// mortal the lock admits reaches `unableToSetFlag` and gets *its*
+// refusal instead of the matcher's.
+//
+// Two things it takes to see the clause at all, both found by running
+// it. The lock has to be stored as a **Lock-typed** property, which
+// is what `@ownlock` itself writes — `lockPasses` ignores a plain
+// string, so an earlier version set `props.Value{Str: ...}` and
+// proved nothing either way. And the program has to belong to
+// somebody who is **not God**, because `do_set`'s own
+// `strict_god_priv` guard (`build.go:1212`) sits between the matcher
+// and `unableToSetFlag` and answers "Only God may touch God's
+// property." first — a guard that was itself unreachable for a
+// mortal until the ownlock was read.
+func TestSetFlagMuckerClauseReachedThroughOwnlock(
+	t *testing.T) {
+
+	h := newHarness(t)
+	h.login()
+
+	_, d := mortal(t, h, "Stranger")
+	author, _ := mortal(t, h, "Author")
+	ctx := context.Background()
+	if err := h.engine.Do(ctx, func(w *world.World) {
+		wiz := h.wizRef()
+		p := w.Create("theirs.muf", ref.TypeProgram, author)
+		p.Home = w.Get(wiz).Location
+		if err := w.MoveTo(p.Ref,
+			w.Get(wiz).Location); err != nil {
+			t.Fatal(err)
+		}
+		// The ownlock every mortal passes.
+		w.SetProp(p.Ref, "@/olk",
+			props.Value{Type: props.Lock, Str: "me|!me"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.out()
+
+	const matched = "You don't control what was matched"
+	for cmd, want := range map[string]string{
+		"@set theirs.muf=2":  "(You can't set that M2)",
+		"@set theirs.muf=M0": "(You can't set that M0)",
+	} {
+		got := sendAs(t, h, d, cmd)
+		if !strings.Contains(got, want) {
+			t.Errorf("%q: want %q, got:\n%s", cmd, want,
+				got)
+		}
+		if strings.Contains(got, matched) {
+			t.Errorf("%q was refused by the matcher, so "+
+				"the ownlock is not being read:\n%s",
+				cmd, got)
+		}
+	}
+}
+
+// TestOwnlockIsAskedAboutTheOwnerNotTheAsker pins the one line of
+// `controls` that no transcript can see: `who = OWNER(who)` happens
+// **before** the ownlock is consulted, so a puppet is admitted by a
+// lock naming its owner.
+//
+// The golden case cannot reach it because the asker there is always
+// the player, who owns themselves; a lock that admits everybody
+// cannot tell the two apart either. Nor can a lock **constant**
+// naming the owner, because `eval_boolexp_rec`'s CONST case already
+// passes for `OWNER(player)` — so the substitution is invisible
+// through it. A **property** lock is what separates them:
+// `has_property` looks at the player and what the player carries, and
+// a thing carries none of its owner's properties.
+func TestOwnlockIsAskedAboutTheOwnerNotTheAsker(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+
+	stranger, _ := mortal(t, h, "Stranger")
+	author, _ := mortal(t, h, "Author")
+	ctx := context.Background()
+	if err := h.engine.Do(ctx, func(w *world.World) {
+		here := w.Get(stranger).Location
+		cart := w.Create("cart", ref.TypeThing, stranger)
+		cart.Home = here
+		if err := w.MoveTo(cart.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		p := w.Create("theirs.muf", ref.TypeProgram, author)
+		p.Home = here
+		if err := w.MoveTo(p.Ref, here); err != nil {
+			t.Fatal(err)
+		}
+		// A property lock, and the property on Stranger
+		// rather than on the cart.
+		w.SetProp(stranger, "key",
+			props.Value{Type: props.String,
+				Str: "yes"})
+		w.SetProp(p.Ref, "@/olk", props.Value{
+			Type: props.Lock,
+			Str:  "key:yes",
+		})
+		if !w.Controls(stranger, p.Ref) {
+			t.Error("the owner should be admitted")
+		}
+		if !w.Controls(cart.Ref, p.Ref) {
+			t.Error("their thing should be " +
+				"admitted too: controls asks " +
+				"about OWNER(who)")
+		}
+		if w.Controls(author, cart.Ref) {
+			t.Error("an unlocked object should not be")
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestOwnlockIsNotConsultedWhenUnset is the other half: without the
+// lock, the matcher refuses first and the clause above is never
+// reached. test_lock_false_default answers **false** for an unset
+// lock rather than passing it, which is the whole reason a property
+// nobody has written does not open every object in the world.
+func TestOwnlockIsNotConsultedWhenUnset(t *testing.T) {
 	h := newHarness(t)
 	h.login()
 
@@ -193,31 +307,15 @@ func TestSetFlagMuckerOwnershipClauseIsUnreachable(t *testing.T) {
 			w.Get(wiz).Location); err != nil {
 			t.Fatal(err)
 		}
-		// The ownlock every mortal passes. Upstream's
-		// controls() consults it; this server does not.
-		w.SetProp(p.Ref, "@/olk",
-			props.Value{Str: "me|!me"})
 	}); err != nil {
 		t.Fatal(err)
 	}
 	h.out()
 
-	const matched = "Permission denied. (You don't control " +
-		"what was matched)"
-	for _, cmd := range []string{"@set theirs.muf=2",
-		"@set theirs.muf=M0"} {
-
-		got := sendAs(t, h, d, cmd)
-		if !strings.Contains(got, matched) {
-			t.Errorf("%q: want match_controlled's "+
-				"refusal, got:\n%s", cmd, got)
-		}
-		if strings.Contains(got, "You can't set that") {
-			t.Errorf("%q reached the ownership clause, "+
-				"so controls() now reads the "+
-				"ownlock; if that is deliberate, "+
-				"update this test:\n%s", cmd, got)
-		}
+	got := sendAs(t, h, d, "@set theirs.muf=2")
+	if !strings.Contains(got,
+		"You don't control what was matched") {
+		t.Errorf("want the matcher's refusal, got:\n%s", got)
 	}
 }
 

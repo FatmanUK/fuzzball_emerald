@@ -53,12 +53,19 @@ func RunEmeraldSteps(ctx context.Context, fx *Fixture, script Script,
 	engine := world.NewEngine(w, world.Options{Interval: 50 * time.Millisecond})
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	done := make(chan error, 1)
-	go func() { done <- engine.Run(runCtx) }()
 
+	// The server and its hooks are installed **before** Run
+	// starts. Engine.Run reads onTick and onEachOp without a
+	// lock, so setting them afterwards is a data race -- latent
+	// until game.New began queueing an operation of its own, at
+	// which point Run had work to apply immediately and read them
+	// while the test was still writing.
 	gs := game.New(engine, game.Options{})
 	engine.OnTick(gs.OnTick())
 	engine.OnEachOp(gs.OnTick())
+
+	done := make(chan error, 1)
+	go func() { done <- engine.Run(runCtx) }()
 
 	d, err := gs.Connect(session.TransportLine, "golden")
 	if err != nil {

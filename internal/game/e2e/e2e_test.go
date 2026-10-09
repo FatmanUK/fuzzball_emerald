@@ -91,10 +91,12 @@ func startServer(t *testing.T) *testServer {
 
 	engine := world.NewEngine(w, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
+	// Before Run, so Engine.Run cannot read its hooks while they
+	// are being written.
+	gs := game.New(engine, game.Options{})
+
 	worldDone := make(chan error, 1)
 	go func() { worldDone <- engine.Run(ctx) }()
-
-	gs := game.New(engine, game.Options{})
 
 	cfg := selfSignedTLS(t)
 

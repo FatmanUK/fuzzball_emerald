@@ -42,10 +42,12 @@ func startWSS(t *testing.T) (url string, client *tls.Config) {
 
 	engine := world.NewEngine(res.World, world.Options{Interval: time.Hour})
 	ctx, cancel := context.WithCancel(context.Background())
+	// Before Run, so Engine.Run cannot read its hooks while they
+	// are being written.
+	gs := game.New(engine, game.Options{})
+
 	done := make(chan error, 1)
 	go func() { done <- engine.Run(ctx) }()
-
-	gs := game.New(engine, game.Options{})
 
 	serverTLS := selfSignedTLS(t)
 

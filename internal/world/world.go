@@ -74,6 +74,20 @@ type World struct {
 	// tuneDirty records that the parameter table changed.
 	tuneDirty bool
 
+	// OwnLockPasses evaluates an object's ownership lock
+	// (`@/olk`) for Controls, defaulting to **false** when none
+	// is set — test_lock_false_default (`boolexp.c:906`).
+	//
+	// It is a callback the game installs rather than a method
+	// here, for the reason Descriptor.AllowANSI is one: a lock
+	// constant may be a MUF program and a lock property is MPI,
+	// so evaluating one reaches the interpreter, the compiler and
+	// the MPI parser — none of which a world knows about. Nil
+	// means no ownlock is ever consulted, which is what the
+	// importer, the configurator and `fbemerald tune` want: they
+	// load a world without running one.
+	OwnLockPasses func(who, what ref.Ref) bool
+
 	now func() time.Time
 }
 
@@ -634,10 +648,15 @@ func (w *World) OwnerOf(r ref.Ref) ref.Ref {
 // that a wizard could edit God's programs and so give themselves
 // God's powers.
 //
-// Two of upstream's routes past the ownership test are **not** here
-// and are recorded in docs/upstream-coverage.md: `tp_realms_control`,
-// which defaults off, and an **ownership lock**, which does not —
-// `@ownlock` writes a property that nothing reads.
+// The last route past the ownership test is an **ownership lock**,
+// `MESGPROP_OWNLOCK` — `@ownlock` — which is how a mortal is let
+// through for an object they do not own. It is reached through
+// OwnLockPasses rather than evaluated here, because evaluating a lock
+// needs more than a world: a lock constant may be a *program*, and a
+// lock property is MPI, so the whole of internal/game is behind it.
+//
+// Upstream's other route, `tp_realms_control`, is still not here and
+// is recorded in docs/upstream-coverage.md. It defaults off.
 func (w *World) Controls(who, target ref.Ref) bool {
 	o := w.Get(target)
 	if o == nil {
@@ -658,5 +677,11 @@ func (w *World) Controls(who, target ref.Ref) bool {
 	if who == target {
 		return true
 	}
-	return o.Owner == owner
+	if o.Owner == owner {
+		return true
+	}
+	if w.OwnLockPasses == nil {
+		return false
+	}
+	return w.OwnLockPasses(owner, target)
 }
