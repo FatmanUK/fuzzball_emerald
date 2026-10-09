@@ -257,6 +257,9 @@ func init() {
 		if f.host == nil {
 			return nil, errf("NOTIFY needs a running server")
 		}
+		if err := f.checkRemote(f.host, who); err != nil {
+			return nil, err
+		}
 		// A carriage return inside a message separates lines,
 		// which is how MUF writes multi-line output.
 		for _, line := range strings.Split(msg, "\r") {

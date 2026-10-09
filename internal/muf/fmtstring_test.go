@@ -102,7 +102,9 @@ func TestRowDialectFillsMissingFieldsByVerb(t *testing.T) {
 	row := NewDict()
 	row.Set(Str("name"), Str("Rusty"))
 
-	got, err := formatWith(nil, "%[name]s/%[count]i/%[missing]s", rowDialect(row))
+	d := rowDialect(nil, row)
+	got, err := formatWith(nil,
+		"%[name]s/%[count]i/%[missing]s", d)
 	if err != nil {
 		t.Fatalf("formatWith failed: %v", err)
 	}
@@ -112,7 +114,8 @@ func TestRowDialectFillsMissingFieldsByVerb(t *testing.T) {
 }
 
 func TestRowDialectRequiresAField(t *testing.T) {
-	if _, err := formatWith(nil, "%s", rowDialect(NewDict())); err == nil {
+	d := rowDialect(nil, NewDict())
+	if _, err := formatWith(nil, "%s", d); err == nil {
 		t.Error("a directive with no [field] should be refused")
 	}
 }

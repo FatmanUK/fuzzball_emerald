@@ -50,7 +50,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		room, h, err := f.refAndHost()
+		room, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}

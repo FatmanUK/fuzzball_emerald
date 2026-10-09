@@ -27,12 +27,18 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// CHECKREMOTE is on the **trigger** (oper2), not the
+		// program, which is checked for being a program
+		// instead (p_stack.c).
 		if progV.Type != TypeObject || !h.Valid(progV.Ref) ||
 			h.ObjType(progV.Ref) != ref.TypeProgram {
 			return nil, errf("Bad program reference. (1)")
 		}
 		if trigV.Type != TypeObject || !h.Valid(trigV.Ref) {
 			return nil, errf("Bad object. (2)")
+		}
+		if err := f.checkRemote(h, trigV.Ref); err != nil {
+			return nil, err
 		}
 		if arg.Type != TypeString {
 			return nil, errf("Expected a string. (3)")

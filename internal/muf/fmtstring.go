@@ -56,7 +56,8 @@ func init() {
 		rows := rowsV.Array.Values()
 		out := make([]Value, 0, len(rows))
 		for _, row := range rows {
-			s, err := formatWith(h, formatV.Str, rowDialect(row.Array))
+			d := rowDialect(f, row.Array)
+			s, err := formatWith(h, formatV.Str, d)
 			if err != nil {
 				return nil, err
 			}
@@ -74,6 +75,13 @@ func init() {
 // reads as "2 and 1".
 func (f *Frame) stackDialect() fmtDialect {
 	return fmtDialect{
+		remote: func(r ref.Ref) error {
+			h, err := f.needHost()
+			if err != nil {
+				return err
+			}
+			return f.checkRemote(h, r)
+		},
 		arg: func(string, byte) (Value, error) { return f.Pop() },
 		star: func() (int, error) {
 			n, err := f.popInt()
@@ -94,10 +102,23 @@ func (f *Frame) stackDialect() fmtDialect {
 //
 // A key the row does not hold is not an error; the directive gets an
 // empty value of whatever type its verb asks for, so one missing
-// field leaves a gap rather than failing the whole array.
-func rowDialect(row *Array) fmtDialect {
+// field leaves a gap rather than failing the whole array. The frame
+// may be nil, which leaves the CHECKREMOTE hook unset — the
+// compiler's own tests render rows without one.
+func rowDialect(f *Frame, row *Array) fmtDialect {
+	var remote func(ref.Ref) error
+	if f != nil {
+		remote = func(r ref.Ref) error {
+			h, err := f.needHost()
+			if err != nil {
+				return err
+			}
+			return f.checkRemote(h, r)
+		}
+	}
 	return fmtDialect{
 		needField: true,
+		remote:    remote,
 		arg: func(field string, verb byte) (Value, error) {
 			if n, err := strconv.Atoi(field); err == nil {
 				if v, ok := row.Get(Int(int64(n))); ok {
@@ -135,6 +156,13 @@ type fmtDialect struct {
 	// arg supplies one directive's value. field is the "[name]"
 	// text, empty when the directive carried none.
 	arg func(field string, verb byte) (Value, error)
+	// remote is CHECKREMOTE, which the "%D" directive applies to
+	// the object it is about to name (`p_strings.c:559`, `:1318`)
+	// -- the only directive that does. render has no frame, so
+	// the check arrives as a hook rather than a method call. Nil
+	// means do not check, which is what the compiler's own tests
+	// rely on.
+	remote func(ref.Ref) error
 	// star reads a '*' width or precision from the stack.
 	// ARRAY_FMTSTRINGS has no dynamic widths, and leaves this
 	// nil.
@@ -354,6 +382,11 @@ func (spec directive) render(h Host, d fmtDialect) (string, error) {
 		}
 		if h == nil || !h.Valid(v.Ref) {
 			return "", errf("Format specified object not valid.")
+		}
+		if d.remote != nil {
+			if err := d.remote(v.Ref); err != nil {
+				return "", err
+			}
 		}
 		return spec.pad(spec.text(h.Name(v.Ref))), nil
 

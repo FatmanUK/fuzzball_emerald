@@ -209,6 +209,23 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// prim_array_notify (p_array.c:2426) walks the whole
+		// ref array **first**, aborting on an invalid entry
+		// and CHECKREMOTEing each, so nothing is notified
+		// unless every target passes. This skipped a
+		// non-object silently and notified the rest.
+		for _, who := range targets.Values() {
+			if who.Type != TypeObject ||
+				!h.Valid(who.Ref) {
+				return nil, errf("Dbref array " +
+					"contains invalid " +
+					"object. (2)")
+			}
+			err := f.checkRemote(h, who.Ref)
+			if err != nil {
+				return nil, err
+			}
+		}
 		for _, who := range targets.Values() {
 			if who.Type != TypeObject {
 				continue

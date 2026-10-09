@@ -180,6 +180,9 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		if err := f.checkRemote(h, who); err != nil {
+			return nil, err
+		}
 		for _, line := range strings.Split(msg, "\r") {
 			h.Notify(who, mlev1Prefix(f, h, line, who))
 		}

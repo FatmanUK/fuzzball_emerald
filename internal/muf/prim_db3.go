@@ -41,7 +41,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		src, h, err := f.refAndHost()
+		src, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -74,6 +74,15 @@ func init() {
 		// able to delete a player by doing so.
 		if h.ForceLevel() > 0 {
 			return nil, errf("Cannot be forced.")
+		}
+		// Two CHECKREMOTEs here, one per argument (p_db.c),
+		// which is the only primitive with more than one
+		// besides LOCKED?.
+		if err := f.checkRemote(h, victim); err != nil {
+			return nil, err
+		}
+		if err := f.checkRemote(h, recipient); err != nil {
+			return nil, err
 		}
 		if !isPlayer(h, victim) {
 			return nil, errf("Player dbref expected for player to be toaded (2)")
@@ -126,7 +135,7 @@ func init() {
 	})
 
 	register("COPYOBJ", func(f *Frame) (*Result, error) {
-		src, h, err := f.refAndHost()
+		src, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}

@@ -86,6 +86,13 @@ func init() {
 			if r.Type != TypeObject || !h.Valid(r.Ref) {
 				continue
 			}
+			// CHECKREMOTE is inside the loop here too,
+			// and unlike the read test it **aborts**
+			// rather than skipping (p_props.c:1513).
+			err := f.checkRemote(h, r.Ref)
+			if err != nil {
+				return nil, err
+			}
 			// p_props.c:1515 tests per object inside the
 			// loop and **skips** one whose property it
 			// may not read, so the filter silently
@@ -147,6 +154,9 @@ func blessEdit(blessed bool) primFunc {
 		if !h.Valid(objV.Ref) {
 			return nil, errf("Non-object argument (1)")
 		}
+		if err := f.checkRemote(h, objV.Ref); err != nil {
+			return nil, err
+		}
 		if strings.ContainsRune(nameV.Str, '\r') ||
 			strings.ContainsRune(nameV.Str, ':') {
 			return nil, errf("Illegal propname")
@@ -197,6 +207,9 @@ func parseMPI(blessed bool) primFunc {
 		}
 		if !h.Valid(objV.Ref) {
 			return nil, errf("Invalid object (1)")
+		}
+		if err := f.checkRemote(h, objV.Ref); err != nil {
+			return nil, err
 		}
 		if mpiV.Type != TypeString {
 			return nil, errf("String expected (2)")
@@ -267,6 +280,9 @@ func init() {
 		}
 		if !h.Valid(objV.Ref) {
 			return nil, errf("Invalid object. (1)")
+		}
+		if err := f.checkRemote(h, objV.Ref); err != nil {
+			return nil, err
 		}
 		if privateV.Num != 0 && privateV.Num != 1 {
 			return nil, errf("Integer of 0 or 1 expected. (4)")

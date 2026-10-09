@@ -100,7 +100,7 @@ func init() {
 	register("LOCATION", refToRef(func(h Host, r ref.Ref) ref.Ref { return h.Location(r) }))
 	register("OWNER", refToRef(func(h Host, r ref.Ref) ref.Ref { return h.Owner(r) }))
 	register("GETLINK", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func init() {
 		return nil, f.Push(Obj(links[0]))
 	})
 	register("GETLINKS", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +124,7 @@ func init() {
 		return nil, f.Push(Int(int64(len(links))))
 	})
 	register("GETLINKS_ARRAY", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func init() {
 	// NEXT walks a containment chain one step, which is how older
 	// programs iterate before arrays existed.
 	register("NEXT", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +204,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -274,7 +274,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		who, h, err := f.refAndHost()
+		who, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -370,7 +370,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -403,7 +403,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -429,7 +429,7 @@ func init() {
 		return nil, nil
 	})
 	register("REMOVE_PROP", func(f *Frame) (*Result, error) {
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -498,6 +498,42 @@ func (f *Frame) refAndHost() (ref.Ref, Host, error) {
 	return r, h, err
 }
 
+// refAndHostRemote is refAndHost plus CHECKREMOTE, which upstream
+// applies at **61 sites** across six primitive files and this server
+// applied at three. Without it a mucker-1 program reads any object
+// anywhere in the database: its name, its owner, its location, its
+// flags, its properties, its links.
+//
+// The two forms are kept apart rather than folded into refAndHost
+// because the set is not "every primitive that takes a dbref" —
+// PROPDIR?, NEXTPROP, BLESSED?, RECYCLE, SETOWN and a dozen others
+// take one and have no CHECKREMOTE at all, and guarding them would
+// make this server stricter than upstream.
+func (f *Frame) refAndHostRemote() (ref.Ref, Host, error) {
+	obj, h, err := f.refAndHost()
+	if err != nil {
+		return ref.Nothing, nil, err
+	}
+	if err := f.checkRemote(h, obj); err != nil {
+		return ref.Nothing, nil, err
+	}
+	return obj, h, nil
+}
+
+// propTargetRemote is propTarget plus CHECKREMOTE, for the property
+// primitives that have one — which is most of `p_props.c` but none
+// of the `ARRAY_*` property family in `p_array.c`.
+func (f *Frame) propTargetRemote() (string, ref.Ref, Host, error) {
+	path, obj, h, err := f.propTarget()
+	if err != nil {
+		return "", ref.Nothing, nil, err
+	}
+	if err := f.checkRemote(h, obj); err != nil {
+		return "", ref.Nothing, nil, err
+	}
+	return path, obj, h, nil
+}
+
 // propTarget pops a property path and the object it is on.
 func (f *Frame) propTarget() (string, ref.Ref, Host, error) {
 	path, err := f.popStr()
@@ -514,7 +550,7 @@ func (f *Frame) propTarget() (string, ref.Ref, Host, error) {
 // CHECKREMOTE and nothing else, alone among the four. Guarding the
 // shared helper would have made it stricter than upstream.
 func (f *Frame) getPropChecked() (props.Value, error) {
-	path, obj, h, err := f.propTarget()
+	path, obj, h, err := f.propTargetRemote()
 	if err != nil {
 		return props.Value{}, err
 	}
@@ -530,7 +566,7 @@ func (f *Frame) getPropChecked() (props.Value, error) {
 
 // getProp reads a property, yielding the zero value when unset.
 func (f *Frame) getProp() (props.Value, error) {
-	path, obj, h, err := f.propTarget()
+	path, obj, h, err := f.propTargetRemote()
 	if err != nil {
 		return props.Value{}, err
 	}
@@ -630,10 +666,11 @@ func refList(refs []ref.Ref) *Array {
 }
 
 // chainPrim builds a primitive that pushes a chain's head, the way
-// the older CONTENTS and EXITS do.
+// the older CONTENTS and EXITS do. Its users -- CONTENTS and EXITS --
+// both take CHECKREMOTE upstream, so it goes in the factory.
 func chainPrim(fn func(Host, ref.Ref) []ref.Ref) primFunc {
 	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -645,10 +682,12 @@ func chainPrim(fn func(Host, ref.Ref) []ref.Ref) primFunc {
 	}
 }
 
-// chainArray builds the array form of the same.
+// chainArray builds the array form of the same. Its users --
+// CONTENTS_ARRAY and EXITS_ARRAY -- both take CHECKREMOTE upstream,
+// so it goes in the factory.
 func chainArray(fn func(Host, ref.Ref) []ref.Ref) primFunc {
 	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -656,10 +695,12 @@ func chainArray(fn func(Host, ref.Ref) []ref.Ref) primFunc {
 	}
 }
 
-// typeOfTest builds a primitive that reports an object's type.
+// typeOfTest builds a primitive that reports an object's type. All
+// five of its users -- PLAYER?, ROOM?, EXIT?, PROGRAM? and THING? --
+// take CHECKREMOTE upstream.
 func typeOfTest(want ref.ObjType) primFunc {
 	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -667,10 +708,11 @@ func typeOfTest(want ref.ObjType) primFunc {
 	}
 }
 
-// refToStr builds a primitive that asks the host about an object.
+// refToStr builds a primitive that asks the host about an object. Its
+// one user, NAME, takes CHECKREMOTE upstream.
 func refToStr(fn func(Host, ref.Ref) string) primFunc {
 	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -679,9 +721,10 @@ func refToStr(fn func(Host, ref.Ref) string) primFunc {
 }
 
 // refToRef builds a primitive that resolves one object to another.
+// Both its users, LOCATION and OWNER, take CHECKREMOTE.
 func refToRef(fn func(Host, ref.Ref) ref.Ref) primFunc {
 	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -697,7 +740,7 @@ func init() {
 	// finds the property, which is how a world puts a default on
 	// a parent room.
 	register("ENVPROP", func(f *Frame) (*Result, error) {
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -712,7 +755,7 @@ func init() {
 		return nil, f.Push(fromProp(v))
 	})
 	register("ENVPROPSTR", func(f *Frame) (*Result, error) {
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -738,7 +781,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -760,7 +803,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -781,7 +824,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		path, obj, h, err := f.propTarget()
+		path, obj, h, err := f.propTargetRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -855,7 +898,7 @@ func init() {
 	})
 
 	register("PENNIES", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -1529,7 +1572,7 @@ func init() {
 	})
 
 	register("MLEVEL", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -1545,7 +1588,7 @@ func init() {
 	})
 
 	register("TIMESTAMPS", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -1640,7 +1683,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		around, h, err := f.refAndHost()
+		around, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -1672,7 +1715,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		player, h, err := f.refAndHost()
+		player, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -1691,7 +1734,7 @@ func init() {
 	})
 
 	register("NEXTOWNED", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHost()
+		obj, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
@@ -1724,7 +1767,10 @@ func create(t ref.ObjType) primFunc {
 		if err != nil {
 			return nil, err
 		}
-		parent, h, err := f.refAndHost()
+		// NEWOBJECT and NEWEXIT take CHECKREMOTE on the
+		// parent (p_db.c); NEWROOM and NEWPROGRAM do not, and
+		// neither goes through this factory.
+		parent, h, err := f.refAndHostRemote()
 		if err != nil {
 			return nil, err
 		}
