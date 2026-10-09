@@ -685,3 +685,43 @@ func (w *World) Controls(who, target ref.Ref) bool {
 	}
 	return w.OwnLockPasses(owner, target)
 }
+
+// PropValue is where an object's currency lives, upstream's
+// GETVALUE/SETVALUE.
+const PropValue = "@/value"
+
+// ValueOf is GETVALUE: an object's currency, zero when unset.
+func (w *World) ValueOf(r ref.Ref) int64 {
+	v, ok := w.GetProp(r, PropValue)
+	if !ok || v.Type != props.Int {
+		return 0
+	}
+	return v.Num
+}
+
+// PayFor is `payfor` (`player.c:512`): charge an object's **owner** a
+// cost, reporting whether they could afford it.
+//
+// A wizard pays for nothing. Otherwise the money has to be there
+// before any of it is taken, so a failed purchase costs nothing.
+//
+// It lives here rather than in internal/game because the matcher
+// needs it: `match_player` (`match.c:252`) charges `lookup_cost` for
+// the attempt, and internal/match cannot reach a Server.
+func (w *World) PayFor(who ref.Ref, cost int) bool {
+	owner := w.OwnerOf(who)
+	o := w.Get(owner)
+	if o == nil {
+		return false
+	}
+	if o.Flags.IsWizard() {
+		return true
+	}
+	have := w.ValueOf(owner)
+	if have < int64(cost) {
+		return false
+	}
+	w.SetProp(owner, PropValue,
+		props.Value{Type: props.Int, Num: have - int64(cost)})
+	return true
+}

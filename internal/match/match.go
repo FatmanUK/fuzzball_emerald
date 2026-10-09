@@ -353,11 +353,38 @@ func (m *Matcher) Inside(container ref.Ref) *Matcher {
 	return m
 }
 
-// Player matches a player by name, anywhere in the game. A leading
-// '*' is Fuzzball's way of forcing a player match.
+// Player is `match_player` (`match.c:252`): a player named from
+// anywhere in the game.
+//
+// **The star is required, not optional.** Upstream's whole body is
+// guarded by `*(md->match_name) == LOOKUP_TOKEN`, so this stage
+// matches `*Bob` and nothing else — a bare "Bob" is left to the
+// other stages, which look only at what is nearby. This treated the
+// '*' as a prefix to strip if present, so any search carrying this
+// stage resolved a bare player name from across the database:
+// `match_everything` for a wizard, `@teleport`'s victim match,
+// `@tune`'s dbref match, `parse_boolexp`'s lock keys, MPI's resolver,
+// `@give`, `page`'s target and `@toad`'s. Four commands in one golden
+// script answered "I don't understand 'Bob'." upstream and succeeded
+// here.
+//
+// The attempt also **costs `lookup_cost`**, charged to the searcher's
+// owner before the name is looked up — so a world that sets it
+// charges for a miss as well as a hit, and a player who cannot afford
+// it cannot name anybody remotely. Nothing read it here. A cost of
+// zero, the default, is always affordable, which is why this is
+// invisible in an unconfigured world.
 func (m *Matcher) Player() *Matcher {
-	name := strings.TrimPrefix(m.name, "*")
-	if name == "" {
+	if !strings.HasPrefix(m.name, "*") {
+		return m
+	}
+	// No early return for a bare "*": upstream charges for the
+	// attempt and then looks up the empty name, which finds
+	// nobody. Guarding it here would make the one spelling that
+	// cannot succeed also the one that is free.
+	name := m.name[1:]
+	if !m.w.PayFor(m.from,
+		int(m.w.Tune.Int("lookup_cost"))) {
 		return m
 	}
 	if r, ok := m.w.PlayerNamed(name); ok {

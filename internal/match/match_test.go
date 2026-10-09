@@ -249,17 +249,97 @@ func TestAbsoluteRefNeedsNoPermission(t *testing.T) {
 	}
 }
 
+// TestPlayerMatch covers match_player, whose whole body is guarded by
+// the leading '*': the star is **required**, not an optional way of
+// forcing the stage. This matched a bare name too, so any search
+// carrying the stage resolved a player from anywhere in the database.
 func TestPlayerMatch(t *testing.T) {
 	f := newFixture(t)
-	if got := New(f.w, f.player, "Igor").Player().Result(); got != f.player {
-		t.Errorf("Igor = %v, want %v", got, f.player)
-	}
-	// A leading '*' forces a player match.
-	if got := New(f.w, f.player, "*igor").Player().Result(); got != f.player {
+	if got := New(f.w, f.player, "*igor").Player().
+		Result(); got != f.player {
 		t.Errorf("*igor = %v, want %v", got, f.player)
 	}
-	if got := New(f.w, f.player, "Nobody").Player().Result(); got != ref.Nothing {
-		t.Errorf("Nobody = %v, want #-1", got)
+	if got := New(f.w, f.player, "*IGOR").Player().
+		Result(); got != f.player {
+		t.Errorf("*IGOR = %v, want %v", got, f.player)
+	}
+	if got := New(f.w, f.player, "Igor").Player().
+		Result(); got != ref.Nothing {
+		t.Errorf("a bare name = %v, want #-1", got)
+	}
+	if got := New(f.w, f.player, "*Nobody").Player().
+		Result(); got != ref.Nothing {
+		t.Errorf("*Nobody = %v, want #-1", got)
+	}
+	// A bare '*' names nobody rather than everybody.
+	if got := New(f.w, f.player, "*").Player().
+		Result(); got != ref.Nothing {
+		t.Errorf("* = %v, want #-1", got)
+	}
+}
+
+// TestPlayerMatchChargesLookupCost is the other half of match_player:
+// `payfor(OWNER(match_from), tp_lookup_cost)` runs **before** the
+// lookup, so the attempt is charged whether or not it finds anybody,
+// and a searcher who cannot afford it finds nothing. Nothing here
+// read the parameter.
+func TestPlayerMatchChargesLookupCost(t *testing.T) {
+	f := newFixture(t)
+	// A mortal, since a wizard pays for nothing.
+	p := f.w.Get(f.player)
+	p.Flags &^= ref.Wizard
+	f.w.Tune.SetString("lookup_cost", "10")
+
+	f.w.SetProp(f.player, world.PropValue,
+		props.Value{Type: props.Int, Num: 25})
+	for i, want := range []ref.Ref{f.player, f.player,
+		ref.Nothing} {
+
+		got := New(f.w, f.player, "*igor").Player().Result()
+		if got != want {
+			t.Errorf("attempt %d = %v, want %v", i+1,
+				got, want)
+		}
+	}
+	if left := f.w.ValueOf(f.player); left != 5 {
+		t.Errorf("%d pennies left, want 5", left)
+	}
+
+	// And a miss is charged too -- as is a bare "*", which is the
+	// one spelling that cannot succeed.
+	f.w.SetProp(f.player, world.PropValue,
+		props.Value{Type: props.Int, Num: 20})
+	New(f.w, f.player, "*Nobody").Player().Result()
+	if left := f.w.ValueOf(f.player); left != 10 {
+		t.Errorf("%d pennies left after a miss, want 10",
+			left)
+	}
+	New(f.w, f.player, "*").Player().Result()
+	if left := f.w.ValueOf(f.player); left != 0 {
+		t.Errorf("%d pennies left after a bare star, want 0",
+			left)
+	}
+
+	// The charge falls on the searcher's **owner**, which is
+	// upstream's `payfor(OWNER(md->match_from), ...)`: a puppet
+	// spends its owner's money, and has none of its own.
+	f.w.SetProp(f.player, world.PropValue,
+		props.Value{Type: props.Int, Num: 40})
+	puppet := f.w.Create("puppet", ref.TypeThing, f.player)
+	if err := f.w.MoveTo(puppet.Ref, f.room); err != nil {
+		t.Fatal(err)
+	}
+	if got := New(f.w, puppet.Ref, "*igor").Player().
+		Result(); got != f.player {
+		t.Errorf("a puppet's search = %v, want %v", got,
+			f.player)
+	}
+	if left := f.w.ValueOf(f.player); left != 30 {
+		t.Errorf("%d pennies left, want 30: the charge "+
+			"falls on the owner", left)
+	}
+	if left := f.w.ValueOf(puppet.Ref); left != 0 {
+		t.Errorf("the puppet has %d pennies", left)
 	}
 }
 

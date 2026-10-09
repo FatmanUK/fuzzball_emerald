@@ -246,11 +246,7 @@ func (s *Server) tellLocation(c *ctx, o *world.Object) {
 
 // valueOf reads an object's currency.
 func valueOf(w *world.World, r ref.Ref) int64 {
-	v, ok := w.GetProp(r, propValue)
-	if !ok || v.Type != props.Int {
-		return 0
-	}
-	return v.Num
+	return w.ValueOf(r)
 }
 
 // lockString renders a lock property. Emerald stores a lock as the

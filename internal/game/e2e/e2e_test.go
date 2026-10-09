@@ -377,7 +377,9 @@ func TestTwoPlayersSeeEachOther(t *testing.T) {
 	b.expect("Cave of Awakening")
 
 	// One is a wizard, so can bring the newcomer along.
-	a.send("!@teleport Visitor=#0")
+	// "*Visitor", with the star: match_player matches only a name
+	// beginning with LOOKUP_TOKEN.
+	a.send("!@teleport *Visitor=#0")
 	a.expect("teleported to")
 	b.drain(300 * time.Millisecond)
 	a.drain(300 * time.Millisecond)

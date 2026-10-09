@@ -1566,21 +1566,10 @@ func (s *Server) evictEditors(w *world.World, program ref.Ref) {
 
 // payFor takes the cost of something out of a player's pocket,
 // reporting whether they could afford it. A wizard pays for nothing.
-func (s *Server) payFor(w *world.World, who ref.Ref, cost int) bool {
-	owner := ownerOf(w, who)
-	o := w.Get(owner)
-	if o == nil {
-		return false
-	}
-	if o.Flags.IsWizard() {
-		return true
-	}
-	have := valueOf(w, owner)
-	if have < int64(cost) {
-		return false
-	}
-	w.SetProp(owner, propValue, props.Value{Type: props.Int, Num: have - int64(cost)})
-	return true
+func (s *Server) payFor(w *world.World, who ref.Ref,
+	cost int) bool {
+
+	return w.PayFor(who, cost)
 }
 
 // endowment is what an object made for a given price is worth, from

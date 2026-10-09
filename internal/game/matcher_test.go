@@ -106,7 +106,12 @@ func TestWizardStillNamesPlayersByName(t *testing.T) {
 	}
 	h.out()
 
-	h.send("@describe Stranger=a person")
+	// With a star: `match_player` (`match.c:252`) is guarded on
+	// LOOKUP_TOKEN, so a bare name reaches only the stages that
+	// look nearby. This test used to pass a bare "Stranger",
+	// which worked because the Player stage treated the star as
+	// optional.
+	h.send("@describe *Stranger=a person")
 	got := h.out()
 	if strings.Contains(got, "I don't understand") {
 		t.Errorf("a wizard should reach a remote player:\n%s",
