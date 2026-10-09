@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 )
 
 // The property functions beyond {prop} and {store}.
@@ -19,7 +20,7 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		return env.Host.GetPropStr(obj, args[0]), nil
+		return env.strictGetProp("PROP!", obj, args[0])
 	})
 
 	// INDEX reads a property whose value names another property,
@@ -41,10 +42,10 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if !env.mayWrite(obj) {
+		if !env.mayWrite(obj) ||
+			!env.safePutProp(obj, args[0], "", false) {
 			return "", errf("DELPROP", "Permission denied.")
 		}
-		env.Host.DelProp(obj, args[0])
 		return "", nil
 	})
 
@@ -83,22 +84,31 @@ func init() {
 
 // indexProp builds {index} and {index!}.
 func indexProp(walk bool) impl {
-	read := func(env *Env, obj Ref, path string) string {
+	name := "INDEX"
+	if !walk {
+		name = "INDEX!"
+	}
+	read := func(env *Env, obj Ref,
+		path string) (string, error) {
+
 		if walk {
-			return env.getProp(obj, path)
+			return env.getProp(name, obj, path)
 		}
-		return env.Host.GetPropStr(obj, path)
+		return env.strictGetProp(name, obj, path)
 	}
 	return func(env *Env, f *Func, args []string) (string, error) {
 		obj, err := env.resolve(f.Name, args, 1)
 		if err != nil {
 			return "", err
 		}
-		name := read(env, obj, args[0])
-		if name == "" {
+		idx, err := read(env, obj, args[0])
+		if err != nil {
+			return "", err
+		}
+		if idx == "" {
 			return "", nil
 		}
-		return read(env, obj, name), nil
+		return read(env, obj, idx)
 	}
 }
 
@@ -129,42 +139,19 @@ func blessProp(set bool) impl {
 // object carrying the message, which is upstream's own blanket check
 // after the finer-grained ones.
 func (env *Env) mayList(obj Ref, path string) bool {
-	if hasPropPrefix(path, "@__sys__") {
+	if props.IsSystem(path) {
 		return false
 	}
 	if env.Blessed {
 		return true
 	}
-	if propSegmentStarts(path, '@') {
+	if props.IsHidden(path) {
 		return false
 	}
 	owner := env.Host.Owner(env.What)
-	if propSegmentStarts(path, '.') &&
+	if props.IsPrivate(path) &&
 		owner != env.Host.Owner(obj) {
 		return false
 	}
 	return obj == env.Who || env.Host.Owner(obj) == owner
-}
-
-// propSegmentStarts is upstream's Prop_Check: whether any path
-// segment begins with the given character. '@' marks a hidden
-// property, '.' a private one.
-func propSegmentStarts(path string, c byte) bool {
-	for _, seg := range strings.Split(path, "/") {
-		if len(seg) > 0 && seg[0] == c {
-			return true
-		}
-	}
-	return false
-}
-
-// hasPropPrefix is upstream's is_prop_prefix: whether a path starts
-// with a given directory, comparing case-insensitively as property
-// names do.
-func hasPropPrefix(path, prefix string) bool {
-	if len(path) < len(prefix) ||
-		!ascii.EqualFold(path[:len(prefix)], prefix) {
-		return false
-	}
-	return len(path) == len(prefix) || path[len(prefix)] == '/'
 }

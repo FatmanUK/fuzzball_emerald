@@ -28,7 +28,11 @@ func init() {
 			return "", err
 		}
 		name := strings.TrimLeft(args[0], "/")
-		text := concatList(env.listItems(obj, name), concatTight)
+		items, err := env.listItems("LEXEC", obj, name)
+		if err != nil {
+			return "", err
+		}
+		text := concatList(items, concatTight)
 		// Unlike {list}, the text is then evaluated as MPI
 		// — which is the whole point: a property list
 		// holding a program, run as one.
@@ -40,11 +44,15 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		n := env.listCount(obj, args[0])
+		n, err := env.listCount("RAND", obj, args[0])
+		if err != nil {
+			return "", err
+		}
 		if n <= 0 {
 			return "", errf("RAND", "Failed list read.")
 		}
-		return env.listItem(obj, args[0], rand.Intn(n)+1), nil
+		return env.listItem("RAND", obj, args[0],
+			rand.Intn(n)+1)
 	})
 
 	register("SELECT", func(env *Env, _ *Func, args []string) (string, error) {
@@ -61,7 +69,12 @@ func init() {
 		// a value — which a plain walk down finds too,
 		// since a list is bounded at 512 entries.
 		for i := want; i >= 1; i-- {
-			if v := env.listItem(obj, args[1], i); v != "" {
+			v, err := env.listItem("SELECT", obj,
+				args[1], i)
+			if err != nil {
+				return "", err
+			}
+			if v != "" {
 				return v, nil
 			}
 		}
@@ -255,7 +268,11 @@ func propList(mode int) impl {
 		if err != nil {
 			return "", err
 		}
-		return concatList(env.listItems(obj, args[0]), mode), nil
+		items, err := env.listItems(f.Name, obj, args[0])
+		if err != nil {
+			return "", err
+		}
+		return concatList(items, mode), nil
 	}
 }
 

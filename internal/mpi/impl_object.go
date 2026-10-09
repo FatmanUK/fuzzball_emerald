@@ -1,6 +1,10 @@
 package mpi
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
+)
 
 // The object and world introspection functions: what an object is,
 // what it holds, who owns it, who is connected.
@@ -206,11 +210,14 @@ func init() {
 		// restrictions apply as to reading one directly:
 		// system properties never, and hidden ones only for a
 		// blessed message.
-		if hasPropPrefix(args[1], "@__sys__") ||
-			(!env.Blessed && propSegmentStarts(args[1], '@')) {
+		if props.IsSystem(args[1]) ||
+			(!env.Blessed && props.IsHidden(args[1])) {
 			return "", errf("TESTLOCK", "Permission denied. (arg1)")
 		}
-		lock := env.getProp(obj, args[1])
+		lock, err := env.getProp("TESTLOCK", obj, args[1])
+		if err != nil {
+			return "", err
+		}
 		if lock == "" {
 			return "0", nil
 		}

@@ -279,11 +279,18 @@ func execProp(walk bool) impl {
 			return "", err
 		}
 		path := strings.TrimLeft(args[0], "/")
+		name := "EXEC"
+		if !walk {
+			name = "EXEC!"
+		}
 		var text string
 		if walk {
-			text = env.getProp(obj, path)
+			text, err = env.getProp(name, obj, path)
 		} else {
-			text = env.Host.GetPropStr(obj, path)
+			text, err = env.strictGetProp(name, obj, path)
+		}
+		if err != nil {
+			return "", err
 		}
 		return Parse(env, text)
 	}

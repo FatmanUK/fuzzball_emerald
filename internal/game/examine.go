@@ -391,7 +391,7 @@ func (s *Server) listProps(c *ctx, target ref.Ref, dir, pattern string) int {
 		if dir != "" {
 			path = dir + "/" + name
 		}
-		if propIsSystem(path) || propIsHidden(path) &&
+		if props.IsSystem(path) || props.IsHidden(path) &&
 			!wizard {
 			continue
 		}
@@ -406,22 +406,6 @@ func (s *Server) listProps(c *ctx, target ref.Ref, dir, pattern string) int {
 		count += s.listProps(c, target, path, next)
 	}
 	return count
-}
-
-// propIsSystem reports whether a path is in the server's own propdir.
-func propIsSystem(path string) bool {
-	return ascii.HasPrefix(path, "@__sys__/") || ascii.EqualFold(path, "@__sys__")
-}
-
-// propIsHidden reports whether any segment of a path starts with '@',
-// which is how a property is marked wizard-only.
-func propIsHidden(path string) bool {
-	for _, seg := range strings.Split(path, "/") {
-		if strings.HasPrefix(seg, "@") {
-			return true
-		}
-	}
-	return false
 }
 
 // displayProp renders one property the way examine lists it: a

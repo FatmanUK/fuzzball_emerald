@@ -86,7 +86,10 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		n := env.listCount(obj, args[2])
+		n, err := env.listCount("TIMESUB", obj, args[2])
+		if err != nil {
+			return "", err
+		}
 		if n == 0 {
 			return "", errf("TIMESUB", "Failed list read.")
 		}
@@ -97,7 +100,7 @@ func init() {
 		// clock, so a property list becomes a slideshow that
 		// advances by itself.
 		i := int(((env.Host.Now()+int64(offset))%int64(period))*int64(n)) / period
-		return env.listItem(obj, args[2], i+1), nil
+		return env.listItem("TIMESUB", obj, args[2], i+1)
 	})
 
 	// Numbers and text.

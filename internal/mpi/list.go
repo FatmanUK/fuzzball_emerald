@@ -21,22 +21,6 @@ const maxListLen = 512
 // with.
 const numberToken = '#'
 
-// getProp reads a property, walking outwards through the environment
-// until something answers — upstream's safegetprop, as against the
-// strict form that looks only at the object named.
-//
-// An unset property and an empty one are not distinguished, which is
-// upstream's own: the walk continues past either.
-func (env *Env) getProp(obj Ref, path string) string {
-	for i := 0; i < maxEnvDepth && obj != nothing; i++ {
-		if v := env.Host.GetPropStr(obj, path); v != "" {
-			return v
-		}
-		obj = env.Host.Parent(obj)
-	}
-	return ""
-}
-
 // maxEnvDepth bounds the environment walk, as internal/world's own
 // does: a damaged world can hold a cycle that getparent's detection
 // misses.
@@ -56,8 +40,11 @@ func trimListName(name string) string {
 
 // listItem reads one item, counting from one. An index outside the
 // list reads as empty rather than failing.
-func (env *Env) listItem(obj Ref, name string, n int) string {
-	return env.getProp(obj, trimListName(name)+"#/"+strconv.Itoa(n))
+func (env *Env) listItem(fn string, obj Ref, name string,
+	n int) (string, error) {
+
+	return env.getProp(fn, obj,
+		trimListName(name)+"#/"+strconv.Itoa(n))
 }
 
 // listCount is how many items a list holds.
@@ -65,33 +52,52 @@ func (env *Env) listItem(obj Ref, name string, n int) string {
 // The count property is looked for under two spellings before the
 // list is measured by walking it, which is upstream's order: "name#"
 // first, then "name/#".
-func (env *Env) listCount(obj Ref, name string) int {
+func (env *Env) listCount(fn string, obj Ref,
+	name string) (int, error) {
+
 	name = trimListName(name)
 	for _, path := range [2]string{name + "#", name + "/#"} {
-		if v := env.getProp(obj, path); v != "" {
+		v, err := env.getProp(fn, obj, path)
+		if err != nil {
+			return 0, err
+		}
+		if v != "" {
 			n, _ := strconv.Atoi(strings.TrimSpace(v))
-			return n
+			return n, nil
 		}
 	}
 	for i := 1; i < maxListLen; i++ {
-		if env.listItem(obj, name, i) == "" {
-			return i - 1
+		v, err := env.listItem(fn, obj, name, i)
+		if err != nil {
+			return 0, err
+		}
+		if v == "" {
+			return i - 1, nil
 		}
 	}
-	return maxListLen
+	return maxListLen, nil
 }
 
 // listItems reads a whole list.
-func (env *Env) listItems(obj Ref, name string) []string {
-	cnt := env.listCount(obj, name)
+func (env *Env) listItems(fn string, obj Ref,
+	name string) ([]string, error) {
+
+	cnt, err := env.listCount(fn, obj, name)
+	if err != nil {
+		return nil, err
+	}
 	if cnt > maxListLen {
 		cnt = maxListLen
 	}
 	out := make([]string, 0, max(cnt, 0))
 	for i := 1; i <= cnt; i++ {
-		out = append(out, env.listItem(obj, name, i))
+		v, err := env.listItem(fn, obj, name, i)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
 	}
-	return out
+	return out, nil
 }
 
 // Concatenation modes, upstream's get_concat_list: 0 joins with

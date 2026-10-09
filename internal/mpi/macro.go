@@ -23,6 +23,21 @@ const macroPropDir = "_msgmacs"
 // property directory on the object's owner, then on the object
 // itself, then on #0 — so a world can offer macros to everything
 // while an object can still override one for itself.
+//
+// **The middle step is a walk, not a read** (`msg_macro_val`,
+// `msgparse.c:1063`): `safegetprop_limited` follows the object's
+// environment chain, accepting a value only off an object with the
+// same owner as the trigger. Emerald did three flat `GetPropStr`
+// calls, so a macro directory on the room a thing is standing in was
+// never found — and none of the three went through the property
+// safety layer, so `{foo}` could read a hidden or `@__sys__` property
+// out of `_msgmacs`.
+//
+// **A refusal does not abort here.** Upstream's three steps each test
+// `!ptr || !*ptr`, so a step that refused falls through to the next
+// exactly as an unset property does. The player still gets the
+// "PropFetch:" line, because that is printed where the refusal
+// happens rather than where it is reported.
 func (env *Env) macro(name string) (string, bool) {
 	if name == "" {
 		return "", false
@@ -32,10 +47,18 @@ func (env *Env) macro(name string) (string, bool) {
 	}
 
 	path := macroPropDir + "/" + name
-	for _, obj := range [3]Ref{env.Host.Owner(env.What), env.What, 0} {
-		if body := env.Host.GetPropStr(obj, path); body != "" {
-			return body, true
-		}
+	owner := env.Host.Owner(env.What)
+	if body, err := env.strictGetProp("", owner,
+		path); err == nil && body != "" {
+		return body, true
+	}
+	if body, err := env.limitedGetProp("", env.What, owner,
+		path); err == nil && body != "" {
+		return body, true
+	}
+	if body, err := env.strictGetProp("", 0, path); err == nil &&
+		body != "" {
+		return body, true
 	}
 	return "", false
 }

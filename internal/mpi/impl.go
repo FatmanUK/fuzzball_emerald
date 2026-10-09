@@ -181,7 +181,7 @@ func init() {
 		// {prop} searches outwards through the environment;
 		// {prop!} is the form that looks only at the object
 		// named.
-		return env.getProp(obj, args[0]), nil
+		return env.getProp("PROP", obj, args[0])
 	})
 	register("STORE", func(env *Env, _ *Func, args []string) (string, error) {
 		// "{store:value,property,object}"
@@ -189,11 +189,13 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		if !env.mayWrite(obj) {
+		if !env.mayWrite(obj) || !env.safePutProp(obj,
+			args[1], args[0], true) {
 			return "", errf("STORE", "Permission denied.")
 		}
-		env.Host.SetPropStr(obj, args[1], args[0])
-		return "", nil
+		// {store} answers with what it wrote, which nothing
+		// else in the property set does.
+		return args[0], nil
 	})
 	register("LOC", objectRef(func(env *Env, obj Ref) Ref {
 		return env.Host.Location(obj)
