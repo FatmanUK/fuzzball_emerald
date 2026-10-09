@@ -128,3 +128,11 @@ func TestRowDialectRequiresAField(t *testing.T) {
 func (h *fmtTestHost) ProgMLevel(ref.Ref) (int, bool) {
 	return 0, false
 }
+
+// UnableToSetFlag declines to refuse, for the same reason: SET
+// consults it, and a nil Host would segfault rather than name the
+// method it wanted.
+func (h *fmtTestHost) UnableToSetFlag(ref.Ref, int, ref.Ref,
+	ref.Flags, bool) (string, bool) {
+	return "", false
+}

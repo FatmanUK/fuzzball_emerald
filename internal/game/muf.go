@@ -156,6 +156,14 @@ func (h *mufHost) ProgMLevel(prog ref.Ref) (int, bool) {
 	return progMLevel(h.w, prog)
 }
 
+// UnableToSetFlag implements muf.Host for SET, delegating to the same
+// function @set uses.
+func (h *mufHost) UnableToSetFlag(who ref.Ref, mlev int,
+	thing ref.Ref, flag ref.Flags, value bool) (string, bool) {
+
+	return h.s.unableToSetFlag(h.w, who, mlev, thing, flag, value)
+}
+
 // ChownLockPasses implements muf.Host for SETOWN, which is the one
 // primitive that consults an object's @chlock. The true default when
 // no lock is set is test_lock's own (boolexp.c:880), not an invention

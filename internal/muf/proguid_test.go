@@ -103,3 +103,11 @@ func TestForkDropsPerms(t *testing.T) {
 // without it a primitive with a floor segfaults rather than saying
 // which method it wanted.
 func (h *uidHost) ProgMLevel(ref.Ref) (int, bool) { return 0, false }
+
+// UnableToSetFlag declines to refuse, for the same reason: SET
+// consults it, and a nil Host would segfault rather than name the
+// method it wanted.
+func (h *uidHost) UnableToSetFlag(ref.Ref, int, ref.Ref,
+	ref.Flags, bool) (string, bool) {
+	return "", false
+}

@@ -298,6 +298,17 @@ type Host interface {
 	// ownership-level authority over target — a wizard, or
 	// target's own owner.
 	Controls(who, target ref.Ref) bool
+	// UnableToSetFlag is unable_to_set_flag (set.c:537): whether
+	// this asker may change this flag on this object. It answers
+	// a message and true when refused, and an empty message means
+	// the caller's own "Permission denied."
+	//
+	// It is a host method rather than a muf-local port because it
+	// reads three @tune parameters, an object's contents, flags
+	// on three different objects and the server's force level —
+	// and because @set already calls the one implementation.
+	UnableToSetFlag(who ref.Ref, mlev int, thing ref.Ref,
+		flag ref.Flags, value bool) (string, bool)
 
 	// CompiledSize reports a program's cached instruction count
 	// without compiling it — upstream's PROGRAM_SIZ, and the

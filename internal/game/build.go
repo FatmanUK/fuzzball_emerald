@@ -846,11 +846,16 @@ func strToFlag(name string) (ref.Flags, bool) {
 // unguarded altogether, and was too strict for three others.
 //
 // `mlev` is the asker's owner's effective mucker level, which only
-// the BUILDER case reads.
-func (s *Server) unableToSetFlag(c *ctx, mlev int, thing ref.Ref,
-	flag ref.Flags, value bool) (string, bool) {
+// the BUILDER case reads. It takes a world and a player rather than a
+// `ctx`, because MUF `SET` needs it too — `prim_set`
+// (`p_db.c:1039`) calls `unable_to_set_flag(ProgUID, mlev, ...)` with
+// exactly these two. Reimplementing it in `internal/muf` would be two
+// ports of one rule, which is the mistake CLAUDE.md records for
+// `can_link_to`/`can_teleport_to`.
+func (s *Server) unableToSetFlag(w *world.World, player ref.Ref,
+	mlev int, thing ref.Ref, flag ref.Flags,
+	value bool) (string, bool) {
 
-	w, player := c.w, c.who
 	owner := ownerOf(w, player)
 	wiz := isWizard(w, owner)
 	typ := w.Get(thing).Type()
@@ -1292,8 +1297,8 @@ func (s *Server) cmdSet(c *ctx) {
 	// wizard test: upstream lets a mortal set their own program
 	// up to their own level.
 	mlev := c.w.Get(ownerOf(c.w, c.who)).Flags.MLevel()
-	if msg, no := s.unableToSetFlag(c, mlev, target, bit,
-		!clear); no {
+	if msg, no := s.unableToSetFlag(c.w, c.who, mlev, target,
+		bit, !clear); no {
 		if msg == "" {
 			msg = "Permission denied. (restricted flag)"
 		}

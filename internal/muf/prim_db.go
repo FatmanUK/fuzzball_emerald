@@ -219,14 +219,46 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// prim_set's four guards, none of which was here: a
+		// mucker-1 program could set WIZARD on anything.
+		//
+		// valid_object (interp.c:2683) is ObjExists and not
+		// GARBAGE, which World.Valid is exactly. refAndHost
+		// only pops a ref, so without this a nonexistent one
+		// fell through to the permission test and was refused
+		// as "Permission denied." instead.
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object.")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		uid := f.progUID(h)
+		if f.MLevel() < 4 && !f.permissions(h, uid, obj) {
+			return nil, errf("Permission denied.")
+		}
+		// Only one '!' is stripped, and the name is then bare
+		// str_to_flag -- so MUF accepts "truewizard", which
+		// @set refuses because it would set something other
+		// than it says.
 		clear := len(name) > 0 && name[0] == '!'
 		if clear {
 			name = name[1:]
 		}
 		bit, ok := ref.FlagNamed(name)
 		if !ok {
-			return nil, errf("unknown flag %q", name)
+			return nil, errf("Unrecognized flag.")
 		}
+		if msg, no := h.UnableToSetFlag(uid, f.MLevel(), obj,
+			bit, !clear); no {
+			if msg == "" {
+				msg = "Permission denied."
+			}
+			return nil, errf("%s", msg)
+		}
+		// Upstream does *not* clear the mucker bits first
+		// here, where do_set does -- so MUF's SET adds a bit
+		// to a level where @set assigns one.
 		flags := h.Flags(obj)
 		if clear {
 			flags &^= bit

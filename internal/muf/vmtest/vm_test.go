@@ -279,6 +279,15 @@ func (h *fakeHost) ProgMLevel(ref.Ref) (int, bool) {
 	return 0, false
 }
 
+// UnableToSetFlag declines to refuse, so a frame that reaches SET in
+// this test is not stopped by a rule the host cannot answer. These
+// hosts embed a nil Host, so a missing method is a segfault at the
+// point of use rather than a compile error.
+func (h *fakeHost) UnableToSetFlag(ref.Ref, int, ref.Ref,
+	ref.Flags, bool) (string, bool) {
+	return "", false
+}
+
 // ChownLockPasses answers true, which is test_lock's own default for
 // an unset lock -- so SETOWN's CHOWN_OK test is what decides here.
 func (h *fakeHost) ChownLockPasses(int, ref.Ref, ref.Ref) bool {

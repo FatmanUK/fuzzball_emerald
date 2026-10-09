@@ -444,3 +444,12 @@ func TestCheckargsNonString(t *testing.T) {
 func (h *checkargsHost) ProgMLevel(ref.Ref) (int, bool) {
 	return 0, false
 }
+
+// UnableToSetFlag declines to refuse, so a frame that reaches SET in
+// this test is not stopped by a rule the host cannot answer. These
+// hosts embed a nil Host, so a missing method is a segfault at the
+// point of use rather than a compile error.
+func (h *checkargsHost) UnableToSetFlag(ref.Ref, int, ref.Ref,
+	ref.Flags, bool) (string, bool) {
+	return "", false
+}
