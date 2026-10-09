@@ -86,6 +86,13 @@ func init() {
 			if r.Type != TypeObject || !h.Valid(r.Ref) {
 				continue
 			}
+			// p_props.c:1515 tests per object inside the
+			// loop and **skips** one whose property it
+			// may not read, so the filter silently
+			// returns fewer objects rather than refusing.
+			if !f.propReadPerms(h, r.Ref, path) {
+				continue
+			}
 			v, ok := h.GetProp(r.Ref, path)
 			if !ok {
 				continue

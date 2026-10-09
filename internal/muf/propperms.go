@@ -107,3 +107,11 @@ func (f *Frame) envPropReadable(h Host, landed ref.Ref,
 	}
 	return nil
 }
+
+// propProtected is the message the `ARRAY_PUT_PROP*` family aborts
+// with (`p_array.c:2182`, `:2356`, `:2436`), which is **not** the
+// plain "Permission denied." the rest of the property surface uses.
+func propProtected() error {
+	return errf("Permission denied while trying to set " +
+		"protected property.")
+}

@@ -138,6 +138,12 @@ func init() {
 			default:
 				continue
 			}
+			// p_array.c:2182 aborts per key rather than
+			// skipping, and with the "protected property"
+			// wording.
+			if !f.propWritePerms(h, obj, dir+"/"+name) {
+				return nil, propProtected()
+			}
 			h.SetProp(obj, dir+"/"+name, toProp(vs[i]))
 		}
 		return nil, nil

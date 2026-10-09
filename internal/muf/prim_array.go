@@ -160,7 +160,15 @@ func init() {
 		n := countVal.Num
 		vals := make([]Value, 0, n)
 		for i := int64(1); i <= n; i++ {
-			v, _ := h.GetProp(obj, path+"#/"+itoa64(i))
+			elem := path + "#/" + itoa64(i)
+			// p_array.c:2035 wraps the append in the read
+			// test rather than aborting, so an element
+			// the program may not read is left out and
+			// the list comes back shorter.
+			if !f.propReadPerms(h, obj, elem) {
+				continue
+			}
+			v, _ := h.GetProp(obj, elem)
 			vals = append(vals, fromProp(v))
 		}
 		return nil, f.Push(Arr(NewList(vals)))
@@ -170,6 +178,9 @@ func init() {
 		path, obj, h, err := f.propTarget()
 		if err != nil {
 			return nil, err
+		}
+		if !f.propReadPerms(h, obj, path) {
+			return nil, propDenied()
 		}
 		// A reflist is a single string of space-separated
 		// dbrefs.
@@ -403,7 +414,11 @@ func init() {
 		}
 		out := NewDict()
 		for _, name := range h.PropChildren(obj, path) {
-			v, _ := h.GetProp(obj, join(path, name))
+			child := join(path, name)
+			if !f.propReadPerms(h, obj, child) {
+				continue
+			}
+			v, _ := h.GetProp(obj, child)
 			out.Set(Str(name), fromProp(v))
 		}
 		return nil, f.Push(Arr(out))
@@ -415,7 +430,11 @@ func init() {
 		}
 		var vals []Value
 		for _, name := range h.PropChildren(obj, path) {
-			if len(h.PropChildren(obj, join(path, name))) > 0 {
+			child := join(path, name)
+			if !f.propReadPerms(h, obj, child) {
+				continue
+			}
+			if len(h.PropChildren(obj, child)) > 0 {
 				vals = append(vals, Str(name))
 			}
 		}
@@ -431,6 +450,18 @@ func init() {
 			return nil, err
 		}
 		vals := a.Values()
+		// Two write tests upstream, and both say "protected
+		// property" rather than the plain refusal every other
+		// property primitive uses.
+		if !f.propWritePerms(h, obj, path+"#") {
+			return nil, propProtected()
+		}
+		for i := range vals {
+			elem := path + "#/" + itoa64(int64(i+1))
+			if !f.propWritePerms(h, obj, elem) {
+				return nil, propProtected()
+			}
+		}
 		h.SetProp(obj, path+"#", props.Value{Type: props.Int, Num: int64(len(vals))})
 		for i, v := range vals {
 			h.SetProp(obj, path+"#/"+itoa64(int64(i+1)), toProp(v))
@@ -445,6 +476,9 @@ func init() {
 		path, obj, h, err := f.propTarget()
 		if err != nil {
 			return nil, err
+		}
+		if !f.propWritePerms(h, obj, path) {
+			return nil, propDenied()
 		}
 		var refs []ref.Ref
 		for _, v := range a.Values() {
