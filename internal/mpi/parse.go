@@ -183,6 +183,10 @@ type Host interface {
 	// test_lock_false_default (boolexp.c:906), which returns 0
 	// for an unset lock rather than passing it.
 	ForceLockPasses(descr int, who, obj Ref) bool
+	// ReadLockPasses is the same against the read lock (`@/rlk`),
+	// which is how mesg_read_perms lets somebody look at an
+	// object they do not own. Also false-default.
+	ReadLockPasses(descr int, who, obj Ref) bool
 
 	// TestLock evaluates a lock expression written as text.
 	TestLock(descr int, player, thing Ref, lock string) (bool, error)

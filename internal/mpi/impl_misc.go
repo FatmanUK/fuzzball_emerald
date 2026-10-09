@@ -261,20 +261,29 @@ func init() {
 	})
 
 	register("OTELL", func(env *Env, _ *Func, args []string) (string, error) {
+		// The room is local -- a message cannot broadcast
+		// into somewhere it is not -- and the excluded object
+		// is raw, because naming somebody to leave out tells
+		// you nothing about them. The listener gate runs
+		// after the match, which is mfn_otell's order.
+		room := env.Host.Location(env.Who)
+		if len(args) > 1 {
+			var err error
+			room, err = env.resolveLocal("OTELL", args, 1)
+			if err != nil {
+				return "", err
+			}
+		}
 		if env.Type.Has(Listener) &&
 			env.Host.TypeName(env.What) != "Room" {
 			return "", errf("OTELL", "Permission denied.")
 		}
-		room := env.Host.Location(env.Who)
-		if len(args) > 1 {
-			var err error
-			if room, err = env.resolve("OTELL", args, 1); err != nil {
-				return "", err
-			}
-		}
 		except := env.Who
 		if len(args) > 2 {
-			except = env.lookup(args[2])
+			if obj, fail := env.resolveAs(matchRaw, args,
+				2); fail == resolveOK {
+				except = obj
+			}
 		}
 		for _, line := range strings.Split(args[0], "\r") {
 			env.Host.NotifyExcept(room, []Ref{except}, line)
@@ -321,9 +330,11 @@ func init() {
 	// Each is gated, because a property anyone can write must not
 	// be able to run commands as its reader.
 	register("FORCE", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("FORCE", args, 0)
+		obj, err := env.resolveMsg(matchRaw, "FORCE", args, 0,
+			"Failed match. (arg1)",
+			"Permission denied. (arg1)")
 		if err != nil {
-			return "", errf("FORCE", "Failed match. (arg1)")
+			return "", err
 		}
 		switch env.Host.TypeName(obj) {
 		case "Thing", "Player":
@@ -372,9 +383,13 @@ func init() {
 	})
 
 	register("MUF", func(env *Env, _ *Func, args []string) (string, error) {
-		prog := env.lookup(args[0])
-		if !env.Host.Valid(prog) ||
-			env.Host.TypeName(prog) != "Program" {
+		// A failed match and a non-program are two different
+		// messages, which this collapsed into one.
+		prog, fail := env.resolveAs(matchRaw, args, 0)
+		if fail != resolveOK {
+			return "", errf("MUF", "Match failed.")
+		}
+		if env.Host.TypeName(prog) != "Program" {
 			return "", errf("MUF", "Bad program reference.")
 		}
 		if !env.Host.HasFlag(prog, "link_ok") &&

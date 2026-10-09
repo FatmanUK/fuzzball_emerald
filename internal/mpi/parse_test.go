@@ -283,6 +283,10 @@ func (h *stubHost) ForceLockPasses(int, Ref, Ref) bool {
 	return false
 }
 
+func (h *stubHost) ReadLockPasses(int, Ref, Ref) bool {
+	return false
+}
+
 func (h *stubHost) Height(Ref) int { return 0 }
 func (h *stubHost) TuneGet(string) (string, bool) {
 	return "", false

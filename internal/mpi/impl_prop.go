@@ -38,12 +38,11 @@ func init() {
 	})
 
 	register("DELPROP", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("DELPROP", args, 1)
+		obj, err := env.resolveStrict("DELPROP", args, 1)
 		if err != nil {
 			return "", err
 		}
-		if !env.mayWrite(obj) ||
-			!env.safePutProp(obj, args[0], "", false) {
+		if !env.safePutProp(obj, args[0], "", false) {
 			return "", errf("DELPROP", "Permission denied.")
 		}
 		return "", nil
@@ -117,12 +116,18 @@ func indexProp(walk bool) impl {
 // could grant itself wizard permissions by blessing it.
 func blessProp(set bool) impl {
 	return func(env *Env, f *Func, args []string) (string, error) {
-		obj, err := env.resolve(f.Name, args, 1)
+		// {bless} and {unbless} are strict, like the other
+		// two that write.
+		obj, err := env.resolveStrict(f.Name, args, 1)
 		if err != nil {
 			return "", err
 		}
+		// safeblessprop (`msgparse.c:144`) owes
+		// is_valid_propname as well as the blessed bit, which
+		// this did not check.
 		path := strings.TrimLeft(args[0], "/")
-		if path == "" || !env.Blessed {
+		if path == "" || !validPropName(path) ||
+			!env.Blessed {
 			return "", errf(f.Name, "Permission denied.")
 		}
 		env.Host.BlessProp(obj, path, set)

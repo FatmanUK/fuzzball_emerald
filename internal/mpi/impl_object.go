@@ -1,6 +1,7 @@
 package mpi
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -9,10 +10,17 @@ import (
 // The object and world introspection functions: what an object is,
 // what it holds, who owns it, who is connected.
 func init() {
+	// {type} and {istype} are mesg_dbref_local, so a message
+	// cannot ask the type of something far away -- and both spell
+	// the refusal "Permission Denied." with a capital D, under
+	// the name "TYPE" even from {istype}.
 	register("TYPE", func(env *Env, _ *Func, args []string) (string, error) {
-		obj := env.lookup(args[0])
-		if !env.Host.Valid(obj) {
+		obj, fail := env.resolveAs(matchLocal, args, 0)
+		if fail == resolveUnknown {
 			return "Bad", nil
+		}
+		if fail == resolveDenied {
+			return "", errf("TYPE", "Permission Denied.")
 		}
 		return env.Host.TypeName(obj), nil
 	})
@@ -24,23 +32,53 @@ func init() {
 	// "NAME", which is part of the copy/paste and is kept.
 	register("FULLNAME", objectName(false))
 
+	// {ref} answers a dbref for a name, and is the one function
+	// that short-circuits the matcher: a literal "#123" is taken
+	// as written, so a message can name an object it would not be
+	// allowed to *match*. Anything else goes through
+	// mesg_dbref_local, and a failed match is #-1 where a refusal
+	// aborts.
 	register("REF", func(env *Env, _ *Func, args []string) (string, error) {
-		return "#" + itoa(int(env.lookup(args[0]))), nil
+		if p := strings.TrimSpace(args[0]); len(p) > 1 &&
+			p[0] == '#' {
+			if n, err := strconv.Atoi(p[1:]); err == nil {
+				return "#" + itoa(n), nil
+			}
+		}
+		obj, fail := env.resolveAs(matchLocal, args, 0)
+		if fail == resolveDenied {
+			return "", errf("REF", "Permission denied.")
+		}
+		if fail == resolveUnknown {
+			obj = nothing
+		}
+		return "#" + itoa(int(obj)), nil
 	})
 
-	register("FLAGS", objectText(func(env *Env, obj Ref) string {
-		return env.Host.FlagString(obj)
-	}))
-	register("FLAG?", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("FLAG?", args, 0)
+	register("FLAGS", func(env *Env, _ *Func,
+		args []string) (string, error) {
+
+		obj, err := env.resolveLocal("FLAGS", args, 0)
 		if err != nil {
+			return "", err
+		}
+		return env.Host.FlagString(obj), nil
+	})
+	register("FLAG?", func(env *Env, _ *Func,
+		args []string) (string, error) {
+
+		// One message for both failures, and it is "Failed
+		// match." rather than "Match failed." -- mfn_flagp
+		// folds PERMDENIED in with the sentinels.
+		obj, fail := env.resolveAs(matchLocal, args, 0)
+		if fail != resolveOK {
 			return "", errf("FLAG?", "Failed match. (arg1)")
 		}
 		return boolOf(env.Host.HasFlag(obj, args[1])), nil
 	})
 
 	register("CONTENTS", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("CONTENTS", args, 0)
+		obj, err := env.resolveLocal("CONTENTS", args, 0)
 		if err != nil {
 			return "", err
 		}
@@ -90,18 +128,23 @@ func init() {
 	})
 
 	register("CONTROLS", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("CONTROLS", args, 0)
+		obj, err := env.resolveMsg(matchRaw, "CONTROLS",
+			args, 0, "Match failed. (arg1)",
+			"Permission denied. (arg1)")
 		if err != nil {
-			return "", errf("CONTROLS", "Match failed. (arg1)")
+			return "", err
 		}
 		// The second argument names whose authority to test;
 		// without one it is the object the message's
 		// permissions come from.
 		who := env.Host.Owner(env.Perms)
 		if len(args) > 1 {
-			other, err := env.resolve("CONTROLS", args, 1)
+			other, err := env.resolveMsg(matchRaw,
+				"CONTROLS", args, 1,
+				"Match failed. (arg2)",
+				"Permission denied. (arg2)")
 			if err != nil {
-				return "", errf("CONTROLS", "Match failed. (arg2)")
+				return "", err
 			}
 			who = env.Host.Owner(other)
 		}
@@ -112,14 +155,25 @@ func init() {
 	// inside a thing inside a room still counts; {holds} tests
 	// only the direct location.
 	register("CONTAINS", func(env *Env, _ *Func, args []string) (string, error) {
-		inner, err := env.resolve("CONTAINS", args, 0)
+		// The first argument is raw and the second local, and
+		// the parenthesised indices carry no full stop before
+		// them -- "Match failed (1)." -- where {locked} and
+		// {testlock} write ". (arg1)". Both spellings are
+		// upstream's.
+		inner, err := env.resolveMsg(matchRaw, "CONTAINS",
+			args, 0, "Match failed (1).",
+			"Permission Denied (1).")
 		if err != nil {
-			return "", errf("CONTAINS", "Match failed (1).")
+			return "", err
 		}
 		outer := env.Who
 		if len(args) > 1 {
-			if outer, err = env.resolve("CONTAINS", args, 1); err != nil {
-				return "", errf("CONTAINS", "Match failed (2).")
+			outer, err = env.resolveMsg(matchLocal,
+				"CONTAINS", args, 1,
+				"Match failed (2).",
+				"Permission Denied (2).")
+			if err != nil {
+				return "", err
 			}
 		}
 		for i := 0; i < maxEnvDepth && inner != nothing &&
@@ -129,39 +183,71 @@ func init() {
 		return boolOf(inner == outer), nil
 	})
 	register("HOLDS", func(env *Env, _ *Func, args []string) (string, error) {
-		inner, err := env.resolve("HOLDS", args, 0)
+		inner, err := env.resolveMsg(matchRaw, "HOLDS",
+			args, 0, "Match failed (1).",
+			"Permission Denied (1).")
 		if err != nil {
-			return "", errf("HOLDS", "Match failed (1).")
+			return "", err
 		}
 		outer := env.Who
 		if len(args) > 1 {
-			if outer, err = env.resolve("HOLDS", args, 1); err != nil {
-				return "", errf("HOLDS", "Match failed (2).")
+			outer, err = env.resolveMsg(matchLocal,
+				"HOLDS", args, 1,
+				"Match failed (2).",
+				"Permission Denied (2).")
+			if err != nil {
+				return "", err
 			}
 		}
 		return boolOf(env.Host.Location(inner) == outer), nil
 	})
 	register("NEARBY", func(env *Env, _ *Func, args []string) (string, error) {
-		a, err := env.resolve("NEARBY", args, 0)
+		a, err := env.resolveMsg(matchRaw, "NEARBY", args, 0,
+			"Match failed (arg1).",
+			"Permission denied (arg1).")
 		if err != nil {
-			return "", errf("NEARBY", "Match failed (arg1).")
+			return "", err
 		}
 		b := env.What
 		if len(args) > 1 {
-			if b, err = env.resolve("NEARBY", args, 1); err != nil {
-				return "", errf("NEARBY", "Match failed (arg2).")
+			b, err = env.resolveMsg(matchRaw, "NEARBY",
+				args, 1, "Match failed (arg2).",
+				"Permission denied (arg2).")
+			if err != nil {
+				return "", err
 			}
 		}
-		return boolOf(neighbours(env, a, b)), nil
+		// {nearby} resolves raw and carries its own locality
+		// test instead, which this server did not have: short
+		// of a blessed message, one of the two objects must
+		// be a neighbour of the message's object or of the
+		// reader, so a description cannot ask whether two
+		// things on the far side of the world are together.
+		// Two spaces after the full stop, as upstream writes
+		// it.
+		if !env.Blessed && !env.isNeighbor(a, env.What) &&
+			!env.isNeighbor(b, env.What) &&
+			!env.isNeighbor(a, env.Who) &&
+			!env.isNeighbor(b, env.Who) {
+			return "", errf("NEARBY",
+				"Permission denied.  Neither "+
+					"object is local.")
+		}
+		return boolOf(env.isNeighbor(a, b)), nil
 	})
 
 	register("DBEQ", func(env *Env, _ *Func, args []string) (string, error) {
-		a, b := env.lookup(args[0]), env.lookup(args[1])
-		if !env.Host.Valid(a) {
-			return "", errf("DBEQ", "Match failed (1).")
+		// Raw, and a refusal is reported as a failed match:
+		// mfn_dbeq tests `UNKNOWN || PERMDENIED` together.
+		a, err := env.resolveMsg(matchRaw, "DBEQ", args, 0,
+			"Match failed (1).", "Match failed (1).")
+		if err != nil {
+			return "", err
 		}
-		if !env.Host.Valid(b) {
-			return "", errf("DBEQ", "Match failed (2).")
+		b, err := env.resolveMsg(matchRaw, "DBEQ", args, 1,
+			"Match failed (2).", "Match failed (2).")
+		if err != nil {
+			return "", err
 		}
 		return boolOf(a == b), nil
 	})
@@ -170,6 +256,15 @@ func init() {
 		obj, err := env.resolve("MONEY", args, 0)
 		if err != nil {
 			return "", err
+		}
+		// The same tunable floor the MUF PENNIES primitive
+		// carries, applied to MPI with blessing standing in
+		// for mucker level (`mfuns2.c:1065`). Unread here, so
+		// a world that raised it still had its balances
+		// readable out of any description.
+		if env.tuneInt("pennies_muf_mlev") > 1 &&
+			!env.Blessed {
+			return "", errf("MONEY", "Permission denied.")
 		}
 		switch env.Host.TypeName(obj) {
 		case "Thing", "Player":
@@ -184,42 +279,85 @@ func init() {
 	register("USECOUNT", timestamp(func(c, m, u int64, n int) int64 { return int64(n) }))
 
 	register("LOCKED", func(env *Env, _ *Func, args []string) (string, error) {
-		who, err := env.resolve("LOCKED", args, 0)
+		who, err := env.resolveMsg(matchLocal, "LOCKED",
+			args, 0, "Match failed. (arg1)",
+			"Permission denied. (arg1)")
 		if err != nil {
-			return "", errf("LOCKED", "Match failed. (arg1)")
+			return "", err
 		}
-		obj, err := env.resolve("LOCKED", args, 1)
+		obj, err := env.resolveMsg(matchLocal, "LOCKED",
+			args, 1, "Match failed. (arg2)",
+			"Permission denied. (arg2)")
 		if err != nil {
-			return "", errf("LOCKED", "Match failed. (arg2)")
+			return "", err
 		}
 		return boolOf(env.Host.Locked(env.Descr, who, obj)), nil
 	})
 
 	register("TESTLOCK", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("TESTLOCK", args, 0)
-		if err != nil {
-			return "", errf("TESTLOCK", "Match failed. (arg1)")
-		}
-		who := env.Who
+		// Both objects resolve first and the **third**
+		// argument is reported before the first, which is the
+		// order mfn_testlock writes its aborts in
+		// (`mfuns2.c:1532`): who, then its type, then obj.
+		obj, objFail := env.resolveAs(matchLocal, args, 0)
+		who, whoFail := env.Who, resolveOK
 		if len(args) > 2 {
-			if who, err = env.resolve("TESTLOCK", args, 2); err != nil {
-				return "", errf("TESTLOCK", "Match failed. (arg3)")
-			}
+			who, whoFail = env.resolveAs(matchLocal,
+				args, 2)
 		}
-		// A lock is read out of a property, so the same
-		// restrictions apply as to reading one directly:
-		// system properties never, and hidden ones only for a
-		// blessed message.
-		if props.IsSystem(args[1]) ||
-			(!env.Blessed && props.IsHidden(args[1])) {
-			return "", errf("TESTLOCK", "Permission denied. (arg1)")
-		}
-		lock, err := env.getProp("TESTLOCK", obj, args[1])
-		if err != nil {
+		if err := failAs("TESTLOCK", whoFail,
+			"Match failed. (arg3)",
+			"Permission denied. (arg3)"); err != nil {
 			return "", err
 		}
+		switch env.Host.TypeName(who) {
+		case "Player", "Thing":
+		default:
+			return "", errf("TESTLOCK",
+				"Invalid object type. (arg3)")
+		}
+		if err := failAs("TESTLOCK", objFail,
+			"Match failed. (arg1)",
+			"Permission denied. (arg1)"); err != nil {
+			return "", err
+		}
+		// A lock is read out of a property, so the same
+		// restrictions apply as to reading one directly --
+		// but the property is **arg2**, and upstream says so:
+		// only Prop_System is reported against arg1.
+		if props.IsSystem(args[1]) {
+			return "", errf("TESTLOCK",
+				"Permission denied. (arg1)")
+		}
+		if !env.Blessed {
+			priv := props.IsPrivate(args[1]) &&
+				env.Host.Owner(env.Perms) !=
+					env.Host.Owner(env.What)
+			if props.IsHidden(args[1]) || priv {
+				return "", errf("TESTLOCK",
+					"Permission denied. (arg2)")
+			}
+		}
+		// A **direct** read, not safegetprop: upstream reads
+		// the lock with GETLOCK, so the explicit checks above
+		// are the whole permission story and there is no
+		// environment walk. Going through the safety layer
+		// instead made ".priv" on an unlocked object refuse,
+		// because the walk left the object and reached one
+		// somebody else owned.
+		lock := env.Host.GetPropStr(obj, args[1])
 		if lock == "" {
-			return "0", nil
+			// A fourth argument is what to answer when
+			// there is no lock at all, which this server
+			// ignored. Without one the answer is **true**
+			// -- `eval_boolexp` passes TRUE_BOOLEXP
+			// (`boolexp.c:93`), so an unset lock lets
+			// everybody through -- where this answered
+			// "0" and made an unlocked object look shut.
+			if len(args) > 3 {
+				return args[3], nil
+			}
+			return "1", nil
 		}
 		ok, err := env.Host.TestLock(env.Descr, who, obj, lock)
 		if err != nil {
@@ -266,7 +404,12 @@ func init() {
 		obj := env.Who
 		if len(args) > 1 {
 			var err error
-			if obj, err = env.resolve("PRONOUNS", args, 1); err != nil {
+			// "Permission Denied." with a capital D,
+			// which only {pronouns} and {type} write.
+			obj, err = env.resolveMsg(matchLocal,
+				"PRONOUNS", args, 1, "Match failed.",
+				"Permission Denied.")
+			if err != nil {
 				return "", err
 			}
 		}
@@ -300,11 +443,14 @@ func timestamp(pick func(created, modified, used int64, count int) int64) impl {
 
 // connTime builds {ontime} and {idle}, which report -1 rather than
 // failing for an object that is not connected — or not an object at
-// all.
+// all. Both are mesg_dbref_raw, which cannot refuse, so the
+// "Permission denied." each of them carries is unreachable -- and
+// they test for it in opposite orders, which is how little it
+// matters.
 func connTime(read func(Host, Ref) int) impl {
 	return func(env *Env, _ *Func, args []string) (string, error) {
-		obj := env.lookup(args[0])
-		if !env.Host.Valid(obj) {
+		obj, fail := env.resolveAs(matchRaw, args, 0)
+		if fail != resolveOK {
 			return "-1", nil
 		}
 		return itoa(read(env.Host, env.Host.Owner(obj))), nil
@@ -322,16 +468,6 @@ func terminalSize(read func(Host, Ref) int) impl {
 		}
 		return itoa(n), nil
 	}
-}
-
-// neighbours reports whether two objects can see each other: in the
-// same room, or one inside the other.
-func neighbours(env *Env, a, b Ref) bool {
-	if a == b {
-		return true
-	}
-	locA, locB := env.Host.Location(a), env.Host.Location(b)
-	return locA == b || locB == a || (locA == locB && locA != nothing)
 }
 
 // objectName is mfn_name (mfuns2.c:638) and mfn_fullname (:694),
@@ -355,8 +491,8 @@ func objectName(truncateExit bool) impl {
 	return func(env *Env, _ *Func, args []string) (string,
 		error) {
 
-		obj := env.lookup(args[0])
-		if !env.Host.Valid(obj) {
+		obj, fail := env.resolveAs(matchRaw, args, 0)
+		if fail != resolveOK {
 			return "", errf("NAME", "Match failed.")
 		}
 		name := env.Host.Name(obj)

@@ -184,43 +184,92 @@ func init() {
 		return env.getProp("PROP", obj, args[0])
 	})
 	register("STORE", func(env *Env, _ *Func, args []string) (string, error) {
-		// "{store:value,property,object}"
-		obj, err := env.resolve("STORE", args, 2)
+		// "{store:value,property,object}" Strict: blessed, or
+		// the same owner. The four functions that *write* all
+		// use this wrapper, and none of them had it.
+		obj, err := env.resolveStrict("STORE", args, 2)
 		if err != nil {
 			return "", err
 		}
-		if !env.mayWrite(obj) || !env.safePutProp(obj,
-			args[1], args[0], true) {
+		if !env.safePutProp(obj, args[1], args[0], true) {
 			return "", errf("STORE", "Permission denied.")
 		}
 		// {store} answers with what it wrote, which nothing
 		// else in the property set does.
 		return args[0], nil
 	})
-	register("LOC", objectRef(func(env *Env, obj Ref) Ref {
-		return env.Host.Location(obj)
-	}))
-	register("OWNER", objectRef(func(env *Env, obj Ref) Ref {
-		return env.Host.Owner(obj)
-	}))
-	register("AWAKE", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("AWAKE", args, 0)
+	// {loc} is local and {owner} is raw, which is why they cannot
+	// share a factory: anybody may ask who owns an object, and
+	// only a neighbour may ask where it is.
+	register("LOC", func(env *Env, _ *Func,
+		args []string) (string, error) {
+
+		obj, err := env.resolveLocal("LOC", args, 0)
 		if err != nil {
 			return "", err
+		}
+		return env.render(env.Host.Location(obj)), nil
+	})
+	register("OWNER", func(env *Env, _ *Func,
+		args []string) (string, error) {
+
+		// "Failed match.", not "Match failed." -- mfn_owner
+		// is one of the three that reverse the words.
+		obj, err := env.resolveMsg(matchRaw, "OWNER", args, 0,
+			"Failed match.", "Permission denied.")
+		if err != nil {
+			return "", err
+		}
+		return env.render(env.Host.Owner(obj)), nil
+	})
+	register("AWAKE", func(env *Env, _ *Func,
+		args []string) (string, error) {
+
+		// Local, and every failure answers "0" rather than
+		// aborting -- so {awake} cannot be used to probe
+		// whether a distant object exists.
+		obj, fail := env.resolveAs(matchLocal, args, 0)
+		if fail != resolveOK {
+			return "0", nil
 		}
 		return boolOf(env.Host.Online(obj)), nil
 	})
-	register("ISTYPE", func(env *Env, _ *Func, args []string) (string, error) {
-		obj, err := env.resolve("ISTYPE", args, 0)
-		if err != nil {
-			return "", err
+	register("ISTYPE", func(env *Env, _ *Func,
+		args []string) (string, error) {
+
+		want := strings.TrimSpace(args[len(args)-1])
+		// A failed match is the type "Bad", and a *refusal*
+		// is too when that is what was asked for -- which
+		// upstream's own TODO calls a bug and asks to have
+		// removed, because "Bad" should not bypass a
+		// permission check. Reproduced, with the comment.
+		obj, fail := env.resolveAs(matchLocal, args, 0)
+		bad := ascii.EqualFold(want, "Bad")
+		if fail == resolveUnknown || (fail == resolveDenied &&
+			bad) {
+			return boolOf(bad), nil
 		}
-		want := strings.ToUpper(strings.TrimSpace(args[len(args)-1]))
-		return boolOf(want == "PLAYER" && env.Host.IsPlayer(obj)), nil
+		if fail == resolveDenied {
+			return "", errf("TYPE", "Permission Denied.")
+		}
+		return boolOf(ascii.EqualFold(want,
+			env.Host.TypeName(obj))), nil
 	})
+	// {isdbref} is **not** a match: mfn_isdbref (`mfuns.c:2235`)
+	// demands a literal "#N" and answers "0" for anything else,
+	// so "{isdbref:me}" is false. This resolved names, which made
+	// it a way to ask whether an object existed under any
+	// spelling.
 	register("ISDBREF", func(env *Env, _ *Func, args []string) (string, error) {
-		obj := env.lookup(args[0])
-		return boolOf(env.Host.Valid(obj)), nil
+		p := strings.TrimSpace(args[0])
+		if len(p) < 2 || p[0] != '#' {
+			return "0", nil
+		}
+		n, err := strconv.Atoi(p[1:])
+		if err != nil {
+			return "0", nil
+		}
+		return boolOf(env.Host.Valid(Ref(n))), nil
 	})
 	register("ISNUM", func(_ *Env, _ *Func, args []string) (string, error) {
 		_, err := strconv.Atoi(strings.TrimSpace(args[0]))
@@ -285,16 +334,23 @@ func init() {
 		// tests the object carrying the message, not the
 		// target: a thing that hears something must not be
 		// able to send a private message to anyone it likes.
-		if env.Type.Has(Listener) &&
-			env.Host.TypeName(env.What) != "Room" {
-			return "", errf("TELL", "Permission denied.")
-		}
+		//
+		// It runs **after** the match, which is the order
+		// mfn_tell writes its aborts in: a listener naming an
+		// object it may not reach is told so before it is
+		// told it is a listener.
 		target := env.Who
 		if len(args) > 1 {
 			var err error
-			if target, err = env.resolve("TELL", args, 1); err != nil {
+			target, err = env.resolveLocal("TELL",
+				args, 1)
+			if err != nil {
 				return "", err
 			}
+		}
+		if env.Type.Has(Listener) &&
+			env.Host.TypeName(env.What) != "Room" {
+			return "", errf("TELL", "Permission denied.")
 		}
 		for _, line := range strings.Split(args[0], "\r") {
 			env.Host.Notify(target, line)
@@ -651,29 +707,6 @@ func repeatTo(n int, fill string) string {
 	return out[:n]
 }
 
-// objectText builds a function that reports something about an
-// object.
-func objectText(fn func(*Env, Ref) string) impl {
-	return func(env *Env, f *Func, args []string) (string, error) {
-		obj, err := env.resolve(f.Name, args, 0)
-		if err != nil {
-			return "", err
-		}
-		return fn(env, obj), nil
-	}
-}
-
-// objectRef builds a function that resolves one object to another.
-func objectRef(fn func(*Env, Ref) Ref) impl {
-	return func(env *Env, f *Func, args []string) (string, error) {
-		obj, err := env.resolve(f.Name, args, 0)
-		if err != nil {
-			return "", err
-		}
-		return env.render(fn(env, obj)), nil
-	}
-}
-
 // render writes an object the way MPI does: a player as "*Name",
 // anything else as its dbref.
 func (env *Env) render(obj Ref) string {
@@ -688,41 +721,6 @@ func clock(layout string) impl {
 	return func(env *Env, _ *Func, _ []string) (string, error) {
 		return time.Unix(env.Host.Now(), 0).UTC().Format(layout), nil
 	}
-}
-
-// resolve reads an object argument at the given position, defaulting
-// to the object carrying the message.
-func (env *Env) resolve(fn string, args []string, at int) (Ref, error) {
-	if at >= len(args) || strings.TrimSpace(args[at]) == "" {
-		return env.What, nil
-	}
-	obj := env.lookup(args[at])
-	if !env.Host.Valid(obj) {
-		return 0, errf(fn, "Match failed.")
-	}
-	return obj, nil
-}
-
-// lookup resolves a name or a "#123" reference to an object.
-func (env *Env) lookup(name string) Ref {
-	name = strings.TrimSpace(name)
-	if strings.HasPrefix(name, "#") {
-		if n, err := strconv.Atoi(name[1:]); err == nil {
-			return Ref(n)
-		}
-	}
-	return env.Host.Match(env.Who, env.What, name)
-}
-
-// mayWrite reports whether this evaluation may change an object.
-//
-// A blessed property carries wizard permissions; otherwise the
-// permissions object must own what is being written.
-func (env *Env) mayWrite(obj Ref) bool {
-	if env.Blessed {
-		return true
-	}
-	return env.Host.Owner(obj) == env.Host.Owner(env.Perms) || obj == env.Perms
 }
 
 // truthy decides whether a value counts as true, which MPI does by

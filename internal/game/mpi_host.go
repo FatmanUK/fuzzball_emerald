@@ -87,6 +87,16 @@ func (h *mpiHost) ForceLockPasses(descr int, who, obj mpi.Ref) bool {
 		ref.Ref(obj), propForceLock, false)
 }
 
+// ReadLockPasses is the same against the read lock, which MPI's two
+// permission wrappers both consult -- mesg_read_perms on the object
+// itself and mesg_local_perms on the *owner of its location*. Neither
+// was ported, so `@readlock` had one reader here (`examine`'s) where
+// upstream has three.
+func (h *mpiHost) ReadLockPasses(descr int, who, obj mpi.Ref) bool {
+	return h.s.lockPasses(h.w, descr, 1, ref.Ref(who),
+		ref.Ref(obj), propReadLock, false)
+}
+
 func (h *mpiHost) Exits(obj mpi.Ref) []mpi.Ref {
 	return toMPIRefs(h.w.Exits(ref.Ref(obj)))
 }
