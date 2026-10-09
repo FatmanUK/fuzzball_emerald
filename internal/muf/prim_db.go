@@ -456,7 +456,21 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, f.Push(Str(nextProp(h, obj, path)))
+		// prim_nextprop (p_props.c:1100) **skips** a name the
+		// program may not read rather than refusing it:
+		//
+		//	while (pname && !prop_read_perms(...))
+		//		pname = next_prop_name(..., pname);
+		//
+		// So a hidden property is invisible to a walk rather
+		// than stopping it, and the walk ends with the empty
+		// string. It is also the one property primitive with
+		// no CHECKREMOTE at all.
+		next := nextProp(h, obj, path)
+		for next != "" && !f.propReadPerms(h, obj, next) {
+			next = nextProp(h, obj, next)
+		}
+		return nil, f.Push(Str(next))
 	})
 }
 
@@ -557,19 +571,31 @@ func toProp(v Value) props.Value {
 }
 
 // nextProp returns the property name after path at the same level, or
-// "" at the end. An empty path starts the walk at the top.
+// "" at the end. An empty path starts the walk at the top. The name
+// it returns is **rooted**: `next_prop_name` (`property.c:1118`)
+// writes a leading '/' when it was handed an empty string, and every
+// later call is handed its own answer back, so a walk from the root
+// yields "/plainonly" and not "plainonly". This returned the bare
+// name, so a program comparing the two, or feeding one to GETPROP,
+// saw a different path from upstream's.
 func nextProp(h Host, obj ref.Ref, path string) string {
 	parent, name := splitProp(path)
 	children := h.PropChildren(obj, parent)
+	root := func(p string) string {
+		if parent == "" {
+			return "/" + p
+		}
+		return join(parent, p)
+	}
 	if name == "" {
 		if len(children) == 0 {
 			return ""
 		}
-		return join(parent, children[0])
+		return root(children[0])
 	}
 	for i, c := range children {
 		if equalFoldASCII(c, name) && i+1 < len(children) {
-			return join(parent, children[i+1])
+			return root(children[i+1])
 		}
 	}
 	return ""
@@ -676,6 +702,10 @@ func init() {
 			return nil, err
 		}
 		where, v := envProp(h, obj, path)
+		err = f.envPropReadable(h, where, path)
+		if err != nil {
+			return nil, err
+		}
 		if err := f.Push(Obj(where)); err != nil {
 			return nil, err
 		}
@@ -687,6 +717,10 @@ func init() {
 			return nil, err
 		}
 		where, v := envProp(h, obj, path)
+		err = f.envPropReadable(h, where, path)
+		if err != nil {
+			return nil, err
+		}
 		if err := f.Push(Obj(where)); err != nil {
 			return nil, err
 		}

@@ -79,3 +79,31 @@ func (f *Frame) propWritePerms(h Host, obj ref.Ref,
 // propDenied is the one message every one of those 31 sites aborts
 // with.
 func propDenied() error { return errf("Permission denied.") }
+
+// envPropReadable is the read test ENVPROP and ENVPROPSTR make, and
+// its placement is the whole of it: the walk runs **first**, and the
+// test is then made against the object it **landed on** rather than
+// the one the search started from (`p_props.c:573`, `:728`).
+//
+// So a property a program may not read on a parent room refuses the
+// lookup even though the starting object was fair game — and when
+// the walk finds nothing, `what` is NOTHING and no test is made at
+// all, which is why this is guarded on the landing rather than
+// unconditional.
+//
+// Upstream also passes the **untrimmed** name here, where the walk
+// itself used a copy with its trailing slashes removed. That makes no
+// observable difference — a trailing '/' starts no path segment, so
+// no sigil test sees it, and `is_prop_prefix` ends at one anyway —
+// but it is why the two strings are not interchangeable in the C.
+func (f *Frame) envPropReadable(h Host, landed ref.Ref,
+	name string) error {
+
+	if landed == ref.Nothing {
+		return nil
+	}
+	if !f.propReadPerms(h, landed, name) {
+		return propDenied()
+	}
+	return nil
+}
