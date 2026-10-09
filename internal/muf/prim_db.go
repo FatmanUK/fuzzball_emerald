@@ -99,9 +99,27 @@ func init() {
 
 	register("LOCATION", refToRef(func(h Host, r ref.Ref) ref.Ref { return h.Location(r) }))
 	register("OWNER", refToRef(func(h Host, r ref.Ref) ref.Ref { return h.Owner(r) }))
+	// GETLINK and GETLINKS refuse a **program** — upstream's
+	// own comment calls it a years-old suggestion that a
+	// program's link might be its owner's home, and refuses it
+	// meanwhile — and **GETLINKS_ARRAY does not**, which
+	// upstream says out loud: "Unlike prim_getlinks, does not
+	// abort on program objects." It answers an empty array, and
+	// its invalid-object message is a third wording again.
+	//
+	// None of the three validated or refused anything here.
 	register("GETLINK", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHostRemote()
+		obj, h, err := f.refAndHost()
 		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object.")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		if err := notAProgram(h, obj); err != nil {
 			return nil, err
 		}
 		links := h.Links(obj)
@@ -111,8 +129,17 @@ func init() {
 		return nil, f.Push(Obj(links[0]))
 	})
 	register("GETLINKS", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHostRemote()
+		obj, h, err := f.refAndHost()
 		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object.")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		if err := notAProgram(h, obj); err != nil {
 			return nil, err
 		}
 		links := h.Links(obj)
@@ -124,23 +151,157 @@ func init() {
 		return nil, f.Push(Int(int64(len(links))))
 	})
 	register("GETLINKS_ARRAY", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHostRemote()
+		obj, h, err := f.refAndHost()
 		if err != nil {
 			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object dbref. (1)")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		// A program answers an empty array rather than
+		// aborting, and `array_getlinks` (`p_db.c:3469`)
+		// reaches it through a switch with no PROGRAM case.
+		if h.ObjType(obj) == ref.TypeProgram {
+			return nil, f.Push(Arr(refList(nil)))
 		}
 		return nil, f.Push(Arr(refList(h.Links(obj))))
 	})
 
-	register("CONTENTS", chainPrim(func(h Host, r ref.Ref) []ref.Ref { return h.Contents(r) }))
-	register("EXITS", chainPrim(func(h Host, r ref.Ref) []ref.Ref { return h.Exits(r) }))
-	register("CONTENTS_ARRAY", chainArray(func(h Host, r ref.Ref) []ref.Ref { return h.Contents(r) }))
-	register("EXITS_ARRAY", chainArray(func(h Host, r ref.Ref) []ref.Ref { return h.Exits(r) }))
+	// The four chain primitives shared one factory and have four
+	// different contracts, which is why the factory is gone.
+	//
+	// CONTENTS and NEXT **skip** what a low-mucker program may
+	// not see rather than refusing; EXITS and EXITS_ARRAY have a
+	// mucker-3 ownership gate; three of the four refuse a program
+	// or an exit argument and each words it differently; and
+	// EXITS_ARRAY asks its permission question *before* checking
+	// that the object exists, which is the opposite order from
+	// every one of its neighbours and is upstream's.
+	register("CONTENTS", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid argument type.")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		chain := h.Contents(obj)
+		i := 0
+		for i < len(chain) && f.darkToMe(h, chain[i]) {
+			i++
+		}
+		if i >= len(chain) {
+			return nil, f.Push(Obj(ref.Nothing))
+		}
+		return nil, f.Push(Obj(chain[i]))
+	})
+
+	register("EXITS", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) ||
+			h.ObjType(obj) == ref.TypeProgram ||
+			h.ObjType(obj) == ref.TypeExit {
+			return nil, errf("Invalid player, thing, " +
+				"or room object.")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		if f.MLevel() < 3 &&
+			!f.permissions(h, f.progUID(h), obj) {
+			return nil, errf("Permission denied.")
+		}
+		chain := h.Exits(obj)
+		if len(chain) == 0 {
+			return nil, f.Push(Obj(ref.Nothing))
+		}
+		return nil, f.Push(Obj(chain[0]))
+	})
+
+	register("CONTENTS_ARRAY", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid dbref (1)")
+		}
+		// A program or an exit answers an **empty array**
+		// rather than aborting, and before CHECKREMOTE -- so
+		// a mucker-1 program may ask about a remote one.
+		if t := h.ObjType(obj); t == ref.TypeProgram ||
+			t == ref.TypeExit {
+			return nil, f.Push(Arr(refList(nil)))
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		var out []ref.Ref
+		for _, r := range h.Contents(obj) {
+			if f.darkToMe(h, r) {
+				continue
+			}
+			out = append(out, r)
+		}
+		return nil, f.Push(Arr(refList(out)))
+	})
+
+	register("EXITS_ARRAY", func(f *Frame) (*Result, error) {
+		obj, h, err := f.refAndHost()
+		if err != nil {
+			return nil, err
+		}
+		// **Before** the validity check, which is upstream's
+		// order: a mucker-1 program asking about a dbref that
+		// does not exist is told "Permission denied." rather
+		// than that it does not exist.
+		//
+		// That order cannot be compared against the oracle,
+		// and the reason is worth writing down: upstream's
+		// `permissions` then reads `OWNER` of an out-of-range
+		// dbref, and the C server **dies**. The golden case
+		// probes `#9999 exits_array` at mucker 3 only, where
+		// the level test short-circuits. This server answers
+		// "Invalid dbref (1)" at either level, because its
+		// permissions helper reads an invalid ref as owned by
+		// nobody.
+		if f.MLevel() < 3 &&
+			!f.permissions(h, f.progUID(h), obj) {
+			return nil, errf("Permission denied.")
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid dbref (1)")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
+			return nil, err
+		}
+		if t := h.ObjType(obj); t == ref.TypeProgram ||
+			t == ref.TypeExit {
+			return nil, f.Push(Arr(refList(nil)))
+		}
+		return nil, f.Push(Arr(refList(h.Exits(obj))))
+	})
 
 	// NEXT walks a containment chain one step, which is how older
 	// programs iterate before arrays existed.
 	register("NEXT", func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHostRemote()
+		obj, h, err := f.refAndHost()
 		if err != nil {
+			return nil, err
+		}
+		if !h.Valid(obj) {
+			return nil, errf("Invalid object.")
+		}
+		if err := f.checkRemote(h, obj); err != nil {
 			return nil, err
 		}
 		loc := h.Location(obj)
@@ -151,10 +312,28 @@ func init() {
 		if h.ObjType(obj) == ref.TypeExit {
 			siblings = h.Exits(loc)
 		}
+		at := -1
 		for i, s := range siblings {
-			if s == obj && i+1 < len(siblings) {
-				return nil, f.Push(Obj(siblings[i+1]))
+			if s == obj {
+				at = i
+				break
 			}
+		}
+		// NEXT's skip rule is **not** CONTENTS's: it hides a
+		// ROOM as well as a DARK thing, and it exempts an
+		// exit from both. So a mucker-1 program walking a
+		// chain steps over the rooms in it, which the first
+		// step of the same walk does not.
+		for i := at + 1; i >= 1 && i < len(siblings); i++ {
+			r := siblings[i]
+			hidden := h.Flags(r)&ref.Dark != 0 ||
+				h.ObjType(r) == ref.TypeRoom
+			if f.MLevel() < 2 && hidden &&
+				h.ObjType(r) != ref.TypeExit &&
+				!h.Controls(f.progUID(h), r) {
+				continue
+			}
+			return nil, f.Push(Obj(r))
 		}
 		return nil, f.Push(Obj(ref.Nothing))
 	})
@@ -665,36 +844,6 @@ func refList(refs []ref.Ref) *Array {
 	return NewList(vals)
 }
 
-// chainPrim builds a primitive that pushes a chain's head, the way
-// the older CONTENTS and EXITS do. Its users -- CONTENTS and EXITS --
-// both take CHECKREMOTE upstream, so it goes in the factory.
-func chainPrim(fn func(Host, ref.Ref) []ref.Ref) primFunc {
-	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHostRemote()
-		if err != nil {
-			return nil, err
-		}
-		chain := fn(h, obj)
-		if len(chain) == 0 {
-			return nil, f.Push(Obj(ref.Nothing))
-		}
-		return nil, f.Push(Obj(chain[0]))
-	}
-}
-
-// chainArray builds the array form of the same. Its users --
-// CONTENTS_ARRAY and EXITS_ARRAY -- both take CHECKREMOTE upstream,
-// so it goes in the factory.
-func chainArray(fn func(Host, ref.Ref) []ref.Ref) primFunc {
-	return func(f *Frame) (*Result, error) {
-		obj, h, err := f.refAndHostRemote()
-		if err != nil {
-			return nil, err
-		}
-		return nil, f.Push(Arr(refList(fn(h, obj))))
-	}
-}
-
 // typeOfTest builds a primitive that reports an object's type. All
 // five of its users -- PLAYER?, ROOM?, EXIT?, PROGRAM? and THING? --
 // take CHECKREMOTE upstream.
@@ -839,13 +988,29 @@ func init() {
 		return nil, nil
 	})
 
+	// UNPARSEOBJ is prim_unparseobj (`p_strings.c:3163`), and it
+	// is **not** unparse_object: no viewer, no permission test,
+	// and four sentinels of its own. This collapsed all of them
+	// into "*NOTHING*", so a program could not tell an unset link
+	// from a HOME one or from a dbref that never existed.
 	register("UNPARSEOBJ", func(f *Frame) (*Result, error) {
 		obj, h, err := f.refAndHost()
 		if err != nil {
 			return nil, err
 		}
-		if !h.Valid(obj) {
+		switch obj {
+		case ref.Nothing:
 			return nil, f.Push(Str("*NOTHING*"))
+		case ref.Home:
+			return nil, f.Push(Str("*HOME*"))
+		case ref.Nil:
+			return nil, f.Push(Str("*NIL*"))
+		}
+		// `ObjExists`, not `OkObj`: a **garbage** ref renders
+		// as its name and flags like anything else, and only
+		// a ref outside the database is "*INVALID*".
+		if obj < 0 || obj >= h.Top() {
+			return nil, f.Push(Str("*INVALID*"))
 		}
 		return nil, f.Push(Str(h.Name(obj) + "(" + obj.String() +
 			h.Flags(obj).Unparse() + ")"))
@@ -1861,9 +2026,24 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// **A player argument restarts the walk at #0.**
+		// Upstream sets `ref = 0` for a player and `ref++`
+		// for anything else, so `me @ nextowned` enumerates
+		// the whole database where this skipped everything
+		// below the player's own dbref -- which for `#1` is
+		// almost nothing and for a player made later is most
+		// of what they own.
+		//
+		// The owner itself is skipped, which only matters
+		// once the walk can reach it.
 		owner := h.Owner(obj)
-		for r := obj + 1; r < h.Top(); r++ {
-			if h.Valid(r) && h.Owner(r) == owner {
+		r := obj + 1
+		if h.ObjType(obj) == ref.TypePlayer {
+			r = 0
+		}
+		for ; r < h.Top(); r++ {
+			if r != owner && h.Valid(r) &&
+				h.Owner(r) == owner {
 				return nil, f.Push(Obj(r))
 			}
 		}
@@ -2137,4 +2317,24 @@ func (f *Frame) popRefIndexed(n int) (ref.Ref, error) {
 			n)
 	}
 	return v.Ref, nil
+}
+
+// notAProgram is GETLINK's and GETLINKS's shared refusal, which
+// GETLINKS_ARRAY deliberately does not have.
+func notAProgram(h Host, obj ref.Ref) error {
+	if h.ObjType(obj) == ref.TypeProgram {
+		return errf("Illegal object referenced.")
+	}
+	return nil
+}
+
+// darkToMe is the skip CONTENTS and CONTENTS_ARRAY share: below
+// mucker 2 a DARK object the program does not control is stepped over
+// rather than refused, so a listing is shorter rather than an error.
+//
+// NEXT's rule is deliberately not this one — it hides a ROOM too
+// and exempts an exit — and is written out at its own call site.
+func (f *Frame) darkToMe(h Host, r ref.Ref) bool {
+	return f.MLevel() < 2 && h.Flags(r)&ref.Dark != 0 &&
+		!h.Controls(f.progUID(h), r)
 }
