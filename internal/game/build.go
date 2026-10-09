@@ -758,18 +758,56 @@ func (s *Server) cmdName(c *ctx) {
 	if !ok {
 		return
 	}
-	newName = strings.TrimSpace(newName)
+	// **Not trimmed.** arg2 reaches a command left-trimmed only
+	// (`game.c:708`), and `do_name` passes it to `ok_object_name`
+	// as it stands — so a name really can end in a space.
+	// Trimming it here undid the intake rule for the one command
+	// whose whole argument *is* a name.
 	if newName == "" {
-		c.tell("Give it what name?")
+		c.tell("Give it what new name?")
 		return
 	}
 
-	// Renaming a player needs the same checks as creating one,
-	// and the player's own password, which @name does not take.
+	// Renaming a **player** takes the player's own password as a
+	// second word, which this did not ask for: `@name bob=jim
+	// secret`. Without it anybody who controls a player — a
+	// wizard, or whoever a `@chown_lock` admits — could rename
+	// them silently. The name is cut at the first whitespace and
+	// the rest is the password, left-trimmed.
 	if c.w.Get(target).Type() == ref.TypePlayer {
-		if err := validPlayerName(c.w, newName); err != nil {
-			c.send(err.Error())
+		pass := ""
+		if i := strings.IndexFunc(newName,
+			func(r rune) bool {
+				return r == ' ' || r == '\t' ||
+					r == '\n' || r == '\v' ||
+					r == '\f' || r == '\r'
+			}); i >= 0 {
+			pass = trimLeftSpace(newName[i+1:])
+			newName = newName[:i]
+		}
+		if pass == "" {
+			c.tell("You must specify a password to " +
+				"change a player name.")
+			c.tell("E.g.: @name player = newname " +
+				"password")
 			return
+		}
+		o := c.w.Get(target)
+		if !password.Verify(o.PasswordHash, pass).OK {
+			c.tell("Incorrect password.")
+			return
+		}
+		// Upstream only validates the name when it is
+		// *changing*, compared case-insensitively — so
+		// correcting somebody's capitalisation is allowed
+		// past a check their current name might not pass.
+		if !ascEqual(newName, o.Name) {
+			if err := validPlayerName(c.w,
+				newName); err != nil {
+				c.tell("You can't give a player " +
+					"that name.")
+				return
+			}
 		}
 	}
 	if err := c.w.Rename(target, newName); err != nil {

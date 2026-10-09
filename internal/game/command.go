@@ -150,7 +150,14 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 		}
 	}()
 
-	line = strings.TrimSpace(line)
+	// **Left-trimmed only.** `process_command` runs
+	// `skip_whitespace(&command)` (`game.c:610`) and never
+	// touches the end of the line, so trailing whitespace reaches
+	// the argument split — where arg1 loses it and arg2 keeps
+	// it. This trimmed both ends, so the second argument of every
+	// "="-taking command lost its trailing space, and `@set
+	// x=kill_ok ` behaved differently here.
+	line = trimLeftSpace(line)
 	if line == "" {
 		return
 	}
@@ -172,7 +179,7 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 	if strings.HasPrefix(line, string(overrideToken)) &&
 		w.Get(c.who).Flags.IsTrueWizard() {
 		overridden = true
-		line = strings.TrimSpace(line[1:])
+		line = trimLeftSpace(line[1:])
 		c.verb, c.arg = trimCommand(line)
 		c.rest = fullCommand(line)
 		if line == "" {
@@ -188,11 +195,11 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 	// the token — leading spaces and all.
 	switch {
 	case strings.HasPrefix(line, string(sayToken)):
-		c.arg, c.rest = strings.TrimSpace(line[1:]), line[1:]
+		c.arg, c.rest = trimSpace(line[1:]), line[1:]
 		s.cmdSay(c)
 		return
 	case strings.HasPrefix(line, string(poseToken)):
-		c.arg, c.rest = strings.TrimSpace(line[1:]), line[1:]
+		c.arg, c.rest = trimSpace(line[1:]), line[1:]
 		s.cmdPose(c)
 		return
 	}

@@ -111,10 +111,17 @@ func (m *Matcher) Arg() string { return m.arg }
 func (m *Matcher) Verb() string { return m.verb }
 
 // New starts a search for name on behalf of who.
+//
+// **The name is taken as given.** `init_match` (`match.c:63`) copies
+// the pointer and trims nothing, and the one caller it matters for is
+// `can_move`, which passes the typed line: `process_command`
+// left-trims it and leaves the end alone, so "out " has to fail to
+// match an exit named "out". This trimmed both ends, so a trailing
+// space was invisible to every matcher.
 func New(w *world.World, who ref.Ref, name string) *Matcher {
 	return &Matcher{
 		w:     w,
-		name:  strings.TrimSpace(name),
+		name:  name,
 		who:   who,
 		from:  who,
 		exact: ref.Nothing, last: ref.Nothing,

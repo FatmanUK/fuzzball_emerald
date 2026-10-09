@@ -756,9 +756,72 @@ func (s *Server) commandLog() *slog.Logger {
 
 // trimCommand splits a line into a verb and its argument.
 func trimCommand(line string) (verb, arg string) {
-	line = strings.TrimSpace(line)
-	verb, arg, _ = strings.Cut(line, " ")
-	return verb, strings.TrimSpace(arg)
+	verb, rest := cutWord(line)
+	a1, a2, found := strings.Cut(rest, string(argDelimiter))
+	a1 = trimSpace(a1)
+	if !found {
+		return verb, a1
+	}
+	// Rejoined rather than carried as two fields, because every
+	// command that takes a second argument cuts `ctx.arg` at the
+	// first '=' itself — so putting each half's own trimming in
+	// before the join gives all of them upstream's answer without
+	// touching any of them.
+	return verb, a1 + string(argDelimiter) + trimLeftSpace(a2)
+}
+
+// argDelimiter is upstream's ARG_DELIMITER, the '=' that separates a
+// command's two arguments.
+const argDelimiter = '='
+
+// cutWord splits a line at its first whitespace, which is what
+// upstream's command-word scan does: `!isspace`, not a space. A
+// tab-separated command line reached one word here.
+func cutWord(line string) (word, rest string) {
+	for i := 0; i < len(line); i++ {
+		if isSpaceByte(line[i]) {
+			return line[:i], line[i+1:]
+		}
+	}
+	return line, ""
+}
+
+// isSpaceByte is C's isspace for the ASCII range, which is what
+// upstream's parsing uses throughout: space, tab, newline, vertical
+// tab, form feed and carriage return.
+func isSpaceByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
+		c == '\f' || c == '\r'
+}
+
+// trimLeftSpace is skip_whitespace, trimRightSpace is
+// remove_ending_whitespace, and trimSpace is both. They are spelled
+// out rather than taken from strings because strings.TrimSpace also
+// trims Unicode spaces, and upstream trims only what isspace answers
+// for — so a non-breaking space is part of an argument there and
+// was not here.
+func trimLeftSpace(s string) string {
+	for len(s) > 0 && isSpaceByte(s[0]) {
+		s = s[1:]
+	}
+	return s
+}
+
+func trimRightSpace(s string) string {
+	// The bound is `len(s) > 1`, not `> 0`: upstream's loop
+	// condition is `p > *s`, so it never removes the *first*
+	// character and a string of nothing but whitespace keeps one.
+	// Unobservable where it is used, since arg1 is left-trimmed
+	// first and an all-whitespace argument is empty by then, but
+	// the loop is the one upstream has.
+	for len(s) > 1 && isSpaceByte(s[len(s)-1]) {
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
+func trimSpace(s string) string {
+	return trimRightSpace(trimLeftSpace(s))
 }
 
 // idleFor renders a duration the way WHO does.
@@ -782,9 +845,10 @@ func idleFor(d time.Duration) string {
 // trims at both ends; this keeps whatever follows the single space,
 // which is what say and pose print back.
 func fullCommand(line string) string {
-	i := strings.IndexAny(line, " \t")
-	if i < 0 {
-		return ""
+	for i := 0; i < len(line); i++ {
+		if isSpaceByte(line[i]) {
+			return line[i+1:]
+		}
 	}
-	return line[i+1:]
+	return ""
 }
