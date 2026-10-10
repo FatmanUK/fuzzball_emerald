@@ -256,8 +256,35 @@ func (h *mufHost) PropChildren(obj ref.Ref, path string) []string {
 	return nil
 }
 
-func (h *mufHost) Match(who ref.Ref, name string) ref.Ref {
-	return match.New(h.w, who, name).Everything().Player().Result()
+// Match implements muf.Host for the MATCH primitive, whose search is
+// its own: a conditional tree rather than `match_everything`. This
+// used `Everything().Player()`, which is neither the same list nor
+// the same gate.
+func (h *mufHost) Match(who ref.Ref, name string,
+	wide bool) ref.Ref {
+
+	m := match.New(h.w, who, name)
+	if strings.HasPrefix(name, "$") {
+		// A "$name" gets match_registered and nothing else,
+		// so a registration cannot be shadowed by something
+		// lying in the room.
+		m = m.Registered()
+	} else {
+		m = m.Exits().Neighbor().Possession().Me().Here().
+			Home().Nil()
+	}
+	if wide {
+		m = m.Absolute().Player()
+	}
+	return m.Result()
+}
+
+// MatchInside implements muf.Host for RMATCH.
+func (h *mufHost) MatchInside(who, container ref.Ref,
+	name string) ref.Ref {
+
+	return match.New(h.w, who, name).
+		PreferType(ref.TypeThing).Inside(container).Result()
 }
 
 func (h *mufHost) MatchPlayer(name string) ref.Ref {

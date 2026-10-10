@@ -94,10 +94,19 @@ type Host interface {
 	// path.
 	PropChildren(obj ref.Ref, path string) []string
 
-	// Match resolves a name the way a player's command would,
+	// Match is prim_match's own search (`p_db.c:815`), which is
+	// **not** match_everything: a "$name" gets match_registered
+	// alone, anything else gets exits, neighbour, possession, me,
+	// here, home and nil, and `wide` adds match_absolute and
+	// match_player -- which upstream gates on `Wizard(ProgUID) ||
+	// mlev >= 4`.
+	Match(who ref.Ref, name string, wide bool) ref.Ref
+	// MatchInside is match_rmatch (`match.c:1001`): the contents
+	// and exits of one named object, with THING as the preferred
+	// type for a tie.
+	MatchInside(who, container ref.Ref, name string) ref.Ref
 	// MatchPlayer looks only at player names, and
 	// MatchPlayerPrefix accepts a partial one.
-	Match(who ref.Ref, name string) ref.Ref
 	MatchPlayer(name string) ref.Ref
 	MatchPlayerPrefix(name string) ref.Ref
 

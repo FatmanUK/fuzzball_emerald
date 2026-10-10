@@ -483,8 +483,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// `Wizard(ProgUID) || mlev >= 4` is what widens the
+		// search to absolute refs and player names, and
+		// `Wizard` excludes a quelled wizard (`db.h:532`).
+		wide := f.MLevel() >= 4 ||
+			h.Flags(h.Owner(f.progUID(h))).IsWizard()
 		return nil, f.Push(Obj(h.Match(f.Caller,
-			ansi.Strip(name))))
+			ansi.Strip(name), wide)))
 	})
 	register("PMATCH", func(f *Frame) (*Result, error) {
 		name, err := f.popStr()
@@ -1966,25 +1971,40 @@ func init() {
 		return nil, f.Push(Obj(h.MatchPlayerPrefix(name)))
 	})
 
+	// RMATCH is prim_rmatch (`p_db.c:860`), and **it is a
+	// matcher**: `init_match` with THING as the preferred type,
+	// then `match_rmatch`. This walked the contents and exits
+	// comparing whole names with an ASCII fold, so there was no
+	// word-prefix matching, no alias splitting, no exit priority,
+	// no ambiguity -- `#-2` was unreachable -- and no preferred
+	// type. `Matcher.Inside` was written for it and had no
+	// callers.
+	//
+	// Its two argument messages carry **no full stop**, which is
+	// upstream's and unlike almost every neighbour.
 	register("RMATCH", func(f *Frame) (*Result, error) {
-		name, err := f.popStr()
+		v, err := f.Pop()
 		if err != nil {
 			return nil, err
 		}
-		around, h, err := f.refAndHostRemote()
+		if v.Type != TypeString {
+			return nil, errf("Invalid argument (2)")
+		}
+		name := v.Str
+		around, h, err := f.refAndHost()
 		if err != nil {
 			return nil, err
 		}
-		// A remote match looks only at what the given object
-		// holds, and strips ANSI from the name first as the
-		// other two matching primitives do.
-		name = ansi.Strip(name)
-		for _, r := range append(h.Contents(around), h.Exits(around)...) {
-			if ascii.EqualFold(h.Name(r), name) {
-				return nil, f.Push(Obj(r))
-			}
+		if !h.Valid(around) ||
+			h.ObjType(around) == ref.TypeProgram ||
+			h.ObjType(around) == ref.TypeExit {
+			return nil, errf("Invalid argument (1)")
 		}
-		return nil, f.Push(Obj(ref.Nothing))
+		if err := f.checkRemote(h, around); err != nil {
+			return nil, err
+		}
+		return nil, f.Push(Obj(h.MatchInside(f.Caller,
+			around, ansi.Strip(name))))
 	})
 
 	register("CHECKPASSWORD", func(f *Frame) (*Result, error) {

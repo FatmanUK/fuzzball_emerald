@@ -236,6 +236,32 @@ func (m *Matcher) Absolute() *Matcher {
 	return m
 }
 
+// absoluteIn is the `#N` test that match_contents and match_exits
+// each make for themselves (`match.c:475`, `:636`), and which neither
+// of Emerald's had.
+//
+// It is **not** `Matcher.Absolute`. That stage is a search in its own
+// right, added or not by the caller's list; this one is inside two
+// other stages and is gated on the searcher's owner **controlling**
+// the object. So `#4` resolves for anything lying in the room the
+// searcher owns, in every search that includes those two stages,
+// whether or not `match_absolute` is in the list — which is how MUF
+// `MATCH` resolves a dbref at mucker 1 despite its own gate on
+// absolute refs.
+//
+// `absolute_name` uses `ObjExists` rather than `OkObj`, so a garbage
+// ref is a candidate; the containment walk then decides.
+func (m *Matcher) absoluteIn() ref.Ref {
+	r, ok := parseAbsolute(m.name)
+	if !ok {
+		return ref.Nothing
+	}
+	if !m.w.Controls(m.w.OwnerOf(m.from), r) {
+		return ref.Nothing
+	}
+	return r
+}
+
 // Registered matches a "$name" registration, looked up in the _reg
 // propdir on the searching object and then outwards through the
 // environment. This is how a world names its libraries:
@@ -325,7 +351,15 @@ func (m *Matcher) Possession() *Matcher {
 }
 
 func (m *Matcher) matchContents(container ref.Ref) {
+	abs := m.absoluteIn()
 	for _, r := range m.w.Contents(container) {
+		// The `#N` branch inside match_contents
+		// (`match.c:475`), which this did not have: a dbref
+		// resolves here too, and **returns at once**.
+		if r == abs {
+			m.exact = r
+			return
+		}
 		o := m.w.Get(r)
 		if o == nil {
 			continue
@@ -506,7 +540,23 @@ func (m *Matcher) matchObjectActions(container ref.Ref) {
 
 // matchExitsOn tries every exit attached to one object.
 func (m *Matcher) matchExitsOn(on ref.Ref) {
+	// A searcher who is nowhere matches no exits, which is
+	// match_exits' second line (`match.c:613`).
+	if o := m.w.Get(m.from); o == nil ||
+		o.Location == ref.Nothing {
+		return
+	}
+	abs := m.absoluteIn()
 	for _, r := range m.w.Exits(on) {
+		// Here the `#N` branch **continues** rather than
+		// returning, so a later exit may still raise the
+		// priority — which is the one difference between
+		// the two copies of it (`match.c:636` against
+		// `:475`).
+		if r == abs {
+			m.exact = r
+			continue
+		}
 		e := m.w.Get(r)
 		if e == nil {
 			continue

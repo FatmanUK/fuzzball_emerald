@@ -102,7 +102,13 @@ func (h *fakeHost) PropChildren(ref.Ref, string) []string {
 	return nil
 }
 
-func (h *fakeHost) Match(ref.Ref, string) ref.Ref {
+func (h *fakeHost) Match(ref.Ref, string, bool) ref.Ref {
+	return ref.Nothing
+}
+
+func (h *fakeHost) MatchInside(ref.Ref, ref.Ref,
+	string) ref.Ref {
+
 	return ref.Nothing
 }
 func (h *fakeHost) MatchPlayer(string) ref.Ref {
