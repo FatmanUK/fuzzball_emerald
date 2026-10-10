@@ -7,12 +7,12 @@ import (
 )
 
 // BLESSPROP, UNBLESSPROP, BLESSED?, PROP-NAME-OK?, PARSEMPI,
-// PARSEMPIBLESSED and ARRAY_FILTER_PROP are ports of the more
-// tractable primitives left in src/p_props.c. PARSEPROPEX is not
-// ported: unlike PARSEMPI, it converts a whole caller-supplied
-// dictionary into MPI variables and hands one back — materially
-// more plumbing than a primitive port on its own, and deferred rather
-// than rushed.
+// PARSEMPIBLESSED, PARSEPROPEX and ARRAY_FILTER_PROP, from
+// src/p_props.c.
+//
+// This comment used to say PARSEPROPEX was deferred for the
+// dictionary-of-variables plumbing it needs. It has that plumbing and
+// is registered below.
 //
 // BLESSED? takes prop_read_perms like every other property reader.
 // BLESSPROP and UNBLESSPROP take **no** write test: upstream gates

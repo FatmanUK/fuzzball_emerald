@@ -9,14 +9,15 @@ import (
 
 // EVENT_COUNT, EVENT_EXISTS, EXT-NAME-OK?, READ_WANTS_BLANKS,
 // READ_WANTS_NO_BLANKS, IGNORING?, IGNORE_ADD, IGNORE_DEL, CONVTIME,
-// FMTTIME, STATS, STATS_ARRAY and USERLOG are ports of the more
-// tractable primitives left in src/p_misc.c. Deliberately not ported,
-// each needing substantially more than a primitive port on its own:
-// TIMER_START/TIMER_STOP/EVENT_SEND (a delayed, out-of-band
-// event-delivery scheduler distinct from WATCHPID's own synchronous
-// one), DEBUGGER_BREAK/DEBUG_LINE/DEBUG_ON/DEBUG_OFF (the MUF
-// single-step debugger, unimplemented entirely), and SMTP_SEND (a
-// real SMTP client).
+// FMTTIME, STATS, STATS_ARRAY and USERLOG, from src/p_misc.c.
+//
+// This comment used to list eight more as deliberately not ported.
+// All eight are registered now: TIMER_START, TIMER_STOP and
+// EVENT_SEND in prim_timer.go, and the four debugger primitives and
+// SMTP_SEND here. The one piece of that note still standing is
+// DEBUGGER_BREAK's **interactive prompt**, which would mean taking
+// over a connection's input — see its own doc comment, and
+// docs/upstream-coverage.md.
 func init() {
 	register("EVENT_COUNT", func(f *Frame) (*Result, error) {
 		return nil, f.Push(Int(int64(len(f.PendingEvents))))

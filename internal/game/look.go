@@ -210,9 +210,8 @@ const (
 // so every look at a thing or a player diverged by a line.
 //
 // Look traps — the _details propdir, consulted when the match finds
-// nothing — are not ported. They are additive, so their absence
-// costs a world that uses them and changes nothing for one that does
-// not.
+// nothing — **are** ported; see detailMatches and the constant
+// above. This note used to say they were not.
 func (s *Server) lookAt(w *world.World, descr int,
 	who, target ref.Ref) {
 

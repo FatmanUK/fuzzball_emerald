@@ -2,15 +2,14 @@ package muf
 
 import "github.com/FatmanUK/fuzzball_emerald/internal/ref"
 
-// COMPILE, COMPILED?, UNCOMPILE, PROGRAM_GETLINES and NEXTENTRANCE
-// are ports of the more tractable primitives left in src/p_db.c.
+// COMPILE, COMPILED?, UNCOMPILE, PROGRAM_GETLINES and NEXTENTRANCE,
+// from src/p_db.c.
+//
+// This comment used to list eight more as "not ported this phase" —
 // NEWPLAYER, COPYPLAYER, TOADPLAYER, PNAME_HISTORY, COPYOBJ, DUMP,
-// PROGRAM_SETLINES and FINDNEXT are not ported this phase: the first
-// six are player-lifecycle and object-cloning features needing real
-// design work (creation cost accounting, an editor-interaction check
-// for PROGRAM_SETLINES); FINDNEXT needs the same
-// init_checkflags/checkflags flag-matching mini-language
-// ARRAY_FILTER_FLAGS does, not yet built.
+// PROGRAM_SETLINES and FINDNEXT. Every one of them is registered now,
+// the first seven in prim_db3.go and FINDNEXT in prim_findflags.go;
+// the phase the note belonged to is over.
 func init() {
 	register("COMPILED?", func(f *Frame) (*Result, error) {
 		progV, err := f.Pop()

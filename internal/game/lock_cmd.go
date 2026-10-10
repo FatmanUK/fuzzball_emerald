@@ -95,11 +95,12 @@ func (s *Server) cmdUnlock(c *ctx) {
 // clears the lock; otherwise it parses and sets it. An empty object
 // name targets the caller.
 //
-// NOFORCE's original guard — force_level, a global incremented for
-// the duration of a MUF {force} call — is not reproduced, since
-// {force} is not ported yet; only @force's own s.forceDepth is
-// checked. Once {force} exists it needs to increment the same counter
-// for this to stay correct.
+// NOFORCE's guard is `force_level`, a counter held for the duration
+// of a force. `Server.forceDepth` is it, and all three routes raise
+// it: `@force`, MUF `FORCE` and MPI's `{force}`, the last two through
+// `mufHost.Force` and so through the same `Server.force`. This note
+// used to say {force} was unported and the counter therefore
+// incomplete; it is not.
 func (s *Server) cmdSetLock(c *ctx, spec lockCommandSpec) {
 	if isGuest(c.w, c.who) {
 		c.tell("Guests are not allowed to %s.", spec.verb)

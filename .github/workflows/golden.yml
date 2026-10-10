@@ -1,0 +1,50 @@
+name: Golden
+
+# The golden suite is the project's primary correctness instrument and
+# had **never run in CI**: the oracle image is not built on a runner, so
+# every one of its cases hit requireOracle's t.Skip and `make test`
+# reported success having compared nothing.
+#
+# It is a separate job because it is a separate shape of work: it builds
+# Fuzzball 7 from the C submodule into a container, which the other jobs
+# have no use for, and it takes minutes rather than seconds.
+
+on:
+  push:
+    branches:
+      - vmother
+  # ...and nightly, so a submodule bump or an upstream behaviour change
+  # is found on a day nobody pushed rather than on the next push.
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+        # The C is the oracle, so unlike every other job this one needs
+        # the submodule.
+        submodules: true
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.26.5'
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Build the oracle
+      run: make golden-build
+
+    - name: Compare against Fuzzball 7
+      run: make golden

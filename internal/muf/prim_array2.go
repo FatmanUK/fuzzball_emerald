@@ -6,11 +6,13 @@ import (
 )
 
 // ARRAY_INSERTRANGE, ARRAY_SORT_INDEXED, ARRAY_PUT_PROPVALS,
-// ARRAY_GET_IGNORELIST, ARRAY_INTERPRET and ARRAY_NOTIFY_SECURE are
-// ports of the more tractable primitives left in src/p_array.c.
-// ARRAY_FILTER_FLAGS is not ported: it needs
-// init_checkflags/checkflags, a flag-matching mini-language (the same
-// one @find would need) that nothing in this codebase has built yet.
+// ARRAY_GET_IGNORELIST, ARRAY_INTERPRET and ARRAY_NOTIFY_SECURE, from
+// src/p_array.c.
+//
+// This comment used to say ARRAY_FILTER_FLAGS was not ported for want
+// of init_checkflags. That language is `FlagCheck` in this package
+// now, written here first because this primitive and FINDNEXT both
+// needed it, and both are in prim_findflags.go.
 func init() {
 	register("ARRAY_INSERTRANGE", func(f *Frame) (*Result, error) {
 		itemsV, err := f.Pop()

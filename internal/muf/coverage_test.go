@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 )
 
 // TestPrimitiveCoverage is what makes the primitive count
@@ -130,6 +132,42 @@ func TestStubsAreNotCountedAsImplemented(t *testing.T) {
 	delete(got, name)
 	if Stubs()[name] == "" {
 		t.Error("Stubs() handed out the real map")
+	}
+}
+
+// TestRegisterStubDoesBothHalves is the function itself, which the
+// two tests above do not reach: they put an entry in `stubs` by hand,
+// so the thing that could come apart — installing the abort and
+// recording the gap in **one** call — was never exercised.
+//
+// It unregisters afterwards, because `register` panics on a duplicate
+// and every other test in this package counts `prims`.
+func TestRegisterStubDoesBothHalves(t *testing.T) {
+	// A real name nothing has claimed would be a contradiction:
+	// every primitive is implemented. So this borrows one, clears
+	// its entry, and puts it back.
+	const name = "SMATCH"
+	n := primIndex[ascii.Fold(name)]
+	if n == 0 {
+		t.Fatalf("%s is not a primitive", name)
+	}
+	saved := prims[n]
+	prims[n] = nil
+	t.Cleanup(func() {
+		prims[n] = saved
+		delete(stubs, name)
+	})
+
+	registerStub(name, "borrowed by a test")
+
+	if why := Stubs()[name]; why != "borrowed by a test" {
+		t.Errorf("the gap was not recorded: %q", why)
+	}
+	if prims[n] == nil {
+		t.Fatal("no implementation was installed")
+	}
+	if _, err := prims[n](&Frame{}); err == nil {
+		t.Error("the installed primitive did not abort")
 	}
 }
 

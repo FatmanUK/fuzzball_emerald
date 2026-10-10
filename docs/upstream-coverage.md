@@ -272,19 +272,24 @@ why it carries a restriction check the message setters do not need.
 
 ### Wizard
 
-    @memory  @usage
+    @memory  @usage  @tops  @teledump  @reconfiguressl
+    @armageddon  @restart
 
-`@armageddon`, `@restart` and `@teledump` are also absent. `@reconfiguressl` is **deliberately** absent:
-TLS is configured from the environment, because a TLS-only server
-cannot read its listener configuration out of a database it has not
-opened.
+All seven are **declined**, not pending, and
+`internal/game/dispatch.go`'s `declined` map carries a reason for
+each. `@reconfiguressl` is the clearest of them: TLS is
+configured from the environment, because a TLS-only server cannot
+read its listener configuration out of a database it has not opened.
 
 ### MUF
 
-    @mcpedit  @mcpprogram
-
-The MCP machinery they need is implemented; only the editor commands
-that drive it over MCP are missing.
+Nothing. `@mcpedit` and `@mcpprogram` have landed, and so has the
+server-side handling behind them — `org-fuzzball-help`,
+`org-fuzzball-languages` and `dns-org-mud-moo-simpleedit` were
+advertised with no handler at all, which made `@mcpedit` half a
+feature: a save had nowhere to go. This section previously said the
+MCP machinery was implemented and only the commands were missing;
+both halves were.
 
 ### Basics
 

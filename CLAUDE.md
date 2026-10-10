@@ -1765,6 +1765,19 @@ primitive a submodule bump introduced needs no edit to the test. Both used
 to report with `t.Logf` and assert nothing, which is how 412-of-417 came to
 be repeated everywhere while `NEWPROGRAM` and `CHECKARGS` were stubs.
 
+**But they assert *registration*, not fidelity, and the difference is
+large.** Every gap the permission tranche closed — MUF `SET` with no
+`CHECKREMOTE`, no ownership gate and no `unable_to_set_flag`;
+seventeen property primitives with no `prop_read_perms`;
+`ieee_bounds_handling` unread at twenty-six sites — was in a primitive
+these tests counted as implemented. That is exactly the failure mode
+their own doc comments describe for stubs, one level up: a name in the
+table is evidence that *something* answers to it and nothing more. A
+count of 412 of 417 means 412 names resolve. It has never meant 412
+primitives behave like the C, and the only thing that measures that is
+`internal/golden` — which is why the golden suite is the instrument and
+the count is a label.
+
 **A stub must go through `registerStub(name, reason)`**, in both packages.
 Plain `register` installs an abort that `len(prims)` happily counts as an
 implementation, which is exactly how the last two hid; `registerStub` records
