@@ -131,6 +131,14 @@ type Host interface {
 	// they are connected.
 	IsPlayer(obj Ref) bool
 	Online(obj Ref) bool
+	// DescrCount is PLAYER_DESCRCOUNT: how many connections a
+	// player has. {awake} answers it rather than a boolean, so a
+	// player connected twice reads "2".
+	DescrCount(obj Ref) int
+	// MLevel is MLevel(obj) — a program's own mucker level,
+	// which {muf} tests against a floor of 3 for a listener or a
+	// lock.
+	MLevel(obj Ref) int
 	// Match resolves a name the way a player's command would.
 	// Match is mesg_dbref_raw (msgparse.c:667). It takes both the
 	// viewer and the object carrying the message, because "this"
@@ -139,8 +147,19 @@ type Host interface {
 	Match(who, what Ref, name string) Ref
 	// Notify sends a line to an object's connections, and
 	// NotifyExcept to everything in a room but the objects named.
+	//
+	// NotifyFrom is {tell}'s own route: `notify_listeners` with
+	// `isprivate` set, which fires the listen propqueues and
+	// delivers to a PLAYER or a THING and to nothing else. The
+	// speaker is named because a listening program can see it,
+	// and the room it is told about is the **speaker's** location
+	// rather than the object being told.
+	//
+	// NotifyExcept takes the speaker for the same reason, which
+	// {otell} had no way to pass.
 	Notify(obj Ref, msg string)
-	NotifyExcept(room Ref, except []Ref, msg string)
+	NotifyFrom(from, obj, room Ref, msg string)
+	NotifyExcept(from, room Ref, except []Ref, msg string)
 	// Now is the server's clock, as a Unix time.
 	Now() int64
 

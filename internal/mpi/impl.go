@@ -232,7 +232,19 @@ func init() {
 		if fail != resolveOK {
 			return "0", nil
 		}
-		return boolOf(env.Host.Online(obj)), nil
+		// A ZOMBIE thing is redirected to its **owner**, so
+		// asking whether a puppet is awake asks whether the
+		// person behind it is; anything else that is not a
+		// player is "0". This read the thing, and answered a
+		// boolean where upstream answers PLAYER_DESCRCOUNT --
+		// so a player connected twice reads "2".
+		if env.Host.TypeName(obj) == "Thing" &&
+			env.Host.HasFlag(obj, "zombie") {
+			obj = env.Host.Owner(obj)
+		} else if env.Host.TypeName(obj) != "Player" {
+			return "0", nil
+		}
+		return itoa(env.Host.DescrCount(obj)), nil
 	})
 	register("ISTYPE", func(env *Env, _ *Func,
 		args []string) (string, error) {
@@ -352,10 +364,20 @@ func init() {
 			env.Host.TypeName(env.What) != "Room" {
 			return "", errf("TELL", "Permission denied.")
 		}
-		for _, line := range strings.Split(args[0], "\r") {
-			env.Host.Notify(target, line)
+		room := env.Host.Location(env.Who)
+		mark := env.tellPrefix(target)
+		named := ""
+		if env.tellNames(target, args[0]) {
+			named = env.speakerPrefix(args[0])
 		}
-		return "", nil
+		for _, line := range splitLinesCR(args[0], true) {
+			env.Host.NotifyFrom(env.Who, target, room,
+				mark+named+line)
+		}
+		// mfn_tell returns its **message**, not the empty
+		// string, so {tell} inside a larger expression
+		// contributes the text it sent.
+		return args[0], nil
 	})
 
 	// Time.

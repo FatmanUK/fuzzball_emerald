@@ -100,10 +100,41 @@ func init() {
 					"Type must be 'player', 'room', 'thing', or 'program'. (arg2)")
 			}
 		}
+		// Each item is filtered, not just by type
+		// (`mfuns2.c:401`), and this filtered by type alone
+		// — so a DARK thing in somebody else's room was
+		// listed.
+		//
+		// An item is kept when the permissions object
+		// controls the **container**, or controls the item,
+		// or the item is not DARK, its location is not DARK,
+		// and it is not a program without VEHICLE. And a ROOM
+		// is dropped unless rooms are what was asked for,
+		// which is the one filter that applies even to
+		// something controlled.
+		perms := env.Perms
+		ownRoom := env.Host.Controls(perms, obj)
 		var out []Ref
 		for _, r := range env.Host.Contents(obj) {
 			if want != "" &&
 				env.Host.TypeName(r) != want {
+				continue
+			}
+			if want != "Room" &&
+				env.Host.TypeName(r) == "Room" {
+				continue
+			}
+			if ownRoom || env.Host.Controls(perms, r) {
+				out = append(out, r)
+				continue
+			}
+			here := env.Host.Location(r)
+			if env.Host.HasFlag(r, "dark") ||
+				env.Host.HasFlag(here, "dark") {
+				continue
+			}
+			if env.Host.TypeName(r) == "Program" &&
+				!env.Host.HasFlag(r, "vehicle") {
 				continue
 			}
 			out = append(out, r)
@@ -201,6 +232,12 @@ func init() {
 		}
 		return boolOf(env.Host.Location(inner) == outer), nil
 	})
+	// mfn_nearby also resolves HOME to the reader's own home
+	// before comparing (`mfuns2.c:519`), which is **dead on both
+	// servers**: `mesg_dbref_raw` collapses HOME to UNKNOWN
+	// before any caller sees it, so the branch cannot be reached.
+	// Recorded rather than ported, the way the dozen other HOME
+	// branches in this file are.
 	register("NEARBY", func(env *Env, _ *Func, args []string) (string, error) {
 		a, err := env.resolveMsg(matchRaw, "NEARBY", args, 0,
 			"Match failed (arg1).",

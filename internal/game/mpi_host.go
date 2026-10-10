@@ -14,18 +14,45 @@ import (
 // properties from it — everything the object, connection and time
 // functions need.
 
-func (h *mpiHost) NotifyExcept(room mpi.Ref, except []mpi.Ref, msg string) {
+// NotifyExcept is `notify_except`, with the speaker named — which
+// {otell} previously had no way to pass, so it reached the listen
+// propqueues with "from" unset: the ignore filter did nothing and a
+// listening program was told the wrong room.
+func (h *mpiHost) NotifyExcept(from, room mpi.Ref,
+	except []mpi.Ref, msg string) {
+
 	skip := make([]ref.Ref, len(except))
 	for i, r := range except {
 		skip[i] = ref.Ref(r)
 	}
-	// No speaker is named: mpiHost is built without one at a
-	// dozen call sites, so {otell} reaches the listen propqueues
-	// with "from" unset, which costs the ignore filter and makes
-	// a listening program's "where" the room rather than the
-	// speaker's location. Worth closing when mpiHost grows a
-	// viewer field.
-	h.s.notifyRoom(h.w, ref.Ref(room), skip, "%s", msg)
+	h.s.notifyRoomFrom(h.w, ref.Ref(from), ref.Ref(room), skip,
+		"%s", msg)
+}
+
+// NotifyFrom is `notify_listeners(who, NOTHING, obj, room, msg, 1)`,
+// which is what {tell} delivers through: the listen propqueues fire,
+// the vehicle echo does not, and a room or an exit hears nothing at
+// all.
+func (h *mpiHost) NotifyFrom(from, obj, room mpi.Ref, msg string) {
+	h.s.notifyPrivately(h.w, ref.Ref(from), ref.Ref(obj),
+		ref.Ref(room), msg)
+}
+
+// DescrCount is PLAYER_DESCRCOUNT, which {awake} answers rather than
+// a boolean.
+func (h *mpiHost) DescrCount(obj mpi.Ref) int {
+	return len(h.s.hub.DescriptorsFor(ref.Ref(obj)))
+}
+
+// MLevel is MLevel(obj): a program's own mucker level, ignoring
+// QUELL, which {muf} tests against a floor of 3 for a listener or a
+// lock.
+func (h *mpiHost) MLevel(obj mpi.Ref) int {
+	o := h.w.Get(ref.Ref(obj))
+	if o == nil {
+		return 0
+	}
+	return o.Flags.MLevel()
 }
 
 // TypeName is upstream's own words for a type, which {type} returns

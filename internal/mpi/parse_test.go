@@ -43,6 +43,8 @@ func (h *stubHost) Contents(Ref) []Ref         { return nil }
 func (h *stubHost) Valid(obj Ref) bool         { return obj >= 0 }
 func (h *stubHost) IsPlayer(obj Ref) bool      { return obj == 1 }
 func (h *stubHost) Online(Ref) bool            { return true }
+func (h *stubHost) DescrCount(Ref) int         { return 1 }
+func (h *stubHost) MLevel(Ref) int             { return 4 }
 func (h *stubHost) Match(Ref, Ref, string) Ref { return 1 }
 func (h *stubHost) Notify(_ Ref, msg string) {
 	h.told = append(h.told, msg)
@@ -241,7 +243,12 @@ func TestFunctionTableIsPopulated(t *testing.T) {
 // The rest of Host is stubbed out: these tests cover the parser
 // rather than the world it reaches, so each answers the least
 // interesting thing it can.
-func (h *stubHost) NotifyExcept(Ref, []Ref, string) {}
+func (h *stubHost) NotifyExcept(_, _ Ref, _ []Ref, msg string) {
+	h.told = append(h.told, msg)
+}
+func (h *stubHost) NotifyFrom(_, _, _ Ref, msg string) {
+	h.told = append(h.told, msg)
+}
 func (h *stubHost) TypeName(obj Ref) string {
 	switch obj {
 	case 1:

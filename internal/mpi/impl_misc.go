@@ -280,15 +280,28 @@ func init() {
 		}
 		except := env.Who
 		if len(args) > 2 {
-			if obj, fail := env.resolveAs(matchRaw, args,
-				2); fail == resolveOK {
-				except = obj
-			}
+			// The third argument **replaces** the default
+			// whether or not it resolves, which is what
+			// makes "#-1" the documented way to exclude
+			// nobody: upstream assigns mesg_dbref_raw's
+			// answer and then tests `thing != eobj`, so a
+			// sentinel excludes nothing. This kept the
+			// player excluded on a failed match, and so
+			// swallowed the whole broadcast.
+			except, _ = env.resolveAs(matchRaw, args, 2)
 		}
-		for _, line := range strings.Split(args[0], "\r") {
-			env.Host.NotifyExcept(room, []Ref{except}, line)
+		named := ""
+		if env.otellNames(room, args[0]) {
+			named = env.speakerPrefix(args[0])
 		}
-		return "", nil
+		// `all` is false: upstream's {otell} sends only the
+		// first line, and splitLinesCR says why.
+		for _, line := range splitLinesCR(args[0], false) {
+			env.Host.NotifyExcept(env.Who, room,
+				[]Ref{except}, named+line)
+		}
+		// mfn_otell returns its message, as mfn_tell does.
+		return args[0], nil
 	})
 
 	// {revoke} evaluates its argument without whatever blessing
@@ -395,6 +408,16 @@ func init() {
 		if !env.Host.HasFlag(prog, "link_ok") &&
 			!env.Host.Controls(env.Host.Owner(env.Perms), prog) {
 			return "", errf("MUF", "Permission denied.")
+		}
+		// A listener or a lock may only run a program at
+		// mucker 3 or above (`mfuns2.c:2671`), which had no
+		// port: a mortal's `_listen` could run a mucker-1
+		// program through MPI.
+		if env.Type.Has(Listener) || env.Type.Has(Lock) {
+			if env.Host.MLevel(prog) < 3 {
+				return "", errf("MUF",
+					"Permission denied.")
+			}
 		}
 		if env.depth > mufCallLimit {
 			return "", errf("MUF", "Too many call levels.")

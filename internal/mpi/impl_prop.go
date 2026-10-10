@@ -51,6 +51,12 @@ func init() {
 	register("BLESS", blessProp(true))
 	register("UNBLESS", blessProp(false))
 
+	// {listprops} resolves with the ordinary read wrapper and
+	// then applies a blanket owner check of its own, which
+	// repeats part of what the wrapper already asked. That
+	// duplication is upstream's (`mfn_listprops`) and is harmless
+	// — the stricter of two tests wins either way — so it is
+	// left as it is rather than collapsed.
 	register("LISTPROPS", func(env *Env, _ *Func, args []string) (string, error) {
 		obj, err := env.resolve("LISTPROPS", args, 1)
 		if err != nil {
