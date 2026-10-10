@@ -162,6 +162,11 @@ func (s *Server) installMCPHandlers() {
 			list[i].Handle = s.programPackageHandler()
 		}
 	}
+	// ...and then the four this server answers for itself take
+	// theirs back. A program cannot bind those: `MCP_BIND` only
+	// reaches a package `MCP_REGISTER` added, whose handler is
+	// `muf_mcp_callback` (`p_mcp.c:519`).
+	s.installPackageHandlers(list)
 	s.hub.SetMCPPackages(list)
 }
 

@@ -292,11 +292,20 @@ func (s *Server) logTuned(c *ctx, name, old string) {
 func (s *Server) tuneRefResolver(c *ctx) func(string) (ref.Ref,
 	ref.ObjType, bool) {
 
+	return s.tuneRefResolverFor(c.w, c.who)
+}
+
+// tuneRefResolverFor is the same without a ctx, for the MCP
+// simpleedit handler — which sets a parameter on behalf of a
+// connection rather than from a typed command.
+func (s *Server) tuneRefResolverFor(w *world.World,
+	who ref.Ref) func(string) (ref.Ref, ref.ObjType, bool) {
+
 	return func(name string) (ref.Ref, ref.ObjType, bool) {
-		r := match.New(c.w, c.who, name).
+		r := match.New(w, who, name).
 			Absolute().Registered().Player().Me().Here().
 			Result()
-		o := c.w.Get(r)
+		o := w.Get(r)
 		if o == nil {
 			return ref.Nothing, 0, false
 		}
