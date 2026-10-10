@@ -130,6 +130,41 @@ func (h *harness) advance(d time.Duration) {
 	}
 }
 
+// procCount counts the suspended programs, which is what the
+// foreground sweep is observed through.
+func (h *harness) procCount() int {
+	h.t.Helper()
+	n := 0
+	err := h.engine.Do(context.Background(),
+		func(*world.World) { n = len(h.s.procs.all()) })
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return n
+}
+
+// mpiEventCount counts what MPI's {delay} has scheduled.
+func (h *harness) mpiEventCount() int {
+	h.t.Helper()
+	n := 0
+	err := h.engine.Do(context.Background(),
+		func(*world.World) { n = len(h.s.mpiEvents) })
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return n
+}
+
+// syncEngine waits for whatever is queued, without needing the
+// descriptor to still be open.
+func (h *harness) syncEngine() {
+	h.t.Helper()
+	if err := h.engine.Do(context.Background(),
+		func(*world.World) {}); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
 // out returns everything sent since the last call.
 func (h *harness) out() string { return drainDescriptor(h.d) }
 

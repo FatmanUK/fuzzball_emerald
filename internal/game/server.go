@@ -325,6 +325,17 @@ func (s *Server) Disconnect(d *session.Descriptor) {
 		// here.
 		s.closeDialogsFor(d.ID)
 		if d.Connected {
+			// `dequeue_prog(player, 2)`, and the
+			// descriptor count is **upstream's**: the
+			// sweep runs only when this was the player's
+			// last connection, so dropping one of two
+			// leaves the other's foreground program
+			// alone. The "Foreground program aborted."
+			// line upstream prints here can therefore
+			// reach nobody, which is why there is none.
+			if len(s.hub.DescriptorsFor(d.Player)) < 2 {
+				s.abortForegroundFor(w, d.Player)
+			}
 			s.announceDisconnect(w, d)
 			s.log.Info("disconnected",
 				"descriptor", d.ID,

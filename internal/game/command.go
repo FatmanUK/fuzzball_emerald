@@ -374,12 +374,12 @@ func (s *Server) interfaceCommand(w *world.World, d *session.Descriptor, line st
 // abortForeground stops the program a descriptor is waiting on,
 // reporting whether there was one.
 func (s *Server) abortForeground(w *world.World, d *session.Descriptor) bool {
-	p := s.procs.readerFor(d.ID)
-	if p == nil {
-		return false
-	}
-	s.finishProcess(w, p)
-	return true
+	// `dequeue_prog(d->player, 2)`, which is the **player's**
+	// foreground programs and not only the one reading this
+	// descriptor — so "@Q" also stops a foreground program that
+	// is asleep, and a queued MPI event unless
+	// `mpi_continue_after_logout` says otherwise.
+	return s.abortForegroundFor(w, d.Player)
 }
 
 // Interface commands and tokens, from include/game.h. QUIT and WHO
