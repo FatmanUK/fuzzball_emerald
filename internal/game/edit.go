@@ -496,13 +496,15 @@ func (s *Server) listLines(c *ctx, lines []string, curr int, arg []int, sysmsg b
 // leaveEditor ends a session, saving the text or discarding it.
 func (s *Server) leaveEditor(c *ctx, e *editSession, save bool) {
 	if save {
-		c.w.SaveSource(e.program, joinSource(e.lines))
+		src := joinSource(e.lines)
+		c.w.SaveSource(e.program, src)
 		s.log.Info("program saved",
 			"program", e.program.String(),
 			"name", nameOf(c.w, e.program),
 			"by", nameOf(c.w, c.who),
 			"player", c.who.String(),
 			"lines", len(e.lines))
+		s.logProgramText(c.w, c.who, e.program, src)
 	}
 	// Either way the cached compile is stale: saving replaced the
 	// source, and cancelling may follow a "c" that compiled the

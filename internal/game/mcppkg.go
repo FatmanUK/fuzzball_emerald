@@ -323,6 +323,7 @@ func (s *Server) simpleEditSet(w *world.World, f *mcp.Frame,
 		}
 		w.SaveSource(obj, joinSource(lines))
 		s.InvalidateProgram(obj)
+		s.logProgramText(w, player, obj, joinSource(lines))
 		s.log.Info("program saved",
 			"program", obj.String(),
 			"name", nameOf(w, obj),

@@ -303,10 +303,17 @@ func (s *Server) Input(d *session.Descriptor, line string) {
 			// untrimmed: leading spaces are part of
 			// program text, and an empty line is a blank
 			// line to insert.
+			//
+			// `log_interactive` decides whether either is
+			// logged, which nothing read: a line taken by
+			// a program or the editor was not recorded at
+			// all.
 			switch {
 			case s.interfaceCommand(w, d, line):
 			case s.readInput(w, d.ID, line):
+				s.logInteractive(w, d, line, true)
 			case s.editing(d.Player) != nil:
+				s.logInteractive(w, d, line, false)
 				s.editInput(w, d, line)
 			default:
 				s.command(w, d, line)

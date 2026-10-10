@@ -3,6 +3,7 @@ package game
 import (
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
@@ -150,6 +151,14 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 				"panic", r,
 				"stack", string(debug.Stack()))
 		}
+	}()
+
+	// `cmd_log_threshold_msec`: nothing timed a command. Upstream
+	// brackets the whole of process_command, the exit match and
+	// the dispatch alike, and logs afterwards.
+	started := time.Now()
+	defer func() {
+		s.logSlowCommand(w, d, line, time.Since(started))
 	}()
 
 	// **Left-trimmed only.** `process_command` runs
@@ -331,6 +340,7 @@ func (s *Server) huh(c *ctx) {
 		return
 	}
 	c.send(c.w.Tune.String("huh_mesg"))
+	s.logFailedCommand(c, c.verb, c.rest)
 }
 
 // interfaceCommand handles the lines the descriptor layer answers
@@ -394,28 +404,3 @@ const (
 	sayToken      = '"'
 	poseToken     = ':'
 )
-
-// logCommand records a command for the audit log. Anything that could
-// carry a password is logged without its argument.
-func (s *Server) logCommand(w *world.World, d *session.Descriptor, verb, arg string) {
-	if isSecretCommand(verb) {
-		arg = "<redacted>"
-	}
-	s.commandLog().Debug("command",
-		"descriptor", d.ID,
-		"player", d.Player.String(),
-		"name", nameOf(w, d.Player),
-		"verb", verb,
-		"arg", arg,
-	)
-}
-
-// isSecretCommand reports whether a command's argument contains a
-// credential.
-func isSecretCommand(verb string) bool {
-	switch ascii.Fold(verb) {
-	case "@password", "@newpassword", "@pcreate":
-		return true
-	}
-	return false
-}

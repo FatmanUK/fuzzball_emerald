@@ -138,11 +138,13 @@ func copyProps(from, to *world.Object, copyHidden bool) {
 
 // SetProgramLines implements muf.Host for PROGRAM_SETLINES.
 func (h *mufHost) SetProgramLines(prog ref.Ref, lines []string) {
-	h.w.SaveSource(prog, strings.Join(lines, "\n"))
+	src := strings.Join(lines, "\n")
+	h.w.SaveSource(prog, src)
 	h.s.InvalidateProgram(prog)
 	h.s.statusLog().Info("program saved by a program",
 		"program", prog.String(), "name", nameOf(h.w, prog),
 		"by", h.caller.String(), "byName", nameOf(h.w, h.caller))
+	h.s.logProgramText(h.w, h.caller, prog, src)
 }
 
 // DumpNow implements muf.Host for DUMP: asks the persister to write

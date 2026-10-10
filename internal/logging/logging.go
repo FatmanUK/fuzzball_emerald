@@ -27,6 +27,11 @@ const (
 	Gripe    Channel = "gripe"    // player gripes
 	Sanity   Channel = "sanity"   // database consistency
 	Muf      Channel = "muf"      // MUF diagnostics
+	// CmdTimes is `file_log_cmd_times`: the commands that took
+	// longer than `cmd_log_threshold_msec`, which is a
+	// performance record rather than an audit one and is kept
+	// apart from Command for that reason.
+	CmdTimes Channel = "cmdtimes"
 
 	// Security is the one channel with no file_log_* ancestor.
 	// Fuzzball scattered these records through its status log,
