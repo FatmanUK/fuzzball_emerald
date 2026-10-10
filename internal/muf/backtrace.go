@@ -113,7 +113,8 @@ func (f *Frame) argText(level int, proc *Proc) []BacktraceArg {
 	for i := 0; i < proc.Args && i < len(proc.VarNames); i++ {
 		val := "?"
 		if i < len(scope) {
-			val = truncateText(scope[i].Display(), maxArgText)
+			val = valueTextIn(scope[i],
+				f.expandedTrace())
 		}
 		out = append(out, BacktraceArg{
 			Name: proc.VarNames[i], Value: val,
@@ -122,29 +123,13 @@ func (f *Frame) argText(level int, proc *Proc) []BacktraceArg {
 	return out
 }
 
-// Display renders a value the way a debugger shows it, quoting
-// strings so an empty one is visible.
-func (v Value) Display() string {
-	switch v.Type {
-	case TypeString:
-		return strconv.Quote(v.Str)
-	case TypeArray:
-		if v.Array == nil {
-			return "<array>"
-		}
-		return "<array " + strconv.Itoa(v.Array.Len()) + ">"
-	default:
-		return v.String()
-	}
-}
-
-// truncateText shortens a value for display.
-func truncateText(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
+// A backtrace argument and a trace line's stack are rendered by the
+// **same** function upstream — `insttotext`, with the same string
+// cut at thirty characters and the same `expandarrs` of 1
+// (`debugger.c:470` against `interp.c:2963`). Emerald had a second
+// renderer here, `Value.Display`, which spelled an array "<array 3>"
+// and cut a long string without the trailing marker; it is gone, and
+// `valueTextIn` is the one function.
 
 // Report builds a failure report from an error raised by this frame.
 func (f *Frame) Report(err error) *Report {

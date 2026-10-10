@@ -52,7 +52,8 @@ func (f *Frame) debugLine(in Inst) string {
 		if i > start {
 			b.WriteString(", ")
 		}
-		b.WriteString(valueText(f.Stack[i]))
+		b.WriteString(valueTextIn(f.Stack[i],
+			f.expandedTrace()))
 	}
 	b.WriteString(") ")
 	b.WriteString(instText(f, in))
@@ -139,7 +140,15 @@ func plural(n int) string {
 // upstream's insttotext: a string quoted and cut at thirty
 // characters, a float always carrying a decimal point, a variable by
 // its slot number.
-func valueText(v Value) string {
+func valueText(v Value) string { return valueTextIn(v, false) }
+
+// valueTextIn is the same with `expanded_debug_trace` applied.
+//
+// Every caller in the trace passes `expandarrs` as **1**
+// (`interp.c:2963`), so an array is spelled out unless the parameter
+// is clear — which this never did, so a debugging world saw
+// "3{...}" where upstream shows the contents.
+func valueTextIn(v Value, expand bool) string {
 	switch v.Type {
 	case TypeString:
 		if len(v.Str) > traceStrMax {
@@ -157,10 +166,7 @@ func valueText(v Value) string {
 	case TypeObject:
 		return v.Ref.String()
 	case TypeArray:
-		if v.Array == nil {
-			return "0{}"
-		}
-		return strconv.Itoa(v.Array.Len()) + "{...}"
+		return arrayText(v, expand)
 	case TypeLock:
 		if v.Str == "" {
 			return "[TRUE_BOOLEXP]"
@@ -168,6 +174,62 @@ func valueText(v Value) string {
 		return "[" + v.Str + "]"
 	}
 	return v.String()
+}
+
+// arrayText renders an array for a trace line.
+//
+// Expanded, that is "N{" then up to **eight** "key:value" pairs
+// separated by spaces, a "_" when there were more, and "}". The items
+// themselves are rendered **unexpanded** (`interp.c:3164`), so a
+// nested array inside one still reads "N{...}".
+//
+// Upstream also truncates on the line's remaining buffer and marks
+// that with the same "_". That is not reproduced: Emerald builds the
+// line in a strings.Builder, so there is no buffer to run out of, and
+// the golden case for the trace compares the sequence of source lines
+// rather than the text — see internal/golden's debugtrace_test.go
+// for why the two compilers' traces cannot be compared instruction
+// for instruction anyway.
+func arrayText(v Value, expand bool) string {
+	if v.Array == nil || v.Array.Len() == 0 {
+		// An empty array reads "0{}" whichever way the
+		// parameter is set, because upstream tests for a nil
+		// array before it tests the parameter.
+		return "0{}"
+	}
+	n := strconv.Itoa(v.Array.Len())
+	if !expand {
+		return n + "{...}"
+	}
+	var b strings.Builder
+	b.WriteString(n + "{")
+	for i, k := range v.Array.Keys() {
+		if i >= maxTraceArray {
+			b.WriteString("_")
+			break
+		}
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(valueTextIn(k, false))
+		b.WriteString(":")
+		item, _ := v.Array.Get(k)
+		b.WriteString(valueTextIn(item, false))
+	}
+	b.WriteString("}")
+	return b.String()
+}
+
+// maxTraceArray is how many of an array's items a trace line shows.
+const maxTraceArray = 8
+
+// expandedTrace reads `expanded_debug_trace`, which defaults **true**
+// — so a frame with no host gets the default.
+func (f *Frame) expandedTrace() bool {
+	if f.host == nil {
+		return true
+	}
+	return f.host.TuneBool("expanded_debug_trace")
 }
 
 // tracing reports whether this frame should print a line per

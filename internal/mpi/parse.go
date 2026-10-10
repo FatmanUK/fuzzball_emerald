@@ -395,12 +395,9 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 		return string(leadChar), start + 1, nil
 	}
 
-	if err := env.charge(name); err != nil {
-		return "", 0, err
-	}
-
 	// A variable reference takes the variable's value as its
 	// first argument and behaves as {sublist} otherwise.
+	typed := name
 	varName := ""
 	if strings.HasPrefix(name, "&") {
 		varName = name[1:]
@@ -408,6 +405,21 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 	}
 
 	fn, known := Lookup(name)
+
+	// The limit's refusal names the function the count ran out
+	// on, and for an ordinary call that is the **table's** name
+	// rather than what was typed — `mfun_list[s].name` against
+	// `cmdbuf`, chosen by `varflag` (`msgparse.c:1487`). So
+	// `{null:}` is refused as "{NULL}" where a `{&how}` keeps its
+	// own spelling, '&' included. That is why the lookup comes
+	// first.
+	charged := typed
+	if known && varName == "" {
+		charged = fn.Name
+	}
+	if err := env.charge(charged); err != nil {
+		return "", 0, err
+	}
 
 	// Collect the raw arguments.
 	var args []string
@@ -484,8 +496,18 @@ func (env *Env) evalCall(in string, start int) (string, int, error) {
 }
 
 // charge counts a call against the instruction limit.
+//
+// The limit is `mpi_max_commands`, read from the host rather than set
+// on the Env: **none** of the seven places that build one set
+// MaxInstructions, so a retuned world had no limit it asked for and
+// only the fallback constant — which happens to equal the default,
+// which is why nothing noticed. The field stays as an override for a
+// caller with no host, which is what the package's own tests are.
 func (env *Env) charge(name string) error {
 	limit := env.MaxInstructions
+	if limit <= 0 && env.Host != nil {
+		limit = env.tuneInt("mpi_max_commands")
+	}
 	if limit <= 0 {
 		limit = defaultMaxInstr
 	}
