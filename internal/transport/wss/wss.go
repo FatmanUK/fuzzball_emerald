@@ -163,6 +163,23 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 				if !write(text) {
 					return
 				}
+			case <-d.Keepalive():
+				// A WebSocket has a keepalive of its
+				// own, so this is where the port
+				// diverges: upstream's answer for a
+				// connection that has not spoken
+				// telnet is a zero-byte write, and a
+				// zero-length *text frame* is a blank
+				// line the client would show. A ping
+				// is the same intent in the protocol
+				// this connection actually speaks.
+				pctx, cancel := context.WithTimeout(
+					ctx, 30*time.Second)
+				err := conn.Ping(pctx)
+				cancel()
+				if err != nil {
+					return
+				}
 			case <-d.Done():
 				// Deliver whatever is still queued
 				// before closing, so a parting

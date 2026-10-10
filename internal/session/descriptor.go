@@ -47,8 +47,46 @@ type Descriptor struct {
 	// Connected reports whether login has completed.
 	Connected   bool
 	ConnectedAt time.Time
+	// AcceptedAt is when the connection arrived, which is
+	// upstream's `connected_at` — stamped in `initializesock`
+	// (`interface.c:2586`) rather than at login, because what
+	// reads it is the login screen's own timeout. Emerald's
+	// ConnectedAt is the login moment and WHO's "On For" wants
+	// that one, so the two are separate fields here where
+	// upstream has one.
+	AcceptedAt time.Time
 	// LastActive is when input last arrived.
 	LastActive time.Time
+
+	// lastSent is when something was last written to this
+	// connection. It is upstream's `last_pinged_at`, whose name
+	// its own struct comment contradicts: "last time we sent data
+	// to them", stamped in `socket_write` (`interface.c:2120`) on
+	// *every* write and never by the keepalive as such. So the
+	// keepalive fires only when nothing at all has gone out for
+	// `idle_ping_time` — a chatty room never pings.
+	//
+	// It is an atomic because sendRaw is reached from the
+	// transport's goroutine as well as the world's: the MCP frame
+	// answers a negotiation from wherever the line arrived.
+	lastSent atomic.Int64
+
+	// keepalive carries a request for a protocol-level keepalive,
+	// which only a transport can spell. It is buffered at one and
+	// written without blocking: a second request while one is
+	// outstanding is the same request.
+	keepalive chan struct{}
+
+	// telnet records that the client has spoken telnet, which is
+	// upstream's `telnet_enabled` — set by any WILL, DO, WONT
+	// or DONT it sends (`interface.c:3558` and three more). It
+	// decides what a keepalive *is*.
+	telnet atomic.Bool
+
+	// Clock is the world's clock, so a test that freezes time
+	// freezes these timestamps too. Nil means time.Now, which is
+	// right for a descriptor the game has not adopted yet.
+	Clock func() time.Time
 
 	Width  int
 	Height int
@@ -104,18 +142,29 @@ func newDescriptor(id int, tr Transport, host string, now time.Time, packages []
 		Transport:  tr,
 		Hostname:   host,
 		Player:     ref.Nothing,
+		AcceptedAt: now,
 		LastActive: now,
 		Width:      80,
 		Height:     24,
 		out:        make(chan string, outputDepth),
 		done:       make(chan struct{}),
+		keepalive:  make(chan struct{}, 1),
 		// A connection starts with a nominal allowance so
 		// input works before the world has told it what this
 		// world's burst size is.
 		Quota: newQuota(defaultBurst),
 	}
+	d.lastSent.Store(now.UnixNano())
 	d.MCP = mcp.NewFrame(d.sendRaw, packages)
 	return d
+}
+
+// now reads the descriptor's clock.
+func (d *Descriptor) now() time.Time {
+	if d.Clock != nil {
+		return d.Clock()
+	}
+	return time.Now()
 }
 
 // Output is the stream a transport writes to the client.
@@ -176,6 +225,7 @@ func (d *Descriptor) sendRaw(text string) {
 	}
 	select {
 	case d.out <- text:
+		d.lastSent.Store(d.now().UnixNano())
 	case <-d.done:
 	default:
 		// The client has stopped reading. Dropping the
@@ -206,6 +256,38 @@ func (d *Descriptor) Overflowed() bool { return d.overflowed.Load() }
 func (d *Descriptor) IdleSince(now time.Time) time.Duration {
 	return now.Sub(d.LastActive)
 }
+
+// LastSent is when something was last written to this connection.
+func (d *Descriptor) LastSent() time.Time {
+	return time.Unix(0, d.lastSent.Load())
+}
+
+// Keepalive is the stream of keepalive requests. A transport selects
+// on it beside Output and spells the keepalive its own protocol's
+// way.
+func (d *Descriptor) Keepalive() <-chan struct{} {
+	return d.keepalive
+}
+
+// RequestKeepalive asks the transport for one, without blocking.
+//
+// It stamps lastSent whether or not the request was queued, because
+// upstream's does: the write it asks for goes through socket_write,
+// which stamps. Without that the condition stays true and a keepalive
+// would be requested on every tick.
+func (d *Descriptor) RequestKeepalive() {
+	d.lastSent.Store(d.now().UnixNano())
+	select {
+	case d.keepalive <- struct{}{}:
+	default:
+	}
+}
+
+// SetTelnet records that the client has spoken telnet.
+func (d *Descriptor) SetTelnet(on bool) { d.telnet.Store(on) }
+
+// TelnetEnabled reports whether it has.
+func (d *Descriptor) TelnetEnabled() bool { return d.telnet.Load() }
 
 // Hub tracks live descriptors.
 //

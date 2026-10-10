@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,11 @@ type harness struct {
 	engine *world.Engine
 	w      *world.World
 	d      *session.Descriptor
+
+	// clockOffset is how far the frozen clock has been advanced.
+	// It is an atomic because the clock is read from a
+	// descriptor's own goroutine as well as the world's.
+	clockOffset atomic.Int64
 }
 
 // newHarness builds a small world and connects one client to it.
@@ -35,7 +41,6 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 
 	w := world.New()
-	w.SetClock(func() time.Time { return time.Unix(1_700_000_000, 0).UTC() })
 
 	room := w.Create("The Study", ref.TypeRoom, ref.God)
 	wiz := w.Create("Wizard", ref.TypePlayer, ref.Nothing)
@@ -63,6 +68,12 @@ func newHarness(t *testing.T) *harness {
 	// operation, so the other order is a race.
 	h := &harness{t: t, s: New(engine, Options{}),
 		engine: engine, w: w}
+	// The clock is frozen so timestamps are reproducible, and
+	// movable so the tick's own rules can be reached.
+	base := time.Unix(1_700_000_000, 0).UTC()
+	w.SetClock(func() time.Time {
+		return base.Add(time.Duration(h.clockOffset.Load()))
+	})
 
 	done := make(chan error, 1)
 	go func() { done <- engine.Run(ctx) }()
@@ -102,6 +113,19 @@ func (h *harness) sync() {
 		if h.d.Closed() {
 			return // the command disconnected us, which is fine
 		}
+		h.t.Fatal(err)
+	}
+}
+
+// advance moves the frozen clock forward and runs one tick, which is
+// the only way to reach the rules the world goroutine applies on its
+// own rather than in answer to a line.
+func (h *harness) advance(d time.Duration) {
+	h.t.Helper()
+	h.clockOffset.Add(int64(d))
+	err := h.engine.Do(context.Background(),
+		func(w *world.World) { h.s.Tick(w) })
+	if err != nil && !h.d.Closed() {
 		h.t.Fatal(err)
 	}
 }

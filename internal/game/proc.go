@@ -197,6 +197,7 @@ type mufTimer struct {
 func (s *Server) Tick(w *world.World) {
 	now := w.Now()
 	s.refillQuotas(w, now)
+	s.sweepDescriptors(w, now)
 	s.fireTimers(w, now)
 	s.fireMPIEvents(w, now)
 	s.fireDeferred(w, now)

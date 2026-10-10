@@ -143,3 +143,24 @@ func TestEscapeIAC(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// TestTelnetEnabledNeedsAnOption is upstream's `telnet_enabled`,
+// which decides what an idle keepalive *is*: it is set by any WILL,
+// DO, WONT or DONT the client sends (`interface.c:3558` and three
+// more) and by nothing else — not by a subnegotiation, and not by a
+// doubled IAC, both of which leave it clear.
+func TestTelnetEnabledNeedsAnOption(t *testing.T) {
+	d := NewDecoder(nil)
+	d.Decode([]byte("hello"))
+	if d.TelnetEnabled() {
+		t.Error("plain text enabled telnet")
+	}
+	d.Decode([]byte{IAC, IAC})
+	if d.TelnetEnabled() {
+		t.Error("a doubled IAC enabled telnet")
+	}
+	d.Decode([]byte{IAC, DONT, OptNAWS})
+	if !d.TelnetEnabled() {
+		t.Error("DONT did not enable telnet")
+	}
+}

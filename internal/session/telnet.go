@@ -65,6 +65,14 @@ type telnetDecoder struct {
 	onResize func(WindowSize)
 	// reply queues bytes to send back, such as option refusals.
 	reply []byte
+
+	// telnet records that the client has spoken the protocol at
+	// all, which is upstream's `telnet_enabled`: set by any WILL,
+	// DO, WONT or DONT it sends and by nothing else, so a client
+	// that only ever sends text never sets it. What reads it is
+	// the idle keepalive, which is an IAC NOP for a telnet client
+	// and nothing at all for the rest.
+	telnet bool
 }
 
 func newTelnetDecoder(onResize func(WindowSize)) *telnetDecoder {
@@ -110,15 +118,19 @@ func (d *telnetDecoder) Decode(in []byte) []byte {
 
 		case stateWill:
 			d.onWill(c)
+			d.telnet = true
 			d.state = stateNormal
 		case stateWont:
+			d.telnet = true
 			d.state = stateNormal
 		case stateDo:
 			// We offer nothing, so refuse whatever is
 			// asked of us.
 			d.reply = append(d.reply, IAC, WONT, c)
+			d.telnet = true
 			d.state = stateNormal
 		case stateDont:
+			d.telnet = true
 			d.state = stateNormal
 
 		case stateSubneg:
@@ -232,6 +244,26 @@ type Decoder = telnetDecoder
 // onResize.
 func NewDecoder(onResize func(WindowSize)) *Decoder {
 	return newTelnetDecoder(onResize)
+}
+
+// TelnetEnabled reports whether the client has spoken telnet.
+func (d *telnetDecoder) TelnetEnabled() bool { return d.telnet }
+
+// Keepalive is what an idle keepalive looks like on the line
+// protocol: a telnet NOP for a client that speaks telnet, and
+// **nothing** for one that does not.
+//
+// The empty answer is upstream's. `send_keepalive`
+// (`interface.c:3107`) calls `queue_immediate_raw(d, "")` there,
+// which queues a zero-length block; `write_text_block` then calls
+// `socket_write` with a count of zero, so the timestamp is stamped
+// and no byte leaves. A non-telnet client is therefore pinged with
+// nothing at all, and the parameter only resets its own clock.
+func Keepalive(telnet bool) []byte {
+	if !telnet {
+		return nil
+	}
+	return []byte{IAC, NOP}
 }
 
 // InitialNegotiation is what a server offers a client on connect.

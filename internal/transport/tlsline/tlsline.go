@@ -145,6 +145,20 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 					conn.Close()
 					return
 				}
+			case <-d.Keepalive():
+				// Nothing to send for a client that
+				// has never spoken telnet, which is
+				// upstream's zero-byte write.
+				nop := session.Keepalive(
+					d.TelnetEnabled())
+				if len(nop) == 0 {
+					continue
+				}
+				_, err := bw.Write(nop)
+				if err != nil || bw.Flush() != nil {
+					conn.Close()
+					return
+				}
 			case <-d.Done():
 				// Deliver whatever is still queued,
 				// so a parting message is not lost to
@@ -180,6 +194,7 @@ func (s *Server) readLoop(conn net.Conn, d *session.Descriptor, dec *session.Dec
 		n, err := conn.Read(buf)
 		if n > 0 {
 			data := dec.Decode(buf[:n])
+			d.SetTelnet(dec.TelnetEnabled())
 			if reply := dec.TakeReply(); len(reply) > 0 {
 				if _, werr := conn.Write(reply); werr != nil {
 					return

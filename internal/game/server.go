@@ -223,6 +223,11 @@ func (s *Server) Connect(tr session.Transport, host string) (*session.Descriptor
 		// asked, which is the one thing the engine exists to
 		// prevent.
 		d.AllowANSI = func() bool { return s.allowANSI(w, d) }
+		// The same capture, for the same reason: the
+		// descriptor stamps its own "last sent" timestamp
+		// from a transport goroutine, and a test that freezes
+		// the world's clock must freeze that too.
+		d.Clock = w.Now
 		close(done)
 
 		// MCP is offered before the banner, so a client that
