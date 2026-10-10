@@ -146,24 +146,41 @@ func TestRegisteredHandlersAreInTheTable(t *testing.T) {
 	}
 }
 
-// TestUnimplementedCommandsSaySo checks the choice to keep upstream's
-// names in the table without handlers. Dropping them would silently
-// widen every abbreviation they constrain, and "Huh?" would be less
-// true than saying what is going on.
-func TestUnimplementedCommandsSaySo(t *testing.T) {
-	h := newHarness(t)
-	h.login()
-
-	// Any name in the table with no handler and no entry in
-	// `declined` will do — the two say different things, and
-	// this is the "not yet" half.
-	h.send("@mcpedit")
-	got := h.out()
-	if !strings.Contains(got, "does not implement") {
-		t.Errorf("@mcpedit said:\n%s", got)
+// TestEveryDispatchedNameIsAnsweredOrDeclined is the whole command
+// surface as one assertion: every name upstream dispatches either has
+// a handler here or an entry in `declined` saying why it never will.
+//
+// It replaces a test that checked the opposite — that an
+// unimplemented name says so — which had nothing left to stand on
+// once `@mcpedit` and `@mcpprogram` landed and `@armageddon` and
+// `@restart` were declined. The "not yet" branch in `dispatch` is
+// kept, because a submodule bump can introduce a name and that is
+// what should happen when it does.
+func TestEveryDispatchedNameIsAnsweredOrDeclined(t *testing.T) {
+	for _, c := range commandTable {
+		if _, ok := handlers[c.n]; ok {
+			if _, no := declined[c.n]; no {
+				t.Errorf("%q is both handled and "+
+					"declined", c.n)
+			}
+			continue
+		}
+		if _, no := declined[c.n]; !no {
+			t.Errorf("%q has no handler and no reason",
+				c.n)
+		}
 	}
-	if !strings.Contains(got, "@mcpedit") {
-		t.Errorf("the message does not name the command:\n%s", got)
+}
+
+// TestDeclinedNamesAreRealCommands is the other direction: a typo in
+// `declined` would silently promise an explanation for a name nobody
+// can type.
+func TestDeclinedNamesAreRealCommands(t *testing.T) {
+	for name := range declined {
+		if !knownCommand(name) {
+			t.Errorf("%q is declined and is not a "+
+				"command", name)
+		}
 	}
 }
 

@@ -211,6 +211,12 @@ var declined = map[string]string{
 	"@teledump": "it base64-encodes the flat-file dump over " +
 		"the connection, and this server has no dump " +
 		"file to send — the world lives in Postgres",
+	"@armageddon": "process lifecycle belongs to the container " +
+		"runtime, not to a command inside the game — and " +
+		"it exits *without* writing, which write-behind " +
+		"would make a deliberate loss rather than a free one",
+	"@restart": "process lifecycle belongs to the container " +
+		"runtime, which is what restarts this server",
 }
 
 // dispatch runs one resolved command, or reports that this server

@@ -16,7 +16,7 @@ Written against Emerald at the commit that adds this file.
 |---|---|
 | [`mpihelp.html`](https://fuzzball-muck.github.io/fuzzball/mpihelp.html) | **All 140 functions, and the documented limits check out.** Two gaps found later: `{force}`'s unblessed path, and error reporting that does not walk back out. |
 | [`mufman.html`](https://fuzzball-muck.github.io/fuzzball/mufman.html) | **Nothing missing that a program can reach.** Every primitive, every compiler directive. Six conditionals are deliberately false. |
-| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **9 of 109 dispatched names have no handler**, and five of those are deliberate. |
+| [`muckhelp.html`](https://fuzzball-muck.github.io/fuzzball/muckhelp.html) | **Every one of the 109 dispatched names is answered**: 102 handled, 7 declined with a reason. |
 
 Two questions answered below need no work: Emerald is **partly
 crash-only, deliberately**, and **does not conform to 12-factor,
@@ -197,18 +197,28 @@ audit; it is here now because that plan file has been deleted.
 
 ---
 
-## `muckhelp.html` — 9 of 109 names have no handler
+## `muckhelp.html` — every dispatched name is answered
 
 `internal/game/dispatch_table.go` is every name Fuzzball 7 dispatches:
-**109 rows, 100 with handlers, 9 without.** The count is exact rather
-than estimated, because the table *is* the command surface and a name
-with no handler says so when typed.
+**109 rows, 102 with handlers, 7 declined.** The count is exact rather
+than estimated, because the table *is* the command surface, and
+`TestEveryDispatchedNameIsAnsweredOrDeclined` asserts that nothing
+falls between the two.
 
-The nine, and why:
+The seven, and why:
 
-    @memory  @usage  @reconfiguressl  @tops  @teledump   deliberate
+    @memory  @usage  @reconfiguressl  @tops  @teledump   replaced
     @armageddon  @restart                                lifecycle
-    @mcpedit  @mcpprogram                                MCP editor
+
+`@mcpedit` and `@mcpprogram` have landed. `@armageddon` and `@restart`
+are now **declined** rather than pending: process lifecycle belongs to
+the container runtime, not to a command inside the game — and
+armageddon exits *without* writing, which write-behind would make a
+deliberate loss rather than a free one.
+
+The "not yet" branch in `dispatch` is kept even though nothing reaches
+it, because a submodule bump can introduce a name and that is what
+should happen when it does.
 
 `@sweep` has landed, which took the LISTENER flag with it: nothing
 maintained the flag before, so the command could not have told the
@@ -217,12 +227,6 @@ none, and derived from the properties at load.
 
 `@teledump` joins the deliberate list: it base64-encodes the flat-file
 dump over the connection, and this server has no dump file to send.
-
-`@armageddon` and `@restart` are implementable but touch process
-lifecycle and deployment rather than the game — armageddon exits
-*without* writing, which write-behind makes a deliberate choice rather
-than a free one, and restart needs a supervisor to restart into. They
-say "not yet", which is accurate.
 
 This is a different shape of gap from the one this document opened
 with, twice over. It began as **verbs, not engine** — about forty

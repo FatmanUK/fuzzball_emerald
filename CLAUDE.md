@@ -1727,12 +1727,12 @@ Worth knowing before "fixing" something that looks wrong:
 
 `docs/upstream-coverage.md` audits this against Fuzzball 7's three manuals and
 answers the crash-only and 12-factor questions. MPI and MUF are complete, and
-the command surface very nearly is: **109 dispatched names, 100 with handlers,
-9 without**, five of those nine declined rather than missing. The count is
-exact rather than estimated, because `internal/game/dispatch_table.go` *is* the
-command surface — it carries every name upstream dispatches, and a name with no
-handler says so when typed. To re-derive it, iterate `commandTable` against
-`handlers` and `declined`.
+the command surface is too: **109 dispatched names, 102 with handlers and 7
+declined with a reason**, and nothing between the two —
+`TestEveryDispatchedNameIsAnsweredOrDeclined` asserts it. The count is exact
+rather than estimated, because `internal/game/dispatch_table.go` *is* the
+command surface. The "not yet" branch in `dispatch` is kept even though
+nothing reaches it, because a submodule bump can introduce a name.
 
 **A missing command is not always a silent gap.** `@chown` was absent while
 being a *prefix* of `@chown_lock`, so `lookupAtCommand` resolved it there and a

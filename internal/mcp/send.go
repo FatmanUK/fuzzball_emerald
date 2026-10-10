@@ -115,3 +115,40 @@ func (f *Frame) SendInband(line string) {
 	}
 	f.Send(line)
 }
+
+// Package names this server both offers and sends on.
+const (
+	// NotifyPackage carries an out-of-band error, which is how a
+	// command that could not be acted on tells a client rather
+	// than printing a line.
+	NotifyPackage = "org-fuzzball-notify"
+	// HelpPackage answers a client's request for a help topic.
+	HelpPackage = "org-fuzzball-help"
+	// LanguagesPackage says what a program can be written in.
+	LanguagesPackage = "org-fuzzball-languages"
+	// SimpleEditPackage and MooSimpleEditPackage are the same
+	// handler under two names: the DNS-prefixed one is MOO's and
+	// is what clients implemented first, so it is the one
+	// `@mcpedit` tests for.
+	SimpleEditPackage    = "org-fuzzball-simpleedit"
+	MooSimpleEditPackage = "dns-org-mud-moo-simpleedit"
+)
+
+// SendError is `show_mcp_error` (`mcppkgs.c:37`): an out-of-band
+// error through the notify package, falling back to **plain text** on
+// a client that does not support it.
+//
+// The fallback is not a `notify`, and upstream says why: the same
+// error can happen at the login screen, where there is no player to
+// notify and the old code segfaulted. Writing to the connection works
+// either way.
+func (f *Frame) SendError(topic, text string) {
+	if v := f.Supports(NotifyPackage); v.Major != 0 ||
+		v.Minor != 0 {
+		_ = f.SendMessage(NewMessage(NotifyPackage, "error").
+			AddArg("text", text).
+			AddArg("topic", topic))
+		return
+	}
+	f.SendInband(text)
+}

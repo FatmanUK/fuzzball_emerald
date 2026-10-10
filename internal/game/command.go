@@ -113,6 +113,8 @@ func init() {
 	register("@tune", (*Server).cmdTune)
 	register("@program", (*Server).cmdProgram)
 	register("@edit", (*Server).cmdEdit)
+	register("@mcpedit", (*Server).cmdMcpedit)
+	register("@mcpprogram", (*Server).cmdMcpprogram)
 	register("@list", (*Server).cmdList)
 	register("@toad", (*Server).cmdToad)
 	register("@boot", (*Server).cmdBoot)
