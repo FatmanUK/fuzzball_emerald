@@ -398,13 +398,56 @@ func (s *Server) notify(w *world.World, player ref.Ref, format string, args ...a
 // a puppet is told — by a program, or by @force — reaches a
 // person at all.
 func (s *Server) send(w *world.World, player ref.Ref, text string) {
-	s.hub.Tell(player, text)
+	s.sendCount(w, player, text)
+}
+
+// sendCount is send, reporting how many connections heard it —
+// counting the owner of a puppet that relayed. `notify_nolisten`
+// returns that count and three callers act on it.
+func (s *Server) sendCount(w *world.World, player ref.Ref,
+	text string) int {
+
+	n := s.hub.Tell(player, text)
 	// A direct notify is **private**, which is half of upstream's
 	// relay condition.
 	if owner, prefix, ok := puppetRelay(s, w, player,
 		true); ok {
-		s.hub.Tell(owner, prefix+text)
+		n += s.hub.Tell(owner, prefix+text)
 	}
+	return n
+}
+
+// notifyPrivately is `notify_listeners` with `isprivate` set
+// (`interface.c:4870`): the listen propqueues fire, the vehicle echo
+// does not, and the message is delivered to a PLAYER or a THING and
+// to nothing else.
+//
+// It reports whether **anybody heard**, which is the return value
+// `page` and `whisper` both branch on — and which is why their "X
+// is not connected." is decided after the message has been composed
+// rather than before.
+//
+// The ignore filter belongs here rather than in `send`:
+// `notify_filtered` applies it and a bare `notify` does not, so a
+// program telling somebody something still gets through.
+func (s *Server) notifyPrivately(w *world.World, from, obj,
+	room ref.Ref, text string) bool {
+
+	s.notifyListeners(w, from, ref.Nothing, obj, room, text)
+	o := w.Get(obj)
+	if o == nil {
+		return false
+	}
+	switch o.Type() {
+	case ref.TypePlayer, ref.TypeThing:
+	default:
+		return false
+	}
+	h := &mufHost{s: s, w: w}
+	if h.IsIgnoring(obj, from) {
+		return false
+	}
+	return s.sendCount(w, obj, text) > 0
 }
 
 // puppetRelay reports whether a target's output should also reach its

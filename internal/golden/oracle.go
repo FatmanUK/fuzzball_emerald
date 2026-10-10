@@ -71,6 +71,22 @@ func RunOracleQuiet(ctx context.Context, fx *Fixture, script Script,
 // it, and tears it down.
 func withOracle(ctx context.Context, fx *Fixture,
 	fn func(net.Conn) ([]string, error)) ([]string, error) {
+
+	var out []string
+	one := func(conns []net.Conn) error {
+		var err error
+		out, err = fn(conns[0])
+		return err
+	}
+	err := withOracleConns(ctx, fx, 1, one)
+	return out, err
+}
+
+// withOracleConns is the same with n connections, which is what a
+// two-seat case needs: the container is started once and dialled
+// twice, since two servers would be two worlds.
+func withOracleConns(ctx context.Context, fx *Fixture, n int,
+	fn func([]net.Conn) error) error {
 	// The C server writes back into its game directory — a
 	// dump, and the macro table — so it runs against a copy.
 	// Without this a case that defines a macro leaves it behind
@@ -78,16 +94,16 @@ func withOracle(ctx context.Context, fx *Fixture,
 	// being of the same world.
 	dir, err := copyFixture(fx.Dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer os.RemoveAll(dir)
 	if err := os.MkdirAll(dir+"/logs", 0o755); err != nil {
-		return nil, err
+		return err
 	}
 
 	port, err2 := freePort()
 	if err2 != nil {
-		return nil, err2
+		return err2
 	}
 	name := fmt.Sprintf("fbgold-%d", port)
 
@@ -109,7 +125,8 @@ func withOracle(ctx context.Context, fx *Fixture,
 		"-nodetach",
 	)
 	if out, err := run.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("starting the oracle: %v: %s", err, out)
+		return fmt.Errorf("starting the oracle: %v: %s",
+			err, out)
 	}
 	defer func() {
 		// -t 0 because this is reached either after the
@@ -124,14 +141,25 @@ func withOracle(ctx context.Context, fx *Fixture,
 			name).Run()
 	}()
 
-	conn, err := dialWithRetry(ctx, fmt.Sprintf("127.0.0.1:%d", port))
-	if err != nil {
-		logs, _ := exec.Command("podman", "logs", name).CombinedOutput()
-		return nil, fmt.Errorf("connecting to the oracle: %w (logs: %s)", err, logs)
+	conns := make([]net.Conn, 0, n)
+	defer func() {
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	}()
+	for len(conns) < n {
+		conn, err := dialWithRetry(ctx,
+			fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			logs, _ := exec.Command("podman", "logs",
+				name).CombinedOutput()
+			return fmt.Errorf("connecting to the "+
+				"oracle: %w (logs: %s)", err, logs)
+		}
+		conns = append(conns, conn)
 	}
-	defer conn.Close()
 
-	return fn(conn)
+	return fn(conns)
 }
 
 // dialWithRetry waits for the oracle to start listening.

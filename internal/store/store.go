@@ -371,9 +371,9 @@ func toRow(o *world.Object) Object {
 
 // toPropRow writes one property. A **directory** entry reaches here
 // only when it is blessed, and stores Type zero -- which is no type
-// at all, and is how the loader tells the two apart.
-// propTooLong is the one error a flush can raise about a property,
-// named so the line fits.
+// at all, and is how the loader tells the two apart. propTooLong is
+// the one error a flush can raise about a property, named so the line
+// fits.
 const propTooLong = "object %v: property path is %d bytes, over " +
 	"the %d limit: %q"
 

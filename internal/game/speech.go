@@ -58,24 +58,38 @@ func (s *Server) cmdWhisper(c *ctx) {
 	}
 	name, text = strings.TrimSpace(name), strings.TrimSpace(text)
 
-	target := match.New(c.w, c.who, name).
-		PreferType(ref.TypePlayer).Thing().Result()
-	switch target {
-	case ref.Nothing:
-		c.tell("I don't see that person here.")
-		return
-	case ref.Ambiguous:
-		c.tell("I don't know which one you mean.")
+	// `do_whisper`'s own match list (`speech.c:395`): neighbours
+	// and "me", with absolute refs and player names added for a
+	// wizard who is a **player** -- so a wizard's puppet cannot
+	// whisper across the game. The failure goes through
+	// `noisy_match_result` like every other command's, where this
+	// invented two messages of its own.
+	m := match.New(c.w, c.who, name).
+		PreferType(ref.TypePlayer).Neighbor().Me()
+	if isWizard(c.w, c.who) &&
+		c.w.Get(c.who).Type() == ref.TypePlayer {
+		m = m.Absolute().Player()
+	}
+	target := m.Result()
+	if !noisyMatch(c, name, target) {
 		return
 	}
-	if c.w.Get(target).Type() != ref.TypePlayer {
-		c.tell("You can only whisper to a player.")
-		return
-	}
-
+	// **No type check.** `notify_listeners` decides what can
+	// hear: a THING is a legal target and a puppet relays the
+	// whisper to its owner. "You can only whisper to a player."
+	// was invented here.
 	me := c.w.Get(c.who)
+	if !s.notifyPrivately(c.w, c.who, target,
+		locationOf(c.w, c.who),
+		sprintf("%s whispers, \"%s\"", me.Name, text)) {
+
+		c.tell("%s is not connected.",
+			c.w.Get(target).Name)
+		return
+	}
+	// The confirmation comes **after** the delivery, because it
+	// is the delivery that decides whether there is one.
 	c.tell("You whisper, \"%s\" to %s.", text, c.w.Get(target).Name)
-	s.notify(c.w, target, "%s whispers, \"%s\"", me.Name, text)
 }
 
 // cmdPage messages a player anywhere in the game.
@@ -89,20 +103,44 @@ func (s *Server) cmdPage(c *ctx) {
 
 	target, found := c.w.PlayerNamed(name)
 	if !found {
-		c.tell("I don't recognise that player.")
+		// "name", and the American spelling, which is
+		// upstream's.
+		c.tell("I don't recognize that name.")
 		return
 	}
-	if !s.hub.Online(target) {
-		c.tell("%s is not connected.", c.w.Get(target).Name)
+	// A HAVEN player is not to be disturbed, which this did not
+	// check -- so the one flag a player sets to stop being paged
+	// did nothing.
+	if c.w.Get(target).Flags&ref.Haven != 0 {
+		c.tell("That player does not wish to be disturbed.")
+		return
+	}
+	// And it **costs** lookup_cost, like any other lookup by
+	// name. Nothing here charged for it.
+	if !s.payFor(c.w, c.who, int(c.w.Tune.Int("lookup_cost"))) {
+		c.tell("You don't have enough %s.",
+			c.w.Tune.String("pennies"))
 		return
 	}
 
+	// The message names the **room** the pager is in, which is
+	// most of the point of it: a page says where to come. And an
+	// empty one is a nudge rather than a message.
 	me := c.w.Get(c.who)
-	if text == "" {
-		c.tell("You page %s.", c.w.Get(target).Name)
-		s.notify(c.w, target, "You sense that %s is looking for you.", me.Name)
+	where := nameOf(c.w, locationOf(c.w, c.who))
+	msg := sprintf("You sense that %s is paging you from %s.",
+		me.Name, where)
+	if text != "" {
+		msg = sprintf("%s pages from %s: \"%s\"", me.Name,
+			where, text)
+	}
+	// The sender is told that it was *sent*, not what was sent:
+	// there is no echo of the text at all.
+	if s.notifyPrivately(c.w, c.who, target,
+		locationOf(c.w, c.who), msg) {
+
+		c.tell("Your message has been sent.")
 		return
 	}
-	c.tell("You page, \"%s\" to %s.", text, c.w.Get(target).Name)
-	s.notify(c.w, target, "%s pages: %s", me.Name, text)
+	c.tell("%s is not connected.", c.w.Get(target).Name)
 }

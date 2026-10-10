@@ -333,11 +333,17 @@ func (h *Hub) All() []*Descriptor {
 // PlayersOnline counts distinct players with a live connection.
 func (h *Hub) PlayersOnline() int { return len(h.byPlayer) }
 
-// Tell sends a line to every descriptor a player is connected on.
-func (h *Hub) Tell(player ref.Ref, text string) {
-	for _, d := range h.byPlayer[player] {
+// Tell sends a line to every descriptor a player is connected on. It
+// reports how many connections it reached, which is what upstream's
+// `notify_nolisten` returns and what tells `page` and `whisper`
+// whether to say "Your message has been sent." or "X is not
+// connected."
+func (h *Hub) Tell(player ref.Ref, text string) int {
+	ds := h.byPlayer[player]
+	for _, d := range ds {
 		d.Send(text)
 	}
+	return len(ds)
 }
 
 // sortByID orders descriptors by id, which is connection order.
