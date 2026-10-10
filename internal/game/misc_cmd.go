@@ -115,8 +115,18 @@ func (s *Server) cmdWall(c *ctx) {
 	// was typed.
 	msg := sprintf("%s shouts, \"%s\"",
 		nameOf(c.w, c.who), c.rest)
+	// Through `notify_listeners` per connected **descriptor**
+	// (`speech.c:125`), not straight to each one. Two things
+	// follow, and the first is why this is not a loop over
+	// players: the **ignore filter** applies, so somebody
+	// ignoring the shouter does not hear it — and a player with
+	// two connections is notified once per descriptor, each
+	// notify reaching all of their descriptors, so they hear it
+	// twice over. That is upstream's and is reproduced; `@wall`
+	// is wizard-only and the arithmetic is its own business.
+	where := locationOf(c.w, c.who)
 	for _, d := range s.hub.Connected() {
-		d.Send(msg)
+		s.notifyPrivately(c.w, c.who, d.Player, where, msg)
 	}
 	s.securityLog().Warn("wall",
 		"player", c.who.String(), "name", nameOf(c.w, c.who),
