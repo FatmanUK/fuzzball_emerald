@@ -40,6 +40,12 @@ type Descriptor struct {
 	ID        int
 	Transport Transport
 	Hostname  string
+	// Port is the peer's port, which is upstream's `d->username`:
+	// `addrout` builds a hostname of the form "1.2.3.4(56789)"
+	// and `initializesock` splits it at the parentheses, so what
+	// WHO shows God beside the host is the port and never a user
+	// name.
+	Port string
 
 	// Player is the connected player, or ref.Nothing before
 	// login.

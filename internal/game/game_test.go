@@ -257,6 +257,14 @@ func TestQuitIsCaseSensitive(t *testing.T) {
 	if !h.d.Closed() {
 		t.Error("QUIT did not disconnect")
 	}
+	// `goodbye_user` prints `leave_mesg`, not a fixed "Goodbye."
+	// -- and only QUIT reaches it, because only do_command
+	// returning false sets `booted == 2`.
+	if got := h.out(); !strings.Contains(got,
+		"Come back later!") {
+
+		t.Errorf("QUIT did not print leave_mesg:\n%s", got)
+	}
 }
 
 func TestWhoIsCaseSensitiveAndTakesAFilter(t *testing.T) {
@@ -265,22 +273,31 @@ func TestWhoIsCaseSensitiveAndTakesAFilter(t *testing.T) {
 
 	h.send("WHO")
 	got := h.out()
+	if !strings.Contains(got, "Player Name           On For") {
+		t.Errorf("not the mortal header:\n%s", got)
+	}
 	if !strings.Contains(got, "Wizard") ||
-		!strings.Contains(got, "player connected") {
+		!strings.Contains(got, "1 player is connected.") {
 		t.Errorf("WHO output:\n%s", got)
 	}
 
-	// A filter that matches nobody.
+	// A filter that matches nobody still **counts** everybody:
+	// upstream's `++players` sits between the who_hides_dark test
+	// and the name filter, so the footer is a count of who is on
+	// and not of who was shown.
 	h.send("WHO nosuchplayer")
 	got = h.out()
-	if !strings.Contains(got, "0 players connected") {
-		t.Errorf("filtered WHO:\n%s", got)
+	if strings.Contains(got, "Wizard") {
+		t.Errorf("the filter did not filter:\n%s", got)
+	}
+	if !strings.Contains(got, "1 player is connected.") {
+		t.Errorf("the filter changed the count:\n%s", got)
 	}
 
 	// Lowercase "who" is not the interface command.
 	h.send("who")
 	got = h.out()
-	if strings.Contains(got, "player connected") {
+	if strings.Contains(got, "is connected.") {
 		t.Errorf("lowercase who should not be the interface command:\n%s", got)
 	}
 }

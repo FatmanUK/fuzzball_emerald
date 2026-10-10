@@ -144,7 +144,7 @@ func TestWSSConnectAndLook(t *testing.T) {
 
 	// The same interface-command rules apply on both transports.
 	c.send("WHO")
-	got = c.expect("player connected")
+	got = c.expect("player is connected")
 	if !strings.Contains(got, "One") {
 		t.Errorf("WHO did not list One:\n%s", got)
 	}

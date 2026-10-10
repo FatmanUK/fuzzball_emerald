@@ -121,7 +121,7 @@ func (s *Server) Close() error { return s.http.Close() }
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	// Refused before the upgrade, so a flood costs a 503 rather
 	// than a websocket.
-	host := clientHost(r)
+	host, port := clientHostPort(r)
 	if v := s.gate.Admit(host); v != admit.Allowed {
 		s.log.Warn("refused a connection", "host", host, "reason", string(v))
 		http.Error(w, "too many connections", http.StatusServiceUnavailable)
@@ -144,6 +144,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	d.Port = port
 	defer s.game.Disconnect(d)
 
 	ctx := r.Context()
@@ -223,10 +224,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 // X-Forwarded-For is deliberately not trusted: anyone can set it, and
 // a forged value would poison the audit log and any rate limiting
 // built on it.
-func clientHost(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+func clientHostPort(r *http.Request) (string, string) {
+	host, port, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		return r.RemoteAddr, ""
 	}
-	return host
+	return host, port
 }

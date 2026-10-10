@@ -85,7 +85,7 @@ func (s *Server) Close() error { return s.ln.Close() }
 func (s *Server) handle(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 
-	host := hostOf(conn.RemoteAddr())
+	host, port := hostPortOf(conn.RemoteAddr())
 
 	// Refused before the handshake: a peer opening connections
 	// faster than it should must not be able to make the server
@@ -116,6 +116,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		return
 	}
+	d.Port = port
 	defer s.game.Disconnect(d)
 
 	// The decoder strips telnet control sequences and reports
@@ -225,11 +226,13 @@ func (s *Server) readLoop(conn net.Conn, d *session.Descriptor, dec *session.Dec
 }
 
 // hostOf renders a remote address for logging and WHO, without the
-// port.
-func hostOf(addr net.Addr) string {
-	host, _, err := net.SplitHostPort(addr.String())
+// port. hostPortOf splits a peer address. Upstream keeps both halves,
+// because WHO shows God the port beside the host — what it calls
+// the connection's "username".
+func hostPortOf(addr net.Addr) (string, string) {
+	host, port, err := net.SplitHostPort(addr.String())
 	if err != nil {
-		return addr.String()
+		return addr.String(), ""
 	}
-	return host
+	return host, port
 }

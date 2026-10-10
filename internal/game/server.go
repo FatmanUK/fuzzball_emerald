@@ -281,6 +281,8 @@ func (s *Server) Input(d *session.Descriptor, line string) {
 	}
 	_ = s.engine.Go(func(w *world.World) {
 		d.LastActive = w.Now()
+		line = sanitizeInput(line,
+			w.Tune.Bool("tab_input_replaced_with_space"))
 
 		// Out-of-band messages are taken off the line before
 		// anything else sees it. A line the client quoted
@@ -872,19 +874,45 @@ func trimSpace(s string) string {
 	return trimRightSpace(trimLeftSpace(s))
 }
 
-// idleFor renders a duration the way WHO does.
-func idleFor(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return "0m"
-	case d < time.Hour:
-		return itoa(int(d.Minutes())) + "m"
-	case d < 24*time.Hour:
-		return itoa(int(d.Hours())) + "h"
-	default:
-		return itoa(int(d.Hours()/24)) + "d"
+// sanitizeInput is `process_input`'s byte filter
+// (`interface.c:3637`), which Emerald did not have: every byte a
+// client sent reached the command parser.
+//
+// Four rules, and `isinput` is the first of them: `isprint(q & 127)`
+// — the byte is **masked** to seven bits for the test and stored
+// unmasked, so 0xE9 is kept because 0x69 is printable, while 0x81 is
+// dropped because 0x01 is not. That is what lets a high byte into a
+// name at all, and why `7bit_other_names` and `7bit_thing_names`
+// exist to refuse one.
+//
+// A tab becomes a space when `tab_input_replaced_with_space` is set,
+// which it is by default and which nothing here read. Backspace and
+// delete remove the previous character, and do nothing at the start
+// of the line. Everything else — a stray carriage return included
+// — is dropped silently.
+func sanitizeInput(line string, tabToSpace bool) string {
+	out := make([]byte, 0, len(line))
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case isPrintByte(c & 127):
+			out = append(out, c)
+		case c == '\t':
+			if tabToSpace {
+				c = ' '
+			}
+			out = append(out, c)
+		case c == 8 || c == 127:
+			if len(out) > 0 {
+				out = out[:len(out)-1]
+			}
+		}
 	}
+	return string(out)
 }
+
+// isPrintByte is `isprint` in the C locale: a space through a tilde.
+func isPrintByte(c byte) bool { return c >= 0x20 && c <= 0x7e }
 
 // fullCommand is upstream's full_command (game.c:677): the line after
 // the command word, with exactly *one* character skipped.

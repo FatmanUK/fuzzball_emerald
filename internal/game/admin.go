@@ -2,7 +2,7 @@ package game
 
 import (
 	"context"
-	"fmt"
+
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +10,6 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
 	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
-	"github.com/FatmanUK/fuzzball_emerald/internal/session"
 	"github.com/FatmanUK/fuzzball_emerald/internal/tune"
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
@@ -18,51 +17,19 @@ import (
 // Version is stamped by the server binary.
 var Version = "dev"
 
-// cmdQuit disconnects.
+// cmdQuit disconnects. `goodbye_user` (`interface.c:2232`) prints
+// `leave_mesg`, not a fixed "Goodbye." — surrounded by blank lines,
+// and flushed before the socket goes.
+//
+// It fires on `booted == 2`, which only `do_command` returning false
+// sets (`interface.c:2014`) — that is, QUIT and nothing else. An
+// idle boot is `booted == 1` and gets `idle_boot_mesg` instead, and a
+// `@boot` gets neither.
 func (s *Server) cmdQuit(c *ctx) {
-	c.tell("Goodbye.")
+	c.d.Send("")
+	c.d.Send(c.w.Tune.String("leave_mesg"))
+	c.d.Send("")
 	c.d.Close()
-}
-
-// cmdWho lists who is online.
-func (s *Server) cmdWho(c *ctx) {
-	s.writeWho(c.w, c.d, c.arg)
-}
-
-// writeWho renders the WHO table, optionally filtered by a name
-// prefix.
-func (s *Server) writeWho(w *world.World, d *session.Descriptor, filter string) {
-	filter = strings.TrimSpace(filter)
-	now := w.Now()
-
-	d.Send(fmt.Sprintf("%-20s %8s %8s  %s", "Player name", "On for", "Idle", "Doing"))
-
-	shown := 0
-	for _, other := range s.hub.Connected() {
-		o := w.Get(other.Player)
-		if o == nil {
-			continue
-		}
-		if filter != "" &&
-			!match.StringMatch(o.Name, filter) {
-			continue
-		}
-		d.Send(fmt.Sprintf("%-20s %8s %8s  %s",
-			o.Name,
-			idleFor(now.Sub(other.ConnectedAt)),
-			idleFor(other.IdleSince(now)),
-			getMesg(w, other.Player, propDoing),
-		))
-		shown++
-	}
-	d.Send(fmt.Sprintf("%d player%s connected.", shown, plural(shown)))
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 // cmdVersion reports the server version.

@@ -260,7 +260,7 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 
 	// WHO lists the connected player.
 	c.send("WHO")
-	got = c.expect("player connected")
+	got = c.expect("player is connected")
 	if !strings.Contains(got, "One") {
 		t.Errorf("WHO did not list One:\n%s", got)
 	}
@@ -300,7 +300,8 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	c.expect("Room Zero")
 
 	c.send("QUIT")
-	c.expect("Goodbye")
+	// `goodbye_user` prints `leave_mesg`, whose default is this.
+	c.expect("Come back later!")
 }
 
 // TestBadPasswordIsRefused checks the failure path does not leak
