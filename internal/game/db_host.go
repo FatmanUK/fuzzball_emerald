@@ -13,11 +13,13 @@ import (
 // NewPlayer implements muf.Host for NEWPLAYER, upstream's
 // create_player.
 func (h *mufHost) NewPlayer(name, pass string) (ref.Ref, error) {
-	if err := validPlayerName(h.w, name); err != nil {
-		return ref.Nothing, err
+	// `abort_interp(error)` with create_player's own text, so
+	// NEWPLAYER's refusals are the command's refusals.
+	if !okObjectName(h.w, name, ref.TypePlayer) {
+		return ref.Nothing, errMsg(cannotUseThatName)
 	}
-	if _, taken := h.w.PlayerNamed(name); taken {
-		return ref.Nothing, errMsg("That name is already taken.")
+	if !okPassword(pass) {
+		return ref.Nothing, errMsg(cannotUseThatPassword)
 	}
 	o, err := h.s.createPlayer(h.w, name, pass)
 	if err != nil {

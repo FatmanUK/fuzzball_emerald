@@ -205,12 +205,16 @@ func (s *Server) doCreate(w *world.World, d *session.Descriptor, user, pass stri
 		d.Close()
 		return
 	}
-	if err := validPlayerName(w, user); err != nil {
-		d.Send(err.Error())
+	// create_player has exactly two refusals and every one of its
+	// four callers prints them verbatim (`player.c:213`), where
+	// this had five messages of its own invention — and each
+	// caller printed a different subset of them.
+	if !okObjectName(w, user, ref.TypePlayer) {
+		d.Send(cannotUseThatName)
 		return
 	}
-	if pass == "" {
-		d.Send("You must give a password.")
+	if !okPassword(pass) {
+		d.Send(cannotUseThatPassword)
 		return
 	}
 
@@ -262,32 +266,14 @@ func (s *Server) createPlayer(w *world.World, user, pass string) (*world.Object,
 // include/game.h.
 const propCreatedAs = "@__sys__/name/created_as"
 
-// validPlayerName applies the rules a new name must satisfy.
-func validPlayerName(w *world.World, name string) error {
-	switch {
-	case name == "":
-		return errMsg("You must give a name.")
-	case len(name) > int(w.Tune.Int("player_name_limit")):
-		return errMsg("That name is too long.")
-	}
-	for _, r := range name {
-		// Fuzzball reserves these because they are matcher
-		// and property syntax; a name containing one could
-		// never be referred to.
-		if strings.ContainsRune("#*!$ \t\r\n", r) || r < 32 {
-			return errMsg("That name contains a character that is not allowed.")
-		}
-	}
-	for _, reserved := range []string{"me", "here", "home", "nil"} {
-		if ascii.EqualFold(name, reserved) {
-			return errMsg("That name is reserved.")
-		}
-	}
-	if _, taken := w.PlayerNamed(name); taken {
-		return errMsg("That name is already taken.")
-	}
-	return nil
-}
+// create_player's two refusals (`player.c:214`, `:219`). Every caller
+// prints them as given, so they are constants rather than a
+// per-caller message.
+const (
+	cannotUseThatName = "You cannot use that name for a " +
+		"player."
+	cannotUseThatPassword = "You cannot use that password."
+)
 
 // errMsg is an error carrying a message meant for a player.
 type errMsg string

@@ -997,11 +997,10 @@ func (s *Server) createProgram(w *world.World, who ref.Ref,
 	// @program gets it as well as NEWPROGRAM. It had been missing
 	// from both, and "@program me" made a program called "me".
 	//
-	// nameForbidden is the type-independent half of
-	// ok_object_name; the TYPE_PROGRAM half is only the
-	// 7bit_other_names test, which NameOK's doc comment explains
-	// Emerald leaves out everywhere rather than in one place.
-	if nameForbidden(name) {
+	// The TYPE_PROGRAM arm of it is the 7bit_other_names test,
+	// which had no reader anywhere until the parameters were
+	// wired up.
+	if !okObjectName(w, name, ref.TypeProgram) {
 		return ref.Nothing, errMsg(badProgramName)
 	}
 

@@ -53,24 +53,15 @@ func nameForbidden(name string) bool {
 }
 
 // NameOK implements muf.Host for EXT-NAME-OK?, upstream's
-// ok_object_name. Unlike upstream, this does not check
-// tp_reserved_names/ tp_reserved_player_names, ok_player_name's
-// length limit, or the 7-bit-only tune flags — Emerald has no
-// object-creation command that enforces any of those either, so
-// adding them only to this one introspection primitive would make it
-// stricter than @create itself.
+// ok_object_name — the whole of it now, including the four @tune
+// parameters and ok_player_name's length limit.
+//
+// Its doc comment used to explain that none of those was checked
+// *anywhere*, so checking them in this one introspection primitive
+// would have made it stricter than @create. That is no longer true:
+// every creator goes through okObjectName.
 func (h *mufHost) NameOK(name string, t ref.ObjType) bool {
-	if nameForbidden(name) {
-		return false
-	}
-	if t == ref.TypePlayer {
-		_, exists := h.w.PlayerNamed(name)
-		return !exists
-	}
-	if t == ref.TypeGarbage {
-		return false
-	}
-	return true
+	return okObjectName(h.w, name, t)
 }
 
 // UserLog implements muf.Host for USERLOG, upstream's log_user —
@@ -245,7 +236,7 @@ func nameRefusal(t ref.ObjType) string {
 func (s *Server) checkName(c *ctx, name string,
 	t ref.ObjType) bool {
 
-	if nameForbidden(name) {
+	if !okObjectName(c.w, name, t) {
 		c.tell("%s", nameRefusal(t))
 		return false
 	}

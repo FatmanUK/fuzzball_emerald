@@ -764,14 +764,22 @@ func (s *Server) cmdName(c *ctx) {
 		// *changing*, compared case-insensitively — so
 		// correcting somebody's capitalisation is allowed
 		// past a check their current name might not pass.
-		if !ascEqual(newName, o.Name) {
-			if err := validPlayerName(c.w,
-				newName); err != nil {
-				c.tell("You can't give a player " +
-					"that name.")
-				return
-			}
+		if !ascEqual(newName, o.Name) &&
+			!okObjectName(c.w, newName,
+				ref.TypePlayer) {
+
+			c.tell("You can't give a player that name.")
+			return
 		}
+	} else if !okObjectName(c.w, newName,
+		c.w.Get(target).Type()) {
+
+		// `do_name`'s else arm (`set.c:97`), which was
+		// missing: a thing, room, exit or program could be
+		// renamed to anything at all here, including a name
+		// no matcher could reach.
+		c.tell("That is not a reasonable name.")
+		return
 	}
 	if err := c.w.Rename(target, newName); err != nil {
 		c.send(err.Error())

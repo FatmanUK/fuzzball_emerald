@@ -439,7 +439,7 @@ func (s *Server) cmdPcreate(c *ctx) {
 	}
 	name, pass, _ := strings.Cut(c.arg, "=")
 	name = strings.TrimSpace(name)
-	if err := validPlayerName(c.w, name); err != nil {
+	if !okObjectName(c.w, name, ref.TypePlayer) {
 		c.tell("You cannot use that name for a player.")
 		return
 	}
@@ -456,19 +456,4 @@ func (s *Server) cmdPcreate(c *ctx) {
 		"player", o.Ref.String(), "name", name,
 		"by", c.who.String(), "byName", nameOf(c.w, c.who))
 	c.tell("Player %s created as object #%d.", name, int32(o.Ref))
-}
-
-// okPassword applies upstream's rule: not empty, and no spaces or
-// unprintable characters, because a password is read from a line of
-// input.
-func okPassword(pass string) bool {
-	if pass == "" {
-		return false
-	}
-	for i := 0; i < len(pass); i++ {
-		if pass[i] <= ' ' || pass[i] == 0x7f {
-			return false
-		}
-	}
-	return true
 }
