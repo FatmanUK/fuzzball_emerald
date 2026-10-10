@@ -109,6 +109,11 @@ type Host interface {
 	Name(obj Ref) string
 	// GetPropStr reads a property's string value.
 	GetPropStr(obj Ref, path string) string
+	// PropBlessed is Prop_Blessed: whether this property carries
+	// the blessing. It is what decides whether {exec}'s and
+	// {eval}'s text runs blessed, and whether the macro walk
+	// accepts a value off an object the caller does not own.
+	PropBlessed(obj Ref, path string) bool
 	// SetPropStr writes one, and DelProp removes one.
 	SetPropStr(obj Ref, path, val string)
 	DelProp(obj Ref, path string)
@@ -669,6 +674,22 @@ func (env *Env) Notes() []string { return env.notes }
 func withFrame(err error, name string, arg int) error {
 	frame := fmt.Sprintf("%c%s%c (arg %d)",
 		leadChar, name, argEnd, arg)
+	e, ok := err.(*Error)
+	if !ok {
+		return &Error{Msg: err.Error(),
+			Trail: []string{frame}}
+	}
+	e.Trail = append(e.Trail, frame)
+	return e
+}
+
+// withNamedFrame is the same with a word in place of the argument
+// number, which is upstream's `CHECKRETURN(ptr, "EXEC", "propval")`
+// — the macro takes a label, and only the argument-parsing sites
+// pass a number.
+func withNamedFrame(err error, name, label string) error {
+	frame := fmt.Sprintf("%c%s%c (%s)",
+		leadChar, name, argEnd, label)
 	e, ok := err.(*Error)
 	if !ok {
 		return &Error{Msg: err.Error(),

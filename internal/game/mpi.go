@@ -28,6 +28,13 @@ func (h *mpiHost) GetPropStr(obj mpi.Ref, path string) string {
 	return v.StringValue()
 }
 
+// PropBlessed is Prop_Blessed: whether a property carries the
+// blessing, which decides what {exec} and {eval} run its text as.
+func (h *mpiHost) PropBlessed(obj mpi.Ref, path string) bool {
+	v, ok := h.w.GetProp(ref.Ref(obj), path)
+	return ok && v.Blessed
+}
+
 func (h *mpiHost) SetPropStr(obj mpi.Ref, path, val string) {
 	h.w.SetProp(ref.Ref(obj), path, props.Value{Type: props.String, Str: val})
 }

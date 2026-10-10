@@ -9,6 +9,10 @@ import (
 type stubHost struct {
 	told  []string
 	props map[string]string
+	// blessed is which property paths this host reports as
+	// carrying the blessing, which decides what {exec} runs its
+	// text as.
+	blessed map[string]bool
 }
 
 func newStub() *stubHost {
@@ -38,12 +42,18 @@ func (h *stubHost) Parent(obj Ref) Ref {
 	}
 	return 0
 }
-func (h *stubHost) Owner(Ref) Ref              { return 1 }
-func (h *stubHost) Contents(Ref) []Ref         { return nil }
-func (h *stubHost) Valid(obj Ref) bool         { return obj >= 0 }
-func (h *stubHost) IsPlayer(obj Ref) bool      { return obj == 1 }
-func (h *stubHost) Online(Ref) bool            { return true }
-func (h *stubHost) DescrCount(Ref) int         { return 1 }
+func (h *stubHost) Owner(Ref) Ref         { return 1 }
+func (h *stubHost) Contents(Ref) []Ref    { return nil }
+func (h *stubHost) Valid(obj Ref) bool    { return obj >= 0 }
+func (h *stubHost) IsPlayer(obj Ref) bool { return obj == 1 }
+func (h *stubHost) Online(Ref) bool       { return true }
+func (h *stubHost) DescrCount(Ref) int    { return 1 }
+
+// blessedProps is which properties the stub reports as blessed, keyed
+// by path.
+func (h *stubHost) PropBlessed(_ Ref, path string) bool {
+	return h.blessed[path]
+}
 func (h *stubHost) MLevel(Ref) int             { return 4 }
 func (h *stubHost) Match(Ref, Ref, string) Ref { return 1 }
 func (h *stubHost) Notify(_ Ref, msg string) {

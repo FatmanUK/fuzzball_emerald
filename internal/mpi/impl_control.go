@@ -1,6 +1,10 @@
 package mpi
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/FatmanUK/fuzzball_emerald/internal/props"
+)
 
 // The looping and evaluating functions.
 //
@@ -284,15 +288,54 @@ func execProp(walk bool) impl {
 			name = "EXEC!"
 		}
 		var text string
+		var blessed bool
 		if walk {
-			text, err = env.getProp(name, obj, path)
+			text, blessed, err = env.getProp(name, obj,
+				path)
 		} else {
-			text, err = env.strictGetProp(name, obj, path)
+			text, blessed, err = env.strictGetProp(name,
+				obj, path)
 		}
 		if err != nil {
 			return "", err
 		}
-		return Parse(env, text)
+		// The text runs as the **property's** blessing says,
+		// not the outer message's: a blessed property's text
+		// is blessed and an unblessed one's is not, even
+		// inside a blessed message. Nothing swapped it
+		// before, which was the looser answer in one
+		// direction and the stricter in the other.
+		//
+		// And the two objects are re-based:
+		// `mesg_parse(descr, player, obj, trg, ...)` makes
+		// **what** the object the property came off, so
+		// "this" inside the text names that object — and
+		// makes **perms** the outer *what* rather than the
+		// outer perms, unless the property's name carries one
+		// of the four privileged sigils, in which case it is
+		// the object too. None of that was ported, so a
+		// property read off somewhere else evaluated as
+		// though it had been read off here.
+		sub := *env
+		sub.Blessed = blessed
+		sub.What = obj
+		sub.Perms = env.What
+		if props.IsReadOnly(path) || props.IsPrivate(path) ||
+			props.IsSeeOnly(path) ||
+			props.IsHidden(path) {
+			sub.Perms = obj
+		}
+		out, err := Parse(&sub, text)
+		if err != nil {
+			// `CHECKRETURN(ptr, "EXEC", "propval")`:
+			// evaluating the text adds its own frame to
+			// the report, labelled by what was being
+			// evaluated rather than by an argument
+			// number.
+			return "", withNamedFrame(err, name,
+				"propval")
+		}
+		return out, nil
 	}
 }
 

@@ -181,7 +181,8 @@ func init() {
 		// {prop} searches outwards through the environment;
 		// {prop!} is the form that looks only at the object
 		// named.
-		return env.getProp("PROP", obj, args[0])
+		v, _, err := env.getProp("PROP", obj, args[0])
+		return v, err
 	})
 	register("STORE", func(env *Env, _ *Func, args []string) (string, error) {
 		// "{store:value,property,object}" Strict: blessed, or

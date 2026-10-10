@@ -48,16 +48,16 @@ func (env *Env) macro(name string) (string, bool) {
 
 	path := macroPropDir + "/" + name
 	owner := env.Host.Owner(env.What)
-	if body, err := env.strictGetProp("", owner,
+	if body, _, err := env.strictGetProp("", owner,
 		path); err == nil && body != "" {
 		return body, true
 	}
-	if body, err := env.limitedGetProp("", env.What, owner,
+	if body, _, err := env.limitedGetProp("", env.What, owner,
 		path); err == nil && body != "" {
 		return body, true
 	}
-	if body, err := env.strictGetProp("", 0, path); err == nil &&
-		body != "" {
+	if body, _, err := env.strictGetProp("", 0,
+		path); err == nil && body != "" {
 		return body, true
 	}
 	return "", false

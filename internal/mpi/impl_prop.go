@@ -20,7 +20,9 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		return env.strictGetProp("PROP!", obj, args[0])
+		v, _, err := env.strictGetProp("PROP!", obj,
+			args[0])
+		return v, err
 	})
 
 	// INDEX reads a property whose value names another property,
@@ -97,9 +99,11 @@ func indexProp(walk bool) impl {
 		path string) (string, error) {
 
 		if walk {
-			return env.getProp(name, obj, path)
+			v, _, err := env.getProp(name, obj, path)
+			return v, err
 		}
-		return env.strictGetProp(name, obj, path)
+		v, _, err := env.strictGetProp(name, obj, path)
+		return v, err
 	}
 	return func(env *Env, f *Func, args []string) (string, error) {
 		obj, err := env.resolve(f.Name, args, 1)

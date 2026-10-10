@@ -31,19 +31,26 @@ import (
 //
 // The name is trimmed of leading '/' first, and an empty one is
 // "Propname required." rather than a permission failure.
+//
+// The second result is the property's **own** blessing, which is
+// upstream's `*blessed` out parameter. It decides what {exec} and
+// {eval} run the text as, and it is the one clause of the three
+// resolvers' dependencies that had no port — so a blessed
+// property's text ran unblessed and, worse, an unblessed one's ran
+// *blessed* whenever the outer message was.
 func (env *Env) strictGetProp(fn string, obj Ref,
-	path string) (string, error) {
+	path string) (string, bool, error) {
 
 	path = strings.TrimLeft(path, "/")
 	if path == "" {
 		env.Host.Notify(env.Who,
 			"PropFetch: Propname required.")
-		return "", errf(fn, "Failed read.")
+		return "", false, errf(fn, "Failed read.")
 	}
-	denied := func() (string, error) {
+	denied := func() (string, bool, error) {
 		env.Host.Notify(env.Who,
 			"PropFetch: Permission denied.")
-		return "", errf(fn, "Failed read.")
+		return "", false, errf(fn, "Failed read.")
 	}
 	if props.IsSystem(path) {
 		return denied()
@@ -60,7 +67,14 @@ func (env *Env) strictGetProp(fn string, obj Ref,
 			return denied()
 		}
 	}
-	return env.Host.GetPropStr(obj, path), nil
+	// Upstream's guard here is `if (ptr)` — whether the
+	// property **exists**, not whether it has anything in it —
+	// so a blessed but empty property still reports blessed.
+	// `PropBlessed` answers false for one that is absent, which
+	// is the same test; an emptiness check beside it would be
+	// stricter than the C and is deliberately not there.
+	return env.Host.GetPropStr(obj, path),
+		env.Host.PropBlessed(obj, path), nil
 }
 
 // getProp reads a property, walking outwards through the environment
@@ -74,19 +88,19 @@ func (env *Env) strictGetProp(fn string, obj Ref,
 // ptr;` — so a hidden property on the first object is not quietly
 // stepped over in favour of a readable one further out.
 func (env *Env) getProp(fn string, obj Ref,
-	path string) (string, error) {
+	path string) (string, bool, error) {
 
 	for i := 0; i < maxEnvDepth && obj != nothing; i++ {
-		v, err := env.strictGetProp(fn, obj, path)
+		v, blessed, err := env.strictGetProp(fn, obj, path)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if v != "" {
-			return v, nil
+			return v, blessed, nil
 		}
 		obj = env.Host.Parent(obj)
 	}
-	return "", nil
+	return "", false, nil
 }
 
 // safePutProp is `safeputprop` (`msgparse.c:98`): the write half, and
@@ -160,24 +174,24 @@ func validPropName(s string) bool {
 // than used. The refusals still fire on every object walked, which is
 // why the notifies are upstream's and not this function's.
 //
-// The one clause not reproduced is upstream's `|| *blessed`, which
-// accepts a differently-owned object's value when the *property* is
-// blessed. Reading a property's blessing back is not on `Host` at
-// all, and blessing propagation is a divergence of its own; this is
-// the stricter of the two answers, so a macro that would be accepted
-// is refused rather than the other way about.
+// A **blessed** value is accepted whoever owns it, which is
+// upstream's `|| *blessed` and was the one clause of the three
+// resolvers' dependencies left unported: a macro directory on
+// somebody else's room counts when a wizard has blessed it, which is
+// how a world publishes macros from a room nobody owns personally.
 func (env *Env) limitedGetProp(fn string, obj Ref, whom Ref,
-	path string) (string, error) {
+	path string) (string, bool, error) {
 
 	for i := 0; i < maxEnvDepth && obj != nothing; i++ {
-		v, err := env.strictGetProp(fn, obj, path)
+		v, blessed, err := env.strictGetProp(fn, obj, path)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
-		if v != "" && env.Host.Owner(obj) == whom {
-			return v, nil
+		if v != "" &&
+			(env.Host.Owner(obj) == whom || blessed) {
+			return v, blessed, nil
 		}
 		obj = env.Host.Parent(obj)
 	}
-	return "", nil
+	return "", false, nil
 }

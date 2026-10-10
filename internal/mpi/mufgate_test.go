@@ -113,3 +113,70 @@ func TestAwakeCountsDescriptors(t *testing.T) {
 type twiceHost struct{ *stubHost }
 
 func (h *twiceHost) DescrCount(Ref) int { return 2 }
+
+// TestBlessedMacroIsAcceptedFromAnyOwner is `safegetprop_limited`'s
+// `|| *blessed` (`msgparse.c:286`), the clause the resolver sweep
+// left out: a macro directory on an object the caller does not own
+// counts when the property is **blessed**, which is how a world
+// publishes macros from a room nobody owns personally.
+//
+// It is not oracle-reachable with one wizard, who owns everything in
+// the fixture and so passes the ownership test without the blessing
+// being consulted at all.
+func TestBlessedMacroIsAcceptedFromAnyOwner(t *testing.T) {
+	for _, blessed := range []bool{false, true} {
+		h := &macroHost{stubHost: &stubHost{
+			props:   map[string]string{},
+			blessed: map[string]bool{},
+		}}
+		// The macro sits on **#6**, one hop out of the
+		// trigger: the first step looks at the trigger's
+		// owner (#9) and finds nothing, the third looks at #0
+		// and finds nothing, so the limited walk in the
+		// middle is the only thing that can accept it -- and
+		// #6 belongs to #8 rather than #9.
+		h.props["6/_msgmacs/greet"] = "hi"
+		h.blessed["_msgmacs/greet"] = blessed
+
+		env := &Env{Who: 1, What: 5, Perms: 5, Host: h}
+		got, err := Parse(env, "{greet}")
+		if err != nil {
+			got = err.Error()
+		}
+		want := "hi"
+		if !blessed {
+			want = "greet"
+		}
+		if !strings.Contains(got, want) {
+			t.Errorf("blessed=%v: got %q, want %q",
+				blessed, got, want)
+		}
+	}
+}
+
+// macroHost owns #5 by somebody who is not its own owner, so the
+// ownership half of the limited walk fails and only the blessing can
+// carry it.
+type macroHost struct{ *stubHost }
+
+// Owner says #5 belongs to #9 and everything else to #8, so the
+// limited walk is looking for #9's property and finds one of #8's:
+// only the blessing can carry it.
+func (h *macroHost) Owner(obj Ref) Ref {
+	if obj == 5 {
+		return 9
+	}
+	return 8
+}
+
+// The chain is 5 -> 6 -> 0, so there is a rung between the trigger
+// and the global environment for the walk to have to accept.
+func (h *macroHost) Parent(obj Ref) Ref {
+	switch obj {
+	case 5:
+		return 6
+	case 6:
+		return 0
+	}
+	return -1
+}

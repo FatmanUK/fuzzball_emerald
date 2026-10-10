@@ -43,8 +43,9 @@ func trimListName(name string) string {
 func (env *Env) listItem(fn string, obj Ref, name string,
 	n int) (string, error) {
 
-	return env.getProp(fn, obj,
+	v, _, err := env.getProp(fn, obj,
 		trimListName(name)+"#/"+strconv.Itoa(n))
+	return v, err
 }
 
 // listCount is how many items a list holds.
@@ -57,7 +58,7 @@ func (env *Env) listCount(fn string, obj Ref,
 
 	name = trimListName(name)
 	for _, path := range [2]string{name + "#", name + "/#"} {
-		v, err := env.getProp(fn, obj, path)
+		v, _, err := env.getProp(fn, obj, path)
 		if err != nil {
 			return 0, err
 		}
