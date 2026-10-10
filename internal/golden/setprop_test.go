@@ -78,13 +78,12 @@ var setPropScript = Script{
 	// just a hidden one, which a wizard may write.
 	"@set me=@__SYS__/upper:y",
 
-	// No "examine me=@**" here, though it would be the natural
-	// read-back: upstream lists the directory this created and
-	// this server lists nothing, even though it reported
-	// "Property set." That is a property-*listing* divergence
-	// rather than a Prop_System one, and it is recorded in the
-	// plan rather than chased here — both probes discriminate
-	// on their reply alone.
+	// And the read-back, which used to list nothing here: the
+	// listing's own Prop_System test was the case-insensitive
+	// copy too, so `@__SYS__` was filtered out of a listing it
+	// had just been written into. Consolidating the predicates
+	// fixed both halves at once.
+	"examine me=@**",
 
 	// ...and a leading slash does not escape the prefix.
 	"@set me=/@__sys__/slashed:y",

@@ -2,6 +2,7 @@ package muf
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
@@ -154,13 +155,25 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		// A proplist is "path#" holding a count, and
-		// "path#/1".."path#/n" holding the entries.
-		countVal, _ := h.GetProp(obj, path+"#")
-		n := countVal.Num
+		// A proplist's **count** is looked for under two
+		// spellings and each as an integer and then as a
+		// string: "path#" first, then "path/#". And each
+		// **item** is looked for under three: "path#/N", then
+		// "path/N", then "pathN". This read only "path#" and
+		// "path#/N", so a world using any of the other
+		// spellings -- which `array_put_proplist` itself does
+		// not write, but older code and hand-built lists do
+		// -- read an empty list.
+		n := listCount(h, obj, path+"#")
+		if n == 0 {
+			n = listCount(h, obj, path+"/#")
+		}
+		if max := h.TuneInt("max_propfetch"); n > max {
+			n = max
+		}
 		vals := make([]Value, 0, n)
 		for i := int64(1); i <= n; i++ {
-			elem := path + "#/" + itoa64(i)
+			elem, v, ok := listItemProp(h, obj, path, i)
 			// p_array.c:2035 wraps the append in the read
 			// test rather than aborting, so an element
 			// the program may not read is left out and
@@ -168,7 +181,14 @@ func init() {
 			if !f.propReadPerms(h, obj, elem) {
 				continue
 			}
-			v, _ := h.GetProp(obj, elem)
+			if !ok {
+				// A missing item is integer zero
+				// rather than a gap, which is what
+				// keeps the list the length the count
+				// claimed.
+				vals = append(vals, Int(0))
+				continue
+			}
 			vals = append(vals, fromProp(v))
 		}
 		return nil, f.Push(Arr(NewList(vals)))
@@ -430,12 +450,29 @@ func init() {
 			return nil, err
 		}
 		out := NewDict()
+		count := 0
 		for _, name := range h.PropChildren(obj, path) {
 			child := join(path, name)
 			if !f.propReadPerms(h, obj, child) {
 				continue
 			}
-			v, _ := h.GetProp(obj, child)
+			// **A valueless directory is not an entry.**
+			// `get_property` answers for the node, and
+			// the type switch that follows has no
+			// directory case -- `goodflag` stays zero and
+			// nothing is added (`p_array.c:1863`). This
+			// added the zero value, so two bare propdirs
+			// answered 2 where upstream answers 0.
+			v, ok := h.GetProp(obj, child)
+			if !ok {
+				continue
+			}
+			if count >= int(h.TuneInt("max_propfetch")) {
+				return nil, errf("Too many " +
+					"properties to put in an " +
+					"array!")
+			}
+			count++
 			out.Set(Str(name), fromProp(v))
 		}
 		return nil, f.Push(Arr(out))
@@ -451,9 +488,18 @@ func init() {
 			if !f.propReadPerms(h, obj, child) {
 				continue
 			}
-			if len(h.PropChildren(obj, child)) > 0 {
-				vals = append(vals, Str(name))
+			if len(h.PropChildren(obj, child)) == 0 {
+				continue
 			}
+			// The cap is `>=` here and `>=` there too,
+			// but the message is its own.
+			if len(vals) >= int(h.TuneInt(
+				"max_propfetch")) {
+				return nil, errf("Too many " +
+					"propdirs to put in an " +
+					"array!")
+			}
+			vals = append(vals, Str(name))
 		}
 		return nil, f.Push(Arr(NewList(vals)))
 	})
@@ -790,4 +836,43 @@ func setNested(a *Array, path []Value, val Value) *Array {
 	}
 	c.Set(path[0], Arr(setNested(inner, path[1:], val)))
 	return c
+}
+
+// listCount reads a proplist's count property, which upstream tries
+// as an **integer and then as a string** — `get_property_value`
+// then `get_property_class` with `atoi` over it (`p_array.c:1954`).
+// So a count written as text works.
+func listCount(h Host, obj ref.Ref, path string) int64 {
+	v, ok := h.GetProp(obj, path)
+	if !ok {
+		return 0
+	}
+	if v.Type == props.Int {
+		return v.Num
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(v.Str), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// listItemProp reads one item of a proplist, trying upstream's three
+// spellings in order (`p_array.c:2013`) and reporting which path it
+// settled on — the read-permission test is made against that one,
+// and against the *last* spelling tried when none of them answers.
+func listItemProp(h Host, obj ref.Ref, path string,
+	i int64) (string, props.Value, bool) {
+
+	n := itoa64(i)
+	for _, elem := range [3]string{
+		path + "#/" + n,
+		path + "/" + n,
+		path + n,
+	} {
+		if v, ok := h.GetProp(obj, elem); ok {
+			return elem, v, true
+		}
+	}
+	return path + n, props.Value{}, false
 }
