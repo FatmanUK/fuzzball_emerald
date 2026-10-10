@@ -550,3 +550,70 @@ func TestGripesAppendRatherThanReplace(t *testing.T) {
 		t.Errorf("the names were not kept: %+v", got[0])
 	}
 }
+
+// TestBlessedDirectorySurvivesAReload is the half of @bless on
+// propdirs that no transcript can see.
+//
+// A property **directory** can carry a blessing of its own
+// (`set_property_flags`, `property.c:177`, works on whatever
+// `get_property` returns), and a directory is not stored: its
+// existence is implied by its children's paths. So a blessed one
+// needs a row with no value, which `Value.IsEmpty` would otherwise
+// delete — and the loader has to put the flag on a node it creates
+// rather than on a value it sets.
+//
+// The order matters too: rows come back ordered by path, so a
+// directory is read **before** its children and has to exist as a
+// bare node until they arrive.
+func TestBlessedDirectorySurvivesAReload(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	original := buildWorld(t)
+	// buildWorld's thing, which already carries properties of
+	// several types.
+	obj := ref.Ref(2)
+	o := original.Get(obj)
+	if o == nil || o.Type() != ref.TypeThing {
+		t.Fatalf("#2 is %v, not the fixture's thing", o)
+	}
+	o.Props.SetString("tree/leaf", "a value")
+	o.Props.SetString("tree/twig/leaf", "deeper")
+	// The directory, and only the directory.
+	if !o.Props.SetBlessed("tree", true) {
+		t.Fatal("the directory should exist to be blessed")
+	}
+	if !o.Props.SetBlessed("tree/twig", true) {
+		t.Fatal("the deeper directory too")
+	}
+	original.Modified(obj)
+
+	if err := s.Flush(ctx, original.TakeSnapshot()); err != nil {
+		t.Fatalf("flushing: %v", err)
+	}
+	reloaded := world.New()
+	if _, err := s.Load(ctx, reloaded); err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+
+	r := reloaded.Get(obj)
+	if r == nil {
+		t.Fatal("the object did not come back")
+	}
+	for _, path := range []string{"tree", "tree/twig"} {
+		if !r.Props.Blessed(path) {
+			t.Errorf("%q came back unblessed", path)
+		}
+		if _, ok := r.Props.Get(path); ok {
+			t.Errorf("%q came back with a value", path)
+		}
+	}
+	if v, ok := r.Props.Get("tree/leaf"); !ok ||
+		v.Str != "a value" {
+		t.Errorf("the leaf came back as %#v", v)
+	}
+	if r.Props.Blessed("tree/leaf") {
+		t.Error("the leaf came back blessed when it " +
+			"was not")
+	}
+}

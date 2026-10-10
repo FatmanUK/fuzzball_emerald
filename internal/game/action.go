@@ -423,23 +423,28 @@ func (s *Server) blessProps(c *ctx, bless bool) {
 
 	o := c.w.Get(victim)
 	n := 0
-	for _, e := range o.Props.All() {
+	// WalkAll rather than All: `blessprops_wildcard` walks with
+	// `first_prop`/`next_prop`, which enumerate **directories**
+	// too, and `set_property_flags` happily flags one. So `@bless
+	// foo/**` blesses every level of a tree, which this could not
+	// do -- and `docs/upstream-coverage.md` recorded as needing a
+	// flag that can live on a valueless node.
+	o.Props.WalkAll(func(e props.Entry) bool {
 		if props.IsSystem(e.Path) {
-			continue
+			return true
 		}
 		if !blessMatches(pattern, e.Path) {
-			continue
+			return true
 		}
-		v := e.Value
-		v.Blessed = bless
-		c.w.SetProp(victim, e.Path, v)
+		c.w.SetBlessed(victim, e.Path, bless)
 		n++
 		if bless {
 			c.send("Blessed /" + e.Path)
 		} else {
 			c.send("Unblessed /" + e.Path)
 		}
-	}
+		return true
+	})
 	word := "properties"
 	if n == 1 {
 		word = "property"
@@ -476,8 +481,15 @@ func blessMatches(pattern, path string) bool {
 
 	for i, p := range pats {
 		if p == "**" {
-			// Everything at or below this point.
-			return true
+			// Everything **below** this point, not at it:
+			// `blessprops_wildcard` tests `!*ptr ||
+			// recurse` *after* matching the current
+			// segment, and when the remaining pattern is
+			// "**" the current segment is not the last
+			// one -- so "_d/**" blesses what is inside
+			// "_d" and leaves "_d" itself alone. This
+			// returned true one level too early.
+			return len(segs) > i
 		}
 		if i >= len(segs) {
 			return false

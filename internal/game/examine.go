@@ -424,12 +424,15 @@ func (s *Server) displayProp(c *ctx, tree *props.Tree,
 	}
 
 	v, ok := tree.Get(path)
-	if !ok {
-		return "- dir " + shown + ":(no value)"
-	}
 	blessed := "-"
-	if v.Blessed {
+	if tree.Blessed(path) {
 		blessed = "B"
+	}
+	if !ok {
+		// A **directory** carries the blessed character too
+		// (`property.c:1340`), which this hardcoded as "-"
+		// because it had nowhere to keep the flag.
+		return blessed + " dir " + shown + ":(no value)"
 	}
 
 	switch v.Type {

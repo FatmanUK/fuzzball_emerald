@@ -127,18 +127,37 @@ func writeObjects(tx *gorm.DB, objs []*world.Object) error {
 	refs := make([]int32, 0, len(objs))
 	var propRows []Property
 	var destRows []ExitDest
+	var pathErr error
 
 	for _, o := range objs {
 		rows = append(rows, toRow(o))
 		refs = append(refs, int32(o.Ref))
 
 		if o.Props != nil {
-			for _, e := range o.Props.All() {
-				if len(e.Path) > maxPathLen {
-					return fmt.Errorf("object %v: property path is %d bytes, over the %d limit: %q",
-						o.Ref, len(e.Path), maxPathLen, e.Path[:64])
+			// WalkAll rather than All: a property
+			// **directory** carries a blessing of its
+			// own, and a blessed one has to survive a
+			// restart. One with nothing to say is
+			// skipped, since its existence is implied by
+			// its children's paths.
+			o.Props.WalkAll(func(e props.Entry) bool {
+				if e.Dir && !e.Blessed {
+					return true
 				}
-				propRows = append(propRows, toPropRow(o.Ref, e))
+				if len(e.Path) > maxPathLen {
+					pathErr = fmt.Errorf(
+						propTooLong, o.Ref,
+						len(e.Path),
+						maxPathLen,
+						e.Path[:64])
+					return false
+				}
+				propRows = append(propRows,
+					toPropRow(o.Ref, e))
+				return true
+			})
+			if pathErr != nil {
+				return pathErr
 			}
 		}
 		for i, d := range o.Dest {
@@ -350,7 +369,22 @@ func toRow(o *world.Object) Object {
 	}
 }
 
+// toPropRow writes one property. A **directory** entry reaches here
+// only when it is blessed, and stores Type zero -- which is no type
+// at all, and is how the loader tells the two apart.
+// propTooLong is the one error a flush can raise about a property,
+// named so the line fits.
+const propTooLong = "object %v: property path is %d bytes, over " +
+	"the %d limit: %q"
+
 func toPropRow(r ref.Ref, e props.Entry) Property {
+	if e.Dir {
+		return Property{
+			Ref:     int32(r),
+			Path:    e.Path,
+			Blessed: true,
+		}
+	}
 	return Property{
 		Ref:     int32(r),
 		Path:    e.Path,
@@ -359,6 +393,6 @@ func toPropRow(r ref.Ref, e props.Entry) Property {
 		Num:     e.Value.Num,
 		Float:   e.Value.Float,
 		RefVal:  int32(e.Value.Ref),
-		Blessed: e.Value.Blessed,
+		Blessed: e.Blessed,
 	}
 }

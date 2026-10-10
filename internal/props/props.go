@@ -111,7 +111,18 @@ type node struct {
 	fold string // ASCII-folded, the lookup and sort key
 	val  Value
 	has  bool // does this node carry a value, or is it only a directory?
-	kids []*node
+	// blessed is PROP_BLESSED, and it lives on the **node**
+	// rather than inside the value because upstream's does:
+	// `set_property_flags` (`property.c:177`) works on whatever
+	// `get_property` returns, and that includes a node with no
+	// value of its own. So a property *directory* can be blessed,
+	// which is what `@bless foo/**` does to every level of a tree
+	// and what this could not represent at all.
+	//
+	// Value.Blessed is a view of this field: Get fills it in and
+	// Set reads it back, so the two cannot disagree.
+	blessed bool
+	kids    []*node
 }
 
 // Tree is an object's property tree.
@@ -188,7 +199,9 @@ func (t *Tree) Get(path string) (Value, bool) {
 	if n == nil || !n.has {
 		return Value{}, false
 	}
-	return n.val, true
+	v := n.val
+	v.Blessed = n.blessed
+	return v, true
 }
 
 // Exists reports whether anything lives at path, value or directory.
@@ -221,7 +234,42 @@ func (t *Tree) Set(path string, v Value) {
 	if !n.has {
 		t.n++
 	}
+	n.blessed = v.Blessed
+	v.Blessed = false
 	n.val, n.has = v, true
+}
+
+// MakeDir creates the node at path without giving it a value, which
+// Set cannot do: an empty value unsets a property. Nothing in the
+// game needs it -- a directory comes into being when a child is
+// written -- but the loader does, because a blessed directory is a
+// row of its own and may be read before its children.
+func (t *Tree) MakeDir(path string) {
+	n := &t.root
+	for _, seg := range split(path) {
+		n = n.makeChild(seg)
+	}
+}
+
+// SetBlessed sets or clears the blessing on whatever is at path,
+// **value or directory**, and reports whether there was anything
+// there. It creates nothing: `set_property_flags` and
+// `clear_property_flags` both do nothing for a path that does not
+// exist.
+func (t *Tree) SetBlessed(path string, blessed bool) bool {
+	n := t.lookup(path)
+	if n == nil {
+		return false
+	}
+	n.blessed = blessed
+	return true
+}
+
+// Blessed reports whether anything at path is blessed, directory
+// included.
+func (t *Tree) Blessed(path string) bool {
+	n := t.lookup(path)
+	return n != nil && n.blessed
 }
 
 // SetString is shorthand for storing a string property.
@@ -256,6 +304,10 @@ func (t *Tree) Delete(path string) bool {
 		t.n--
 	}
 	n.val, n.has = Value{}, false
+	// The blessing is **not** cleared: a node kept as a directory
+	// keeps it, which is upstream's `remove_property` leaving the
+	// flags where they are, and a node with nothing left is
+	// pruned below and takes its flag with it.
 
 	// Prune upwards while nodes carry neither a value nor
 	// children.
@@ -329,6 +381,12 @@ func (t *Tree) Len() int { return t.n }
 type Entry struct {
 	Path  string
 	Value Value
+	// Dir reports a node with no value of its own. Walk never
+	// produces one; WalkAll does.
+	Dir bool
+	// Blessed is the node's own flag, which for a Dir entry is
+	// the only thing it carries.
+	Blessed bool
 }
 
 // Walk visits every value-bearing property in depth-first order,
@@ -343,10 +401,42 @@ func walk(n *node, prefix string, fn func(Entry) bool) bool {
 		if prefix != "" {
 			path = prefix + "/" + k.name
 		}
-		if k.has && !fn(Entry{Path: path, Value: k.val}) {
-			return false
+		if k.has {
+			v := k.val
+			v.Blessed = k.blessed
+			if !fn(Entry{Path: path, Value: v,
+				Blessed: k.blessed}) {
+				return false
+			}
 		}
 		if !walk(k, path, fn) {
+			return false
+		}
+	}
+	return true
+}
+
+// WalkAll is Walk over **every** node, directories included, which is
+// what `first_prop`/`next_prop` enumerate and what `@bless` and the
+// persister need: a directory can carry a blessing of its own, and
+// nothing else about it is worth storing.
+func (t *Tree) WalkAll(fn func(Entry) bool) {
+	walkAll(&t.root, "", fn)
+}
+
+func walkAll(n *node, prefix string, fn func(Entry) bool) bool {
+	for _, k := range n.kids {
+		path := k.name
+		if prefix != "" {
+			path = prefix + "/" + k.name
+		}
+		v := k.val
+		v.Blessed = k.blessed
+		if !fn(Entry{Path: path, Value: v, Dir: !k.has,
+			Blessed: k.blessed}) {
+			return false
+		}
+		if !walkAll(k, path, fn) {
 			return false
 		}
 	}
@@ -370,7 +460,8 @@ func (t *Tree) Clone() *Tree {
 }
 
 func cloneNode(n *node) *node {
-	c := &node{name: n.name, fold: n.fold, val: n.val, has: n.has}
+	c := &node{name: n.name, fold: n.fold, val: n.val,
+		has: n.has, blessed: n.blessed}
 	if len(n.kids) > 0 {
 		c.kids = make([]*node, len(n.kids))
 		for i, k := range n.kids {

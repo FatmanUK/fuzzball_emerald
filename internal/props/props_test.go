@@ -268,3 +268,93 @@ func TestSetEmptyPathIsNoop(t *testing.T) {
 		t.Errorf("Len() = %d, want 0: an empty path sets nothing", tr.Len())
 	}
 }
+
+// TestBlessingLivesOnTheNode covers what the golden suite cannot
+// reach: the blessing is a property of the **node**, not of the
+// value, so a directory can carry one and Value.Blessed is a view of
+// it that cannot disagree.
+func TestBlessingLivesOnTheNode(t *testing.T) {
+	tr := New()
+	tr.SetString("tree/leaf", "a value")
+
+	// Set carries the flag in, and Get carries it back out.
+	tr.Set("flagged", Value{Type: String, Str: "x",
+		Blessed: true})
+	if v, ok := tr.Get("flagged"); !ok || !v.Blessed {
+		t.Errorf("Get gave %#v, want it blessed", v)
+	}
+	if !tr.Blessed("flagged") {
+		t.Error("Blessed disagrees with Get")
+	}
+
+	// A **directory** can be blessed, which is the whole point:
+	// it has no value to put the flag inside.
+	if _, ok := tr.Get("tree"); ok {
+		t.Fatal("the directory should have no value")
+	}
+	if !tr.SetBlessed("tree", true) {
+		t.Fatal("SetBlessed should find the directory")
+	}
+	if !tr.Blessed("tree") {
+		t.Error("the directory came back unblessed")
+	}
+	if tr.Blessed("tree/leaf") {
+		t.Error("the leaf was blessed by its parent")
+	}
+
+	// Nothing is created by blessing a path that is not there.
+	if tr.SetBlessed("nosuch", true) {
+		t.Error("SetBlessed invented a node")
+	}
+	if tr.Exists("nosuch") {
+		t.Error("the node exists after all")
+	}
+
+	// A directory with another child left keeps its blessing when
+	// one of them loses its value...
+	tr.SetString("tree/other", "still here")
+	tr.Set("tree/leaf", Value{Type: String, Str: ""})
+	if !tr.Blessed("tree") {
+		t.Error("the directory lost its blessing with a " +
+			"child's value")
+	}
+	// ...and goes entirely, blessing and all, once the last one
+	// does: Delete prunes upwards while a node carries neither a
+	// value nor children.
+	tr.Set("tree/other", Value{Type: String, Str: ""})
+	if tr.Exists("tree") {
+		t.Error("the directory outlived its last child")
+	}
+	if tr.Blessed("tree") {
+		t.Error("a pruned directory is still blessed")
+	}
+
+	// And WalkAll sees directories where Walk does not.
+	tr2 := New()
+	tr2.SetString("a/b", "x")
+	tr2.SetBlessed("a", true)
+	var all, vals []string
+	dirs := 0
+	tr2.WalkAll(func(e Entry) bool {
+		all = append(all, e.Path)
+		if e.Dir {
+			dirs++
+			if e.Path != "a" || !e.Blessed {
+				t.Errorf("%q is the wrong dir entry",
+					e.Path)
+			}
+		}
+		return true
+	})
+	if dirs != 1 {
+		t.Errorf("WalkAll reported %d directories, want 1",
+			dirs)
+	}
+	tr2.Walk(func(e Entry) bool {
+		vals = append(vals, e.Path)
+		return true
+	})
+	if len(all) != 2 || len(vals) != 1 {
+		t.Errorf("WalkAll saw %v, Walk saw %v", all, vals)
+	}
+}

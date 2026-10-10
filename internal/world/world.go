@@ -411,6 +411,34 @@ func (w *World) SetProp(r ref.Ref, path string, v props.Value) {
 	w.Modified(r)
 }
 
+// SetBlessed sets or clears a property's blessing, **directory
+// included**, and reports whether there was anything at the path.
+//
+// `set_property_flags` (`property.c:177`) works on whatever
+// `get_property` returns, which includes a node with no value of its
+// own -- so a property directory can be blessed, and `@bless foo/**`
+// blesses every level of a tree. Routing this through SetProp instead
+// could only ever touch a value-bearing node.
+func (w *World) SetBlessed(r ref.Ref, path string,
+	blessed bool) bool {
+
+	o := w.objs[r]
+	if o == nil {
+		return false
+	}
+	if !o.Props.SetBlessed(path, blessed) {
+		return false
+	}
+	w.Modified(r)
+	return true
+}
+
+// IsBlessed reports whether a property or directory is blessed.
+func (w *World) IsBlessed(r ref.Ref, path string) bool {
+	o := w.objs[r]
+	return o != nil && o.Props.Blessed(path)
+}
+
 // GetProp reads a property.
 func (w *World) GetProp(r ref.Ref, path string) (props.Value, bool) {
 	o := w.objs[r]

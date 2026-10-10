@@ -67,6 +67,21 @@ func (s *Store) Load(ctx context.Context, w *world.World) (LoadReport, error) {
 						"ref", ref.Ref(p.Ref), "path", p.Path)
 					continue
 				}
+				if p.Type == 0 {
+					// A row with no type is a
+					// blessed **directory**: the
+					// node has to exist before
+					// the flag can go on it, and
+					// its children's paths are
+					// what create it -- which is
+					// why the loader orders by
+					// path and this works for a
+					// parent read before them.
+					o.Props.MakeDir(p.Path)
+					o.Props.SetBlessed(
+						p.Path, true)
+					continue
+				}
 				o.Props.Set(p.Path, fromPropRow(p))
 				rep.Properties++
 			}

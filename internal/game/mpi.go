@@ -47,12 +47,7 @@ func (h *mpiHost) PropChildren(obj mpi.Ref, path string) []string {
 }
 
 func (h *mpiHost) BlessProp(obj mpi.Ref, path string, blessed bool) {
-	v, ok := h.w.GetProp(ref.Ref(obj), path)
-	if !ok {
-		return
-	}
-	v.Blessed = blessed
-	h.w.SetProp(ref.Ref(obj), path, v)
+	h.w.SetBlessed(ref.Ref(obj), path, blessed)
 }
 
 func (h *mpiHost) Parent(obj mpi.Ref) mpi.Ref {

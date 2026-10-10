@@ -319,18 +319,29 @@ typing one says which of the four reasons applies. The list lives in
 `declined` in `internal/game/dispatch.go`, and a test checks every
 name in it is a real command and is not secretly implemented.
 
-### One thing @bless does that is recorded rather than reproduced
+### @bless on directories, and the one thing upstream loses
 
-`blessprops_wildcard` also blesses **directories**, which `first_prop`
-walks and Emerald's `props.Tree` does not report because a directory
-carries no value of its own.
+`blessprops_wildcard` blesses **directories** as well as properties:
+`first_prop`/`next_prop` enumerate every node and
+`set_property_flags` flags whatever `get_property` returns. That is
+ported now — `props.node.blessed` is the flag and `props.Value.Blessed`
+is a view of it, so the two cannot disagree — and `displayprop`'s
+blessed character shows on a `dir` line as readily as on a value.
 
-The effect is confined to the count `@bless` reports and to the marker
-`examine` prints: `Prop_Blessed` reads a path's own flags, and a
-blessed directory does not bless its children. Making it agree means a
-flag that can live on a valueless node, which touches `internal/props`,
-`examine` and the store together — and would have to persist, since
-upstream's dumps carry propdir flags. Its own step.
+`@bless foo/**` blesses what is *inside* `foo` and leaves `foo`
+itself alone, because the recursive segment is reached only after the
+one before it has matched. `@bless foo` blesses the directory and
+nothing under it. The count line counts directories.
+
+**Upstream loses a blessed directory on every dump cycle**, and
+Emerald does not. `db_putprop` (`property.c:1671`) opens
+`if (PropType(p) == PROP_DIRTYP) return;`, so a node with no value is
+never written — its existence is implied by its children's paths, and
+its flags go with it. Emerald's persistence is Postgres rather than a
+dump, and it keeps the flag in a row with no type, which the loader
+recognises and puts back on a bare node. That is a deliberate
+divergence in the same family as the other three: not reproducing a
+subsystem that was replaced.
 
 ### What cannot be compared at all
 

@@ -605,17 +605,11 @@ func (h *mufHost) ParseMPI(who ref.Ref, source, arg string, blessed bool) (strin
 // BlessProp and IsPropBlessed implement muf.Host for
 // BLESSPROP/UNBLESSPROP and BLESSED?.
 func (h *mufHost) BlessProp(obj ref.Ref, path string, blessed bool) {
-	v, ok := h.GetProp(obj, path)
-	if !ok {
-		return
-	}
-	v.Blessed = blessed
-	h.SetProp(obj, path, v)
+	h.w.SetBlessed(obj, path, blessed)
 }
 
 func (h *mufHost) IsPropBlessed(obj ref.Ref, path string) bool {
-	v, ok := h.GetProp(obj, path)
-	return ok && v.Blessed
+	return h.w.IsBlessed(obj, path)
 }
 
 func (h *mufHost) Now() time.Time { return h.w.Now() }
