@@ -21,6 +21,8 @@ func init() {
 	register("ERROR_NUM", func(f *Frame) (*Result, error) {
 		return nil, f.Push(Int(int64(len(errorNames))))
 	})
+	// ERROR_BIT is the one that takes a **string only**
+	// (`p_error.c:484`), where the other five accept either.
 	register("ERROR_BIT", func(f *Frame) (*Result, error) {
 		name, err := f.popStr()
 		if err != nil {
@@ -33,19 +35,66 @@ func init() {
 		}
 		return nil, f.Push(Int(-1))
 	})
-	register("ERROR_NAME", errorText(errorNames))
-	register("ERROR_STR", errorText(errorDescriptions))
-}
-
-// errorText builds ERROR_NAME and ERROR_STR, which look a flag up by
-// number.
-func errorText(table []string) primFunc {
-	return func(f *Frame) (*Result, error) {
-		n, err := f.popInt()
+	// ERROR_NAME takes an **integer only** (`p_error.c:430`),
+	// where ERROR_STR beside it takes either. Three primitives
+	// over one table, three different argument rules; none of
+	// them is a typo in the C.
+	register("ERROR_NAME", func(f *Frame) (*Result, error) {
+		v, err := f.Pop()
 		if err != nil {
 			return nil, err
 		}
-		if n < 0 || int(n) >= len(table) {
+		if v.Type != TypeInteger {
+			return nil, errf("Invalid argument type. (1)")
+		}
+		n := v.Num
+		if n < 0 || int(n) >= len(errorNames) {
+			return nil, f.Push(Str(""))
+		}
+		return nil, f.Push(Str(errorNames[n]))
+	})
+	register("ERROR_STR", errorText(errorDescriptions))
+}
+
+// popErrorFlag is what `IS_SET?`, `SET_ERROR`, `CLEAR_ERROR`,
+// `ERROR_NAME` and `ERROR_STR` all take: a flag **name or number**.
+// Emerald's five took only a number, so a program written the
+// readable way — `"DIV_ZERO" is_set?` — aborted.
+//
+// A name nothing matches and a number out of range are both -1, and
+// each caller decides what to do with that; upstream's own type
+// refusal is "Invalid argument type. (1)" in every one of them.
+func (f *Frame) popErrorFlag() (int, error) {
+	v, err := f.Pop()
+	if err != nil {
+		return -1, err
+	}
+	switch v.Type {
+	case TypeInteger:
+		if v.Num >= 0 && int(v.Num) < len(errorNames) {
+			return int(v.Num), nil
+		}
+		return -1, nil
+	case TypeString:
+		for i, n := range errorNames {
+			if ascii.EqualFold(n, v.Str) {
+				return i, nil
+			}
+		}
+		return -1, nil
+	}
+	return -1, errf("Invalid argument type. (1)")
+}
+
+// errorText builds ERROR_STR, which answers the empty string for a
+// flag it cannot resolve.
+func errorText(table []string) primFunc {
+	return func(f *Frame) (*Result, error) {
+		n, err := f.popErrorFlag()
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 {
 			return nil, f.Push(Str(""))
 		}
 		return nil, f.Push(Str(table[n]))

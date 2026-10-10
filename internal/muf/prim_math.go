@@ -128,11 +128,12 @@ func init() {
 	})
 
 	register("IS_SET?", func(f *Frame) (*Result, error) {
-		n, err := f.popInt()
+		n, err := f.popErrorFlag()
 		if err != nil {
 			return nil, err
 		}
-		return nil, f.Push(Bool(f.ErrorFlags.Get(int(n))))
+		return nil, f.Push(Bool(n >= 0 &&
+			f.ErrorFlags.Get(n)))
 	})
 	register("CLEAR", func(f *Frame) (*Result, error) {
 		f.ErrorFlags.Clear()
@@ -143,22 +144,12 @@ func init() {
 		return nil, f.Push(Bool(e.DivZero || e.NaN || e.Imaginary ||
 			e.FBounds || e.IBounds))
 	})
-	register("SET_ERROR", func(f *Frame) (*Result, error) {
-		n, err := f.popInt()
-		if err != nil {
-			return nil, err
-		}
-		f.ErrorFlags.Set(int(n), true)
-		return nil, nil
-	})
-	register("CLEAR_ERROR", func(f *Frame) (*Result, error) {
-		n, err := f.popInt()
-		if err != nil {
-			return nil, err
-		}
-		f.ErrorFlags.Set(int(n), false)
-		return nil, nil
-	})
+	// SET_ERROR and CLEAR_ERROR **push a result** -- 1 when the
+	// flag was resolved and 0 when it was not -- which Emerald's
+	// pushed nothing at all, so every program using one was a
+	// stack item short from there on.
+	register("SET_ERROR", errorWrite(true))
+	register("CLEAR_ERROR", errorWrite(false))
 
 	register("BITOR", bitwise(func(a, b int64) int64 { return a | b }))
 	register("BITAND", bitwise(func(a, b int64) int64 { return a & b }))
@@ -177,6 +168,21 @@ func init() {
 	}))
 }
 
+// errorWrite builds SET_ERROR and CLEAR_ERROR.
+func errorWrite(to bool) primFunc {
+	return func(f *Frame) (*Result, error) {
+		n, err := f.popErrorFlag()
+		if err != nil {
+			return nil, err
+		}
+		if n < 0 {
+			return nil, f.Push(Int(0))
+		}
+		f.ErrorFlags.Set(n, to)
+		return nil, f.Push(Int(1))
+	}
+}
+
 // arith builds an arithmetic primitive, promoting to float when
 // either side is one, as MUF does.
 func arith(op byte) primFunc {
@@ -188,27 +194,18 @@ func arith(op byte) primFunc {
 		a, b := v[0], v[1]
 
 		if a.Type == TypeFloat || b.Type == TypeFloat {
+			// `prim_mod` refuses a float outright
+			// (`p_math.c:481`), where this answered
+			// fmod's result.
+			if op == '%' {
+				return nil, errf(badArgType)
+			}
 			x, xok := a.asFloat()
 			y, yok := b.asFloat()
 			if !xok || !yok {
 				return nil, errf("Invalid argument type.")
 			}
-			switch op {
-			case '+':
-				return nil, f.Push(Float(x + y))
-			case '-':
-				return nil, f.Push(Float(x - y))
-			case '*':
-				return nil, f.Push(Float(x * y))
-			case '/':
-				// Float division by zero yields an
-				// infinity rather than failing, which
-				// is what the float error mask is
-				// for.
-				return nil, f.Push(Float(x / y))
-			case '%':
-				return nil, f.Push(Float(math.Mod(x, y)))
-			}
+			return nil, f.Push(f.floatArith(op, x, y))
 		}
 
 		if a.Type != TypeInteger || b.Type != TypeInteger {
@@ -227,8 +224,14 @@ func arith(op byte) primFunc {
 			// which a program reads with is_set?.
 			// Aborting here would end programs that
 			// upstream runs to completion.
+			//
+			// Only `/` raises it, though: `prim_mod`
+			// (`p_math.c:485`) answers zero and says
+			// nothing at all.
 			if b.Num == 0 {
-				f.ErrorFlags.DivZero = true
+				if op == '/' {
+					f.ErrorFlags.DivZero = true
+				}
 				return nil, f.Push(Int(0))
 			}
 			// The one case where the quotient does not
@@ -245,6 +248,65 @@ func arith(op byte) primFunc {
 		}
 		return nil, errf("unknown operator")
 	}
+}
+
+// badArgType is what every one of these says for an operand it cannot
+// use.
+const badArgType = "Invalid argument type."
+
+// floatArith is the float half of `+`, `-`, `*` and `/`
+// (`p_math.c:125`, `:197`, `:314`, `:385`), which is more than the
+// arithmetic: `ieee_bounds_handling` decides what an infinite or NaN
+// operand produces, and division by zero is a flag rather than a
+// failure.
+//
+// Three details are upstream's. The ieee branch for an **infinite**
+// operand *recomputes* the operation rather than answering a fixed
+// INF, so `inf 1.0 -` is an infinity and `inf inf -` is a NaN. A NaN
+// operand is told apart from an infinite one and raises the NAN flag
+// where an infinity raises FBOUNDS. And a zero divisor is tested with
+// DBL_EPSILON rather than against zero, so a very small float divisor
+// is a division by zero too.
+func (f *Frame) floatArith(op byte, x, y float64) Value {
+	if op == '/' {
+		if math.Abs(y) < dblEpsilon {
+			// The flag is raised either way; what differs
+			// is whether the sign and kind of the
+			// numerator survive into the answer.
+			f.ErrorFlags.DivZero = true
+			if f.ieeeBounds() {
+				return Float(x * math.Inf(1))
+			}
+			return Float(math.Inf(1))
+		}
+	}
+	if !noGood(x) && !noGood(y) {
+		return Float(floatOp(op, x, y))
+	}
+	if math.IsNaN(x) || math.IsNaN(y) {
+		if f.ieeeBounds() {
+			return Float(math.NaN())
+		}
+		f.ErrorFlags.NaN = true
+		return Float(0)
+	}
+	if f.ieeeBounds() {
+		return Float(floatOp(op, x, y))
+	}
+	f.ErrorFlags.FBounds = true
+	return Float(0)
+}
+
+func floatOp(op byte, x, y float64) float64 {
+	switch op {
+	case '+':
+		return x + y
+	case '-':
+		return x - y
+	case '*':
+		return x * y
+	}
+	return x / y
 }
 
 // compare builds a comparison primitive. Numbers compare numerically
