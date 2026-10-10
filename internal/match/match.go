@@ -93,6 +93,19 @@ type Matcher struct {
 	verb string
 }
 
+// Level sets the exit-priority floor, which is upstream's
+// `md.match_level` — assigned straight after `init_match` by the
+// two callers that want one.
+//
+// `can_move`/`do_move` take it as an argument and every caller passes
+// 0 except the `m3_huh` branch of the dispatcher, which passes 3: an
+// exit standing in for an unknown command has to be deliberately
+// privileged, or any world could capture every typo.
+func (m *Matcher) Level(lev int) *Matcher {
+	m.level = lev
+	return m
+}
+
 // Arg returns the text that followed a matched exit's name.
 //
 // An exit that leads to a program may match just the first word of

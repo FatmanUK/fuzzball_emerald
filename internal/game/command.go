@@ -174,73 +174,71 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 		return
 	}
 
-	// A wizard may prefix a line with '!' to skip exit matching,
-	// which is how you reach a built-in that a room has shadowed
-	// with an exit.
-	overridden := false
-	if strings.HasPrefix(line, string(overrideToken)) &&
-		w.Get(c.who).Flags.IsTrueWizard() {
-		overridden = true
-		line = trimLeftSpace(line[1:])
-		c.verb, c.arg = trimCommand(line)
-		c.rest = fullCommand(line)
-		if line == "" {
-			return
-		}
-	}
-
-	// Single-character shortcuts take the rest of the line
-	// verbatim, so punctuation and spacing survive.
+	// `process_command`'s order (`game.c:616-671`), which is not
+	// the obvious one and is load-bearing in three places.
 	//
-	// Upstream rewrites the line as "say <rest>" and then takes
-	// full_command off it, which comes to exactly the text after
-	// the token — leading spaces and all.
-	switch {
-	case strings.HasPrefix(line, string(sayToken)):
-		c.arg, c.rest = trimSpace(line[1:]), line[1:]
-		s.cmdSay(c)
-		return
-	case strings.HasPrefix(line, string(poseToken)):
-		c.arg, c.rest = trimSpace(line[1:]), line[1:]
-		s.cmdPose(c)
-		return
+	// `enable_prefix` decides **where** the three
+	// single-character shortcuts are expanded. Clear — the
+	// default — and the expansion happens first, so an exit
+	// cannot be named `"foo`. Set, and exit matching gets the raw
+	// line first, so it can. Nothing read the parameter, and this
+	// had the clear branch hard-coded.
+	prefix := w.Tune.Bool("enable_prefix")
+	if !prefix {
+		line = expandPrefix(line)
 	}
 
-	// "home" is a **direction**, and it is tested before exits
-	// rather than after them. can_move (predicates.c:509) answers
-	// yes for it outright when enable_home is set, so an exit of
-	// that name is unreachable; this server had it in the command
-	// table instead, which is consulted *after* exit matching, so
-	// the precedence was the other way round. With enable_home
-	// clear it is not special at all and falls through to exit
-	// matching, where this used to answer an invented "That
-	// command is disabled."
-	if !overridden && ascEqual(line, "home") &&
-		w.Tune.Bool("enable_home") {
-		s.logCommand(w, d, line, "")
-		s.goHome(c)
-		return
-	}
+	// A true wizard may prefix a line with '!' to skip exit
+	// matching, which is how you reach a built-in that a room has
+	// shadowed with an exit. The test is on the **owner**'s bit,
+	// which is what matters for a forced puppet.
+	//
+	// Because the test comes *after* the expansion above, a '!'
+	// suppresses the shortcuts outright: `!"hello` is the command
+	// word `"hello`, which nothing answers.
+	override := strings.HasPrefix(line, string(overrideToken)) &&
+		isTrueWiz(w, ownerOf(w, c.who))
 
-	// Exits are matched before any built-in, which is what lets a
-	// world define its own "look" or "@view". The player's world
-	// beats ours.
-	if !overridden {
-		m := match.New(w, c.who, line).Exits()
-		if r := m.Result(); r != ref.Nothing &&
-			r != ref.Ambiguous {
-			s.logCommand(w, d, line, "")
-			// An exit that runs a program takes the rest
-			// of the line as its argument, and the part
-			// that matched its name as the verb —
-			// upstream's match_args and match_cmdname,
-			// reset by match_exits itself.
-			c.verb, c.arg = m.Verb(), m.Arg()
-			c.rest = c.arg
-			s.useExit(c, r)
+	if !override {
+		// Exits are matched before any built-in, which is
+		// what lets a world define its own "look" or "@view".
+		// The player's world beats ours.
+		if s.tryMove(c, line, 0) {
 			return
 		}
+		if prefix {
+			// With the parameter set the expansion
+			// happens here instead, and the expanded form
+			// is offered to the matcher a second time —
+			// so a world can name an exit `say hello`.
+			// Whichever way that goes, the expansion
+			// sticks for the dispatch below.
+			if e := expandPrefix(line); e != line {
+				line = e
+				if s.tryMove(c, line, 0) {
+					return
+				}
+			}
+		}
+		// `bad_pre_command` with no override to strip: a
+		// world that has set `cmd_only_overrides` has
+		// **turned every built-in off**, leaving them
+		// reachable only to a true wizard's '!'. Including
+		// `@tune`, so a wizard who sets it locks themselves
+		// out of unsetting it the ordinary way.
+		if w.Tune.Bool("cmd_only_overrides") {
+			s.huh(c)
+			return
+		}
+	} else {
+		// `command++`, which skips the token and **not** the
+		// whitespace after it. So "! @create x" has an empty
+		// command word and reaches the dispatcher's default.
+		line = line[1:]
 	}
+
+	c.verb, c.arg = trimCommand(line)
+	c.rest = fullCommand(line)
 
 	// One table for every command, "@"-prefixed or not, resolved
 	// the way upstream's own dispatcher resolves: see
@@ -250,10 +248,89 @@ func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, l
 		s.dispatch(c, cmd)
 		return
 	}
+	s.huh(c)
+}
 
-	// What an unrecognised command says is a @tune parameter, so
-	// a world can answer in its own voice.
-	c.send(w.Tune.String("huh_mesg"))
+// isTrueWiz is `TrueWizard`, which — unlike `Wizard` — ignores
+// QUELL: a quelled wizard still overrides with '!'.
+func isTrueWiz(w *world.World, r ref.Ref) bool {
+	o := w.Get(r)
+	return o != nil && o.Flags.IsTrueWizard()
+}
+
+// expandPrefix rewrites a line beginning with one of the three
+// single-character shortcuts, leaving anything else alone.
+//
+// The rewrite is textual — upstream builds "say %s" and hands the
+// result back to the same code path — which is why the spacing
+// survives into `full_command` and why the matcher gets a shot at the
+// expanded string.
+//
+// `;` is the surprise: it expands to `delimiter`, and **there is no
+// `delimiter` command**. Upstream's dispatcher has no entry for it,
+// so `;hello` reaches "Huh?" by way of a command nobody wrote. The
+// rewrite is reproduced rather than dropped, because the expanded
+// form is offered to the exit matcher and a world could have an exit
+// of that name.
+func expandPrefix(line string) string {
+	switch {
+	case strings.HasPrefix(line, string(sayToken)):
+		return "say " + line[1:]
+	case strings.HasPrefix(line, string(poseToken)):
+		return "pose " + line[1:]
+	case strings.HasPrefix(line, string(exitDelimiter)):
+		return "delimiter " + line[1:]
+	}
+	return line
+}
+
+// tryMove is `can_move` and `do_move` together (`predicates.c:505`,
+// `move.c:60`), reporting whether the line was a direction after all.
+//
+// "home" is one, and it is tested **before** exits rather than after
+// them: `can_move` answers yes for it outright when `enable_home` is
+// set, so an exit of that name is unreachable. This server had it in
+// the command table instead, which is consulted after exit matching,
+// so the precedence was the other way round.
+func (s *Server) tryMove(c *ctx, line string, lev int) bool {
+	if ascEqual(line, "home") &&
+		c.w.Tune.Bool("enable_home") {
+		s.logCommand(c.w, c.d, line, "")
+		s.goHome(c)
+		return true
+	}
+	m := match.New(c.w, c.who, line).Level(lev).Exits()
+	r := m.Result()
+	if r == ref.Nothing || r == ref.Ambiguous {
+		return false
+	}
+	s.logCommand(c.w, c.d, line, "")
+	// An exit that runs a program takes the rest of the line as
+	// its argument, and the part that matched its name as the
+	// verb — upstream's match_args and match_cmdname, reset by
+	// match_exits itself.
+	c.verb, c.arg = m.Verb(), m.Arg()
+	c.rest = c.arg
+	s.useExit(c, r)
+	return true
+}
+
+// huh is the dispatcher's `bad:` label (`game.c:1794`).
+//
+// `m3_huh` lets a world answer an unknown command with an **exit**,
+// named "HUH? " plus the command word and matched at priority 3 —
+// deliberately privileged, or any world could capture every typo. The
+// name is built from the command *word* and not the whole line, where
+// the parameter's own label says "with full command string".
+//
+// What it says otherwise is a @tune parameter, so a world can answer
+// in its own voice.
+func (s *Server) huh(c *ctx) {
+	if c.w.Tune.Bool("m3_huh") &&
+		s.tryMove(c, "HUH? "+c.verb, 3) {
+		return
+	}
+	c.send(c.w.Tune.String("huh_mesg"))
 }
 
 // interfaceCommand handles the lines the descriptor layer answers

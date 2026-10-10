@@ -271,8 +271,14 @@ func TestConnectAndWalkTheWorld(t *testing.T) {
 	c.send("!say hello world")
 	c.expect(`You say, "hello world"`)
 
-	// A pose uses the player's name.
-	c.send(":waves")
+	// A pose uses the player's name -- and needs the same "!" as
+	// the say above, because `enable_prefix` is clear by default
+	// and the ':' is therefore expanded to "pose waves" *before*
+	// exit matching, where the starter world's own "pose" exit
+	// wins. (That program uses REG_ALL, which the starter world
+	// never defines, so it does not compile on either server; see
+	// internal/muf/compiler/starterdb_test.go.)
+	c.send("!pose waves")
 	c.expect("One waves")
 
 	// Inventory works even when empty.
