@@ -113,7 +113,12 @@ func TestTeleportRefusesGodsThings(t *testing.T) {
 		if err := w.MoveTo(p.Ref, here); err != nil {
 			t.Error(err)
 		}
-		h.d.Player = p.Ref
+		// Rebound through the hub rather than by writing the
+		// field: a command's replies go to every descriptor
+		// the hub has for the player, so a descriptor the
+		// index still files under somebody else hears
+		// nothing.
+		h.s.Hub().Bind(h.d, p.Ref, w.Now())
 	})
 	if err != nil {
 		t.Fatal(err)

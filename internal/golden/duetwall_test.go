@@ -72,13 +72,13 @@ func TestDuetWallMatchesFuzzball(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oracle, err := RunOracleDuet(ctx, fx, duetWallSetup, "Bob",
-		"secret", duetWall)
+	oracle, err := RunOracleDuet(ctx, fx, duetWallSetup,
+		bobOnly, duetWall)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}
 	emerald, err := RunEmeraldDuet(ctx, fx, duetWallSetup,
-		"Bob", "secret", duetWall)
+		bobOnly, duetWall)
 	if err != nil {
 		t.Fatalf("driving this server: %v", err)
 	}

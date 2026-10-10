@@ -14,8 +14,8 @@ import (
 	"github.com/FatmanUK/fuzzball_emerald/internal/world"
 )
 
-// Two seats, which is the last class of output a one-seat transcript
-// cannot reach: a line addressed to somebody else.
+// Two or three seats, which is the last class of output a one-seat
+// transcript cannot reach: a line addressed to somebody else.
 //
 // `page`, `whisper`, `@wall`, the connect and disconnect
 // announcements and the "o" half of every message property are all
@@ -36,16 +36,25 @@ import (
 // `IsTrueWizard`. The second seat poses without it, which is safe in
 // a fixture with no trapping exit.
 //
-// The quota matters at four command tokens a step rather than two, so
-// a duet turns the limiter up before it starts.
+// The quota matters at two command tokens **per seat** per step, so a
+// duet turns the limiter up before it starts.
+//
+// A **third** seat is a second connection for a player who already
+// has one, which is the only way to see three things: `@wall`'s
+// per-descriptor arithmetic, the `connect` *action* firing on the
+// first connection where the propqueues fire on every one, and the
+// puppet wake-up that goes with it.
 
-// Seat names one of the two connections.
+// Seat names one of the connections.
 type Seat int
 
-// A and B are the wizard and the second player.
+// A is the fixture's wizard; B and C are whoever the case logs in
+// after it, which may be two different players or the same player
+// twice.
 const (
 	A Seat = 0
 	B Seat = 1
+	C Seat = 2
 )
 
 // Step is one command, and which seat types it.
@@ -57,22 +66,38 @@ type Step struct {
 // Duet is a two-seat script.
 type Duet []Step
 
-// Say and Hear build a step for each seat, so a script reads as a
-// column of who-does-what.
+// Say, Hear and Also build a step for each seat, so a script reads as
+// a column of who-does-what.
 func Say(cmd string) Step  { return Step{Seat: A, Cmd: cmd} }
 func Hear(cmd string) Step { return Step{Seat: B, Cmd: cmd} }
+func Also(cmd string) Step { return Step{Seat: C, Cmd: cmd} }
 
-// Heard is what both seats saw during one step.
-type Heard [2]string
+// Heard is what each seat saw during one step, indexed by seat.
+type Heard []string
 
-// duetMarkers are the two tokens, one per seat.
-var duetMarkers = [2]string{"EMERALDSEATA", "EMERALDSEATB"}
+// Login is a seat after the first: who it connects as.
+type Login struct {
+	Name     string
+	Password string
+}
 
-// bothMarkers reports whether a line carries either seat's token, so
-// a reader can drop the other's bookkeeping as well as its own.
-func bothMarkers(line string) bool {
-	return strings.Contains(line, duetMarkers[0]) ||
-		strings.Contains(line, duetMarkers[1])
+// bobOnly is the common case: one extra seat, as the second player
+// the setup created.
+var bobOnly = []Login{{Name: "Bob", Password: "secret"}}
+
+// duetMarkers are the tokens, one per seat.
+var duetMarkers = [3]string{"EMERALDSEATA", "EMERALDSEATB",
+	"EMERALDSEATC"}
+
+// anyMarker reports whether a line carries any seat's token, so a
+// reader can drop the others' bookkeeping as well as its own.
+func anyMarker(line string) bool {
+	for _, m := range duetMarkers {
+		if strings.Contains(line, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // RunOracleDuet drives the C server with two connections.
@@ -81,22 +106,26 @@ func bothMarkers(line string) bool {
 // second player is made, since `@pcreate` has to happen before
 // anybody can connect as them.
 func RunOracleDuet(ctx context.Context, fx *Fixture, setup Script,
-	second, password string, duet Duet) ([]Heard, error) {
+	logins []Login, duet Duet) ([]Heard, error) {
 
+	n := len(logins) + 1
 	var out []Heard
 	run := func(conns []net.Conn) error {
-		seats := make([]*oracleSeat, 2)
+		seats := make([]*oracleSeat, n)
 		for i := range conns {
 			seats[i] = &oracleSeat{
 				conn: conns[i],
 				br:   bufio.NewReader(conns[i]),
 				mark: duetMarkers[i],
+				// A seat after the first may be a
+				// mortal, and a mortal cannot use the
+				// '!' prefix: it requires
+				// IsTrueWizard. Plain "pose" is safe
+				// in a fixture with no trapping exit.
+				pose: "pose ",
 			}
 		}
-		// Seat A is the fixture's wizard and poses with the
-		// '!' prefix; seat B is a mortal and cannot.
 		seats[0].pose = "!pose "
-		seats[1].pose = "pose "
 
 		if err := seats[0].login("One",
 			godPassword); err != nil {
@@ -113,16 +142,20 @@ func RunOracleDuet(ctx context.Context, fx *Fixture, setup Script,
 				return err
 			}
 		}
-		if err := seats[1].login(second,
-			password); err != nil {
-			return err
-		}
-		// Seat B connecting is itself an announcement, and
-		// seat A hears it. Flushing it here keeps it out of
-		// the first step's transcript -- which is where it
-		// turned up on the first run.
-		if err := seats[0].flush(); err != nil {
-			return err
+		// Each later seat connects in turn. Its own login
+		// swallows its banner — which is the one thing that
+		// must not be compared, since the two servers greet a
+		// connection in their own words — but what the
+		// seats **already open** hear is left queued, so the
+		// arrival announcements land in the first step's
+		// transcript on both servers and are compared there.
+		// That is the only way a connect is observable at
+		// all: nothing inside the duet loop can cause one.
+		for i, lg := range logins {
+			if err := seats[i+1].login(lg.Name,
+				lg.Password); err != nil {
+				return err
+			}
 		}
 
 		for _, st := range duet {
@@ -141,7 +174,6 @@ func RunOracleDuet(ctx context.Context, fx *Fixture, setup Script,
 			// other seat is asked anything, so whatever
 			// it was told is already queued.
 			act := seats[st.Seat]
-			quiet := seats[1-st.Seat]
 			if err := act.send(st.Cmd); err != nil {
 				return err
 			}
@@ -149,28 +181,39 @@ func RunOracleDuet(ctx context.Context, fx *Fixture, setup Script,
 				act.mark); err != nil {
 				return err
 			}
-			var h Heard
+			h := make(Heard, n)
 			got, err := act.readTo()
 			h[st.Seat] = got
 			if err != nil {
 				out = append(out, h)
 				return err
 			}
-			if err := quiet.send(quiet.pose +
-				quiet.mark); err != nil {
-				return err
+			failed := error(nil)
+			for i, quiet := range seats {
+				if Seat(i) == st.Seat {
+					continue
+				}
+				if err := quiet.send(quiet.pose +
+					quiet.mark); err != nil {
+					failed = err
+					break
+				}
+				got, err := quiet.readTo()
+				h[i] = got
+				if err != nil {
+					failed = err
+					break
+				}
 			}
-			got, err = quiet.readTo()
-			h[1-st.Seat] = got
 			out = append(out, h)
-			if err != nil {
-				return err
+			if failed != nil {
+				return failed
 			}
 		}
 		_ = seats[0].send("@shutdown")
 		return nil
 	}
-	err := withOracleConns(ctx, fx, 2, run)
+	err := withOracleConns(ctx, fx, n, run)
 	return out, err
 }
 
@@ -199,7 +242,7 @@ func (s *oracleSeat) readTo() (string, error) {
 		if strings.Contains(line, s.mark) {
 			return got.String(), nil
 		}
-		if !bothMarkers(line) {
+		if !anyMarker(line) {
 			got.WriteString(line)
 		}
 		if err != nil {
@@ -251,7 +294,9 @@ func (s *oracleSeat) step(cmd string) error {
 // one round trip through the engine is enough to know a command has
 // finished.
 func RunEmeraldDuet(ctx context.Context, fx *Fixture, setup Script,
-	second, password string, duet Duet) ([]Heard, error) {
+	logins []Login, duet Duet) ([]Heard, error) {
+
+	n := len(logins) + 1
 
 	res, err := importer.Load(importer.Source{
 		DumpPath: fx.DumpPath,
@@ -289,7 +334,7 @@ func RunEmeraldDuet(ctx context.Context, fx *Fixture, setup Script,
 	done := make(chan error, 1)
 	go func() { done <- engine.Run(runCtx) }()
 
-	ds := make([]*session.Descriptor, 2)
+	ds := make([]*session.Descriptor, n)
 	for i := range ds {
 		d, err := gs.Connect(session.TransportLine, "golden")
 		if err != nil {
@@ -305,7 +350,7 @@ func RunEmeraldDuet(ctx context.Context, fx *Fixture, setup Script,
 		for {
 			select {
 			case line := <-d.Output():
-				if bothMarkers(line) {
+				if anyMarker(line) {
 					continue
 				}
 				b.WriteString(line)
@@ -330,15 +375,18 @@ func RunEmeraldDuet(ctx context.Context, fx *Fixture, setup Script,
 		}
 		drain(ds[0])
 	}
-	gs.Input(ds[1], "connect "+second+" "+password)
-	if err := settle(); err != nil {
-		return nil, err
+	// Only the connecting seat's own stream is discarded, for the
+	// reason the oracle side gives: its banner is the one thing
+	// the two servers write differently. What the seats already
+	// open hear is left for the first step's transcript.
+	for i, lg := range logins {
+		gs.Input(ds[i+1], "connect "+lg.Name+" "+
+			lg.Password)
+		if err := settle(); err != nil {
+			return nil, err
+		}
+		drain(ds[i+1])
 	}
-	// Seat B connecting is itself an announcement, and seat A
-	// hears it — but the oracle's seat A heard it during its
-	// own setup, before the duet began. Both are discarded.
-	drain(ds[0])
-	drain(ds[1])
 
 	out := make([]Heard, 0, len(duet))
 	for _, st := range duet {
@@ -346,7 +394,11 @@ func RunEmeraldDuet(ctx context.Context, fx *Fixture, setup Script,
 		if err := settle(); err != nil {
 			return out, err
 		}
-		out = append(out, Heard{drain(ds[0]), drain(ds[1])})
+		h := make(Heard, n)
+		for i := range ds {
+			h[i] = drain(ds[i])
+		}
+		out = append(out, h)
 	}
 
 	for _, d := range ds {
@@ -369,7 +421,7 @@ func CompareDuets(t interface {
 	Errorf(string, ...any)
 }, duet Duet, oracle, emerald []Heard) {
 
-	names := [2]string{"seat A", "seat B"}
+	names := [3]string{"seat A", "seat B", "seat C"}
 	for i, st := range duet {
 		var want, got Heard
 		if i < len(oracle) {
@@ -378,8 +430,16 @@ func CompareDuets(t interface {
 		if i < len(emerald) {
 			got = emerald[i]
 		}
-		for seat := range names {
-			diffs := Compare(want[seat], got[seat])
+		for seat := 0; seat < len(want) ||
+			seat < len(got); seat++ {
+			var w, g string
+			if seat < len(want) {
+				w = want[seat]
+			}
+			if seat < len(got) {
+				g = got[seat]
+			}
+			diffs := Compare(w, g)
 			if len(diffs) == 0 {
 				continue
 			}

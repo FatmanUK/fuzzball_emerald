@@ -139,13 +139,13 @@ func TestDuetSpeechMatchesFuzzball(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oracle, err := RunOracleDuet(ctx, fx, duetSpeechSetup, "Bob",
-		"secret", duetSpeech)
+	oracle, err := RunOracleDuet(ctx, fx, duetSpeechSetup,
+		bobOnly, duetSpeech)
 	if err != nil {
 		t.Fatalf("driving the oracle: %v", err)
 	}
 	emerald, err := RunEmeraldDuet(ctx, fx, duetSpeechSetup,
-		"Bob", "secret", duetSpeech)
+		bobOnly, duetSpeech)
 	if err != nil {
 		t.Fatalf("driving this server: %v", err)
 	}

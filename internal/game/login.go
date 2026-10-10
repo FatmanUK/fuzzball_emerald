@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/FatmanUK/fuzzball_emerald/internal/ascii"
+	"github.com/FatmanUK/fuzzball_emerald/internal/match"
 	"github.com/FatmanUK/fuzzball_emerald/internal/password"
 	"github.com/FatmanUK/fuzzball_emerald/internal/props"
 	"github.com/FatmanUK/fuzzball_emerald/internal/ref"
@@ -309,8 +310,12 @@ func (s *Server) finishLogin(w *world.World, d *session.Descriptor, player ref.R
 	}
 
 	s.showMOTD(w, d)
+	// The arrival look belongs **inside** announceConnect, which
+	// is where `announce_connect` does it: between the
+	// announcement and the `connect` action, and before the
+	// propqueues. Doing it afterwards put a world's `_connect`
+	// output above the room description instead of below it.
 	s.announceConnect(w, d, alreadyOn)
-	s.lookHere(w, d.ID, player)
 	s.warnInteractive(d)
 }
 
@@ -331,22 +336,32 @@ func (s *Server) warnInteractive(d *session.Descriptor) {
 	d.Send("***  You are currently using the MUF program editor.  ***")
 }
 
-// announceConnect tells the player's room that they have arrived, and
-// runs the _connect propqueues.
+// announceConnect is `announce_connect` (`interface.c:1068`): the
+// arrival line, the look, the `connect` action, the puppets waking
+// up, and the two propqueues, in that order.
 //
-// The announcement is for the first connection only and the queues
-// are for **every** one, which upstream's own comment calls odd and
-// leaves alone: the `connect` action is likewise first-only.
-// Reproduced because a world whose _connect sets a "last host"
-// property needs it on a reconnect too.
-func (s *Server) announceConnect(w *world.World, d *session.Descriptor, alreadyOn bool) {
+// **Which of those is gated on being the first connection is not what
+// this said.** The line is tested against DARK and nothing else, so
+// it fires on *every* connection; what fires only on the first is the
+// `connect` **action** and the puppet wake-up, which upstream's own
+// comment calls odd and leaves alone. This had the line first-only
+// and neither of the other two at all.
+func (s *Server) announceConnect(w *world.World,
+	d *session.Descriptor, alreadyOn bool) {
+
 	o := w.Get(d.Player)
 	if o == nil || o.Location == ref.Nothing {
 		return
 	}
-	if !alreadyOn {
+	if o.Flags&ref.Dark == 0 &&
+		!hasFlag(w, o.Location, ref.Dark) {
 		s.notifyRoom(w, o.Location, []ref.Ref{d.Player},
 			"%s has connected.", o.Name)
+	}
+	s.autolook(w, d.ID, d.Player)
+	if !alreadyOn {
+		s.connectAction(w, d, "connect")
+		s.announcePuppets(w, d.Player, "wakes up.", propPCon)
 	}
 	// ts_useobject is already done by the login path above, where
 	// upstream does it here, after the queues. Same count either
@@ -355,22 +370,96 @@ func (s *Server) announceConnect(w *world.World, d *session.Descriptor, alreadyO
 		propConnect, propOConnect, "Connect", "Oconnect")
 }
 
-// announceDisconnect tells the player's room that they have gone.
-func (s *Server) announceDisconnect(w *world.World, d *session.Descriptor) {
-	// Only announce when the last connection for this player goes
-	// away.
-	if len(s.hub.DescriptorsFor(d.Player)) > 1 {
-		return
-	}
+// announceDisconnect is `announce_disconnect` (`interface.c:2325`),
+// and the same split: the line and the propqueues fire on **every**
+// disconnect, while the `disconnect` action and the puppets falling
+// asleep wait for the last one. This returned early for anything but
+// the last, so a world's `_disconnect` never saw a second connection
+// closing.
+func (s *Server) announceDisconnect(w *world.World,
+	d *session.Descriptor) {
+
 	o := w.Get(d.Player)
 	if o == nil || o.Location == ref.Nothing {
 		return
 	}
-	s.notifyRoom(w, o.Location, []ref.Ref{d.Player},
-		"%s has disconnected.", o.Name)
+	// The descriptor being closed is still in the hub here, so
+	// "the last one" is a count of one.
+	last := len(s.hub.DescriptorsFor(d.Player)) <= 1
+	if o.Flags&ref.Dark == 0 &&
+		!hasFlag(w, o.Location, ref.Dark) {
+		s.notifyRoom(w, o.Location, []ref.Ref{d.Player},
+			"%s has disconnected.", o.Name)
+	}
+	if last {
+		s.connectAction(w, d, "disconnect")
+		s.announcePuppets(w, d.Player, "falls asleep.",
+			propPDCon)
+	}
 	s.connectQueues(w, d.ID, d.Player, o.Location,
 		propDisconnect, propODisconnect,
 		"Disconnect", "Odisconnect")
+}
+
+// connectAction is the `connect` and `disconnect` **exits**, which
+// had no port at all: matched as an exit at priority 1, and an
+// ambiguous match is no match (`interface.c:1085`).
+//
+// A floor of 1 is **not** a privilege, which is worth saying because
+// it reads like one beside `m3_huh`'s floor of 3. Priority 1 is the
+// *default* — an exit with no mucker bits has it — so the only
+// thing this excludes is an **ABODE** exit, which is the one shape
+// that binds more weakly than the default (`match.c:694`).
+func (s *Server) connectAction(w *world.World,
+	d *session.Descriptor, name string) {
+
+	m := match.New(w, d.Player, name).
+		PreferType(ref.TypeExit).Level(1)
+	r := m.Exits().Result()
+	if r == ref.Nothing || r == ref.Ambiguous {
+		return
+	}
+	c := &ctx{w: w, d: d, who: d.Player, out: d.Send,
+		verb: name}
+	s.useExit(c, r)
+}
+
+// announcePuppets is `announce_puppets` (`interface.c:1013`): every
+// ZOMBIE thing the player owns announces itself in its own room when
+// they connect or disconnect, with `_/pcon` or `_/pdcon` replacing
+// the wording.
+//
+// It is a **whole-database walk**, which upstream's own comment calls
+// brutal and does anyway, on every login and every disconnect. Three
+// DARK tests gate each one: the room, the player and the thing.
+func (s *Server) announcePuppets(w *world.World, player ref.Ref,
+	msg, prop string) {
+
+	if hasFlag(w, player, ref.Dark) {
+		return
+	}
+	w.Each(func(o *world.Object) bool {
+		what := o.Ref
+		if o.Type() != ref.TypeThing ||
+			o.Flags&ref.Zombie == 0 ||
+			ownerOf(w, what) != player {
+			return true
+		}
+		where := o.Location
+		if o.Flags&ref.Dark != 0 ||
+			hasFlag(w, where, ref.Dark) ||
+			where == ref.Nothing {
+			return true
+		}
+		line := msg
+		if v, ok := w.GetProp(what, prop); ok &&
+			v.Str != "" {
+			line = v.Str
+		}
+		s.notifyRoom(w, where, []ref.Ref{what}, "%s %s",
+			o.Name, line)
+		return true
+	})
 }
 
 // connectQueues runs one of the two connect/disconnect propqueue

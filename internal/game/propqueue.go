@@ -650,4 +650,8 @@ const (
 	propDisconnect  = "_disconnect"
 	propODisconnect = "_odisconnect"
 	propLookQueue   = "_lookq"
+	// MESGPROP_PCON and MESGPROP_PDCON (`db.h:171`): what a
+	// puppet says instead of "wakes up." and "falls asleep."
+	propPCon  = "_/pcon"
+	propPDCon = "_/pdcon"
 )

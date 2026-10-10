@@ -136,11 +136,17 @@ func (s *Server) command(w *world.World, d *session.Descriptor, line string) {
 // commandAs dispatches a line on behalf of an object that is not the
 // one that typed it, which is what @force does. Replies go to that
 // object.
+//
+// They go to **every** connection that object has, not to the one
+// that typed the line: upstream's `notify` is `notify_filtered` over
+// a player's descriptors (`interface.c:4697`), so somebody connected
+// twice sees their own command's output on both. Only the two
+// interface commands are descriptor-local, and they build their own
+// context — `WHO` is `queue_ansi(e, ...)` and QUIT's farewell is
+// `queue_immediate_and_flush(d, ...)`, each writing to the one
+// connection.
 func (s *Server) commandAs(w *world.World, d *session.Descriptor, who ref.Ref, line string) {
-	out := d.Send
-	if who != d.Player {
-		out = func(text string) { s.send(w, who, text) }
-	}
+	out := func(text string) { s.send(w, who, text) }
 	defer func() {
 		if r := recover(); r != nil {
 			out("Something went wrong running that command. It has been logged.")
