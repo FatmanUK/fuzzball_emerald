@@ -277,8 +277,8 @@ func (s *Server) cmdRelink(c *ctx) {
 		}
 		// The destinations are all checked before anything is
 		// broken, which is link_exit_dry's whole job.
-		if _, ok := s.resolveExitDest(c, thing,
-			destName); !ok {
+		if _, ok := s.linkExitDests(c, thing, destName,
+			true); !ok {
 			c.tell("Invalid target.")
 			return
 		}

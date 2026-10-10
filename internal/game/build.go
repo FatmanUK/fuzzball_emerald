@@ -240,11 +240,10 @@ func (s *Server) cmdOpen(c *ctx) {
 				c.w.Tune.String("pennies"))
 			return
 		}
-		if dest, ok := s.resolveExitDest(c, o.Ref,
-			destName); ok {
-			o.Dest = []ref.Ref{dest}
+		if dests, _ := s.linkExitDests(c, o.Ref, destName,
+			false); len(dests) > 0 {
+			o.Dest = dests
 			c.w.Modified(o.Ref)
-			c.tell("%s", s.linkedTo(c, dest))
 		}
 	}
 	s.registerBuilt(c, rname, o.Ref)
@@ -328,28 +327,6 @@ func exitLoopFrom(w *world.World, source, dest ref.Ref,
 		}
 	}
 	return false
-}
-
-// resolveExitDest is `_link_exit`'s TYPE_EXIT case (`db.c:2117`):
-// `parse_linkable_dest` and then, when the destination is itself an
-// exit, the loop check. Every site that links an *exit* goes through
-// it; a home or a dropto does not, because upstream applies the check
-// only in that one branch of its switch.
-func (s *Server) resolveExitDest(c *ctx, exit ref.Ref,
-	name string) (ref.Ref, bool) {
-
-	dest, ok := s.resolveLinkTarget(c, exit, name)
-	if !ok {
-		return ref.Nothing, false
-	}
-	if c.w.Valid(dest) &&
-		c.w.Get(dest).Type() == ref.TypeExit &&
-		exitLoopCheck(c.w, exit, dest) {
-		c.tell("Destination %s would create a loop, "+
-			"ignored.", s.unparse(c.w, c.who, dest))
-		return ref.Nothing, false
-	}
-	return dest, true
 }
 
 // resolveLinkTarget is parse_linkable_dest (db.c:1971): what an exit
@@ -564,14 +541,13 @@ func (s *Server) linkExit(c *ctx, target ref.Ref, destName string) {
 		noneLinked()
 		return
 	}
-	dest, ok := s.resolveExitDest(c, target, destName)
-	if !ok {
+	dests, _ := s.linkExitDests(c, target, destName, false)
+	if len(dests) == 0 {
 		noneLinked()
 		return
 	}
-	o.Dest = []ref.Ref{dest}
+	o.Dest = dests
 	c.w.Modified(target)
-	c.tell("%s", s.linkedTo(c, dest))
 }
 
 // linkHome is do_link's TYPE_THING and TYPE_PLAYER branch
@@ -652,19 +628,6 @@ func (s *Server) pennies(c *ctx, cost int) string {
 		return c.w.Tune.String("penny")
 	}
 	return c.w.Tune.String("pennies")
-}
-
-// linkedTo is what @link says it did to an *exit*. HOME is named
-// rather than unparsed, because unparsing it gives "*HOME*" — the
-// spelling a lock or a dump uses, not the one db.c:2143 prints.
-func (s *Server) linkedTo(c *ctx, dest ref.Ref) string {
-	if dest == ref.Home {
-		return "Linked to HOME."
-	}
-	if dest == ref.Nil {
-		return "Linked to NIL."
-	}
-	return sprintf("Linked to %s.", s.unparse(c.w, c.who, dest))
 }
 
 // cmdUnlink removes an exit's destination or a room's drop-to.
@@ -1733,3 +1696,111 @@ func linkableFlag(w *world.World, where ref.Ref) bool {
 	}
 	return o.Flags&ref.LinkOK != 0
 }
+
+// linkExitDests is `_link_exit` (`db.c:2042`): an exit's destinations
+// are a **list**, written as one ';'-separated argument.
+//
+// `@link exit=a;b` linked only the first here, and `trigger` has
+// always traversed a list — so an exit that fetches three things,
+// which is what the list is for, could not be built from inside the
+// game at all.
+//
+// Each destination is reported as it is linked, so the command says
+// "Linked to X." once per destination rather than once in total. Four
+// refusals are per-destination too, and each names the one it
+// skipped: a second player, room or program; an exit that would close
+// a loop; an unparseable name, which `parse_linkable_dest` reports
+// for itself; and the MAX_LINKS bound, which ends the loop rather
+// than skipping an entry.
+//
+// `dryrun` is `link_exit_dry`, which `@relink` uses to check every
+// destination before it breaks the existing link. In that mode
+// nothing is linked and nothing is said, and a *skipped* destination
+// becomes a failure of the whole thing rather than something to carry
+// on past.
+//
+// HOME is appended and announced without going through the type
+// switch at all. Upstream reaches `Typeof(HOME)` there, which indexes
+// three objects before the start of its database — so which branch
+// it takes is its allocator's business, and the only part of it worth
+// reproducing is what a transcript can see.
+func (s *Server) linkExitDests(c *ctx, exit ref.Ref, destName string,
+	dryrun bool) ([]ref.Ref, bool) {
+
+	var dests []ref.Ref
+	prdest, failed := false, false
+	rest := destName
+	for rest != "" {
+		rest = trimLeftSpace(rest)
+		word := rest
+		if i := strings.IndexByte(rest,
+			match.ExitDelimiter); i >= 0 {
+			word = rest[:i]
+			rest = trimLeftSpace(rest[i+1:])
+		} else {
+			rest = ""
+		}
+		dest, ok := s.resolveLinkTarget(c, exit, word)
+		if !ok {
+			continue
+		}
+		if dest == ref.Nil {
+			if !dryrun {
+				c.tell("Linked to NIL.")
+			}
+			dests = append(dests, dest)
+			continue
+		}
+		shown := s.unparse(c.w, c.who, dest)
+		if dest != ref.Home {
+			o := c.w.Get(dest)
+			if o == nil {
+				continue
+			}
+			switch o.Type() {
+			case ref.TypePlayer, ref.TypeRoom,
+				ref.TypeProgram:
+
+				if prdest {
+					c.tell(onePRPOnly, shown)
+					failed = failed || dryrun
+					continue
+				}
+				prdest = true
+			case ref.TypeExit:
+				if exitLoopCheck(c.w, exit, dest) {
+					c.tell(wouldLoop, shown)
+					failed = failed || dryrun
+					continue
+				}
+			}
+		}
+		dests = append(dests, dest)
+		if !dryrun {
+			if dest == ref.Home {
+				c.tell("Linked to HOME.")
+			} else {
+				c.tell("Linked to %s.", shown)
+			}
+		}
+		if len(dests) >= maxExitLinks {
+			c.tell("Too many destinations, rest ignored.")
+			failed = failed || dryrun
+			break
+		}
+	}
+	if dryrun && failed {
+		return nil, false
+	}
+	return dests, len(dests) > 0
+}
+
+// maxExitLinks is upstream's MAX_LINKS.
+const maxExitLinks = 50
+
+// The two per-destination refusals, named so the lines fit.
+const (
+	onePRPOnly = "Only one player, room, or program " +
+		"destination allowed. Destination %s ignored."
+	wouldLoop = "Destination %s would create a loop, ignored."
+)
